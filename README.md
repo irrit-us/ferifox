@@ -2,6 +2,8 @@
 
 This source tree is based on `FIREFOX_152_0_4_RELEASE` at commit `d4faced9e237d6431856c0873cb035cbbc25817b`.
 
+Build locally with `DEVELOPER_OPTIONS=1 CARGO_BUILD_JOBS=1 ./mach build -j6`.
+
 [Firefox](https://firefox.com/) is a fast, reliable and private web browser from the non-profit [Mozilla organization](https://mozilla.org/).
 
 ### Contributing
