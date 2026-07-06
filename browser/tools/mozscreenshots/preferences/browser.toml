@@ -1,0 +1,8 @@
+[DEFAULT]
+subsuite = "screenshots"
+support-files = ["../head.js"]
+
+["browser_preferences.js"]
+skip-if = [
+  "true"
+]
