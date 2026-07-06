@@ -6,6 +6,7 @@
 #include "Navigator.h"
 
 #include "Geolocation.h"
+#include "FerifoxConfig.h"
 #include "base/basictypes.h"
 #include "mozilla/Components.h"
 #include "mozilla/ContentBlockingNotifier.h"
@@ -296,6 +297,15 @@ void Navigator::GetUserAgent(nsAString& aUserAgent, CallerType aCallerType,
 }
 
 void Navigator::GetAppCodeName(nsAString& aAppCodeName, ErrorResult& aRv) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.appCodeName"_ns, val);
+    if (!val.IsEmpty()) {
+      aAppCodeName = std::move(val);
+      return;
+    }
+  }
+
   nsresult rv;
 
   nsCOMPtr<nsIHttpProtocolHandler> service(
@@ -328,6 +338,14 @@ void Navigator::GetAppVersion(nsAString& aAppVersion, CallerType aCallerType,
 }
 
 void Navigator::GetAppName(nsAString& aAppName) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.appName"_ns, val);
+    if (!val.IsEmpty()) {
+      aAppName = std::move(val);
+      return;
+    }
+  }
   aAppName.AssignLiteral("Netscape");
 }
 
@@ -411,6 +429,13 @@ void Navigator::GetLanguage(nsAString& aLanguage) {
 }
 
 void Navigator::GetLanguages(nsTArray<nsString>& aLanguages) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    cfg->GetStringList("navigator.languages"_ns, aLanguages);
+    if (!aLanguages.IsEmpty()) {
+      return;
+    }
+  }
+
   BrowsingContext* bc = mWindow ? mWindow->GetBrowsingContext() : nullptr;
   if (bc) {
     const nsCString& languageOverride = bc->Top()->GetLanguageOverride();
@@ -432,6 +457,15 @@ void Navigator::GetLanguages(nsTArray<nsString>& aLanguages) {
 
 void Navigator::GetPlatform(nsAString& aPlatform, CallerType aCallerType,
                             ErrorResult& aRv) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.platform"_ns, val);
+    if (!val.IsEmpty()) {
+      aPlatform = std::move(val);
+      return;
+    }
+  }
+
   if (mWindow) {
     BrowsingContext* bc = mWindow->GetBrowsingContext();
     nsString customPlatform;
@@ -457,6 +491,15 @@ void Navigator::GetPlatform(nsAString& aPlatform, CallerType aCallerType,
 
 void Navigator::GetOscpu(nsAString& aOSCPU, CallerType aCallerType,
                          ErrorResult& aRv) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.oscpu"_ns, val);
+    if (!val.IsEmpty()) {
+      aOSCPU = std::move(val);
+      return;
+    }
+  }
+
   if (aCallerType != CallerType::System) {
     // If fingerprinting resistance is on, we will spoof this value. See
     // nsRFPService.h for details about spoofed values.
@@ -492,15 +535,43 @@ void Navigator::GetOscpu(nsAString& aOSCPU, CallerType aCallerType,
   CopyASCIItoUTF16(oscpu, aOSCPU);
 }
 
-void Navigator::GetVendor(nsAString& aVendor) { aVendor.Truncate(); }
+void Navigator::GetVendor(nsAString& aVendor) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.vendor"_ns, val);
+    if (!val.IsEmpty()) {
+      aVendor = std::move(val);
+      return;
+    }
+  }
+  aVendor.Truncate();
+}
 
-void Navigator::GetVendorSub(nsAString& aVendorSub) { aVendorSub.Truncate(); }
+void Navigator::GetVendorSub(nsAString& aVendorSub) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.vendorSub"_ns, val);
+    if (!val.IsEmpty()) {
+      aVendorSub = std::move(val);
+      return;
+    }
+  }
+  aVendorSub.Truncate();
+}
 
 void Navigator::GetProduct(nsAString& aProduct) {
   aProduct.AssignLiteral("Gecko");
 }
 
 void Navigator::GetProductSub(nsAString& aProductSub) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.productSub"_ns, val);
+    if (!val.IsEmpty()) {
+      aProductSub = std::move(val);
+      return;
+    }
+  }
   // Legacy build date hardcoded for backward compatibility (bug 776376)
   aProductSub.AssignLiteral(LEGACY_UA_GECKO_TRAIL);
 }
@@ -527,6 +598,12 @@ nsPluginArray* Navigator::GetPlugins(ErrorResult& aRv) {
 }
 
 bool Navigator::PdfViewerEnabled() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetBool("navigator.pdfViewerEnabled"_ns)) {
+      return *val;
+    }
+  }
+
   return !StaticPrefs::pdfjs_disabled() ||
          nsContentUtils::ShouldResistFingerprinting(GetDocShell(),
                                                     RFPTarget::PdfjsSpoof);
@@ -556,6 +633,12 @@ StorageManager* Navigator::Storage() {
 }
 
 bool Navigator::CookieEnabled() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetBool("navigator.cookieEnabled"_ns)) {
+      return *val;
+    }
+  }
+
   // Check whether an exception overrides the global cookie behavior
   // Note that the code for getting the URI here matches that in
   // nsHTMLDocument::SetCookie.
@@ -620,6 +703,15 @@ bool Navigator::OnLine() {
 
 void Navigator::GetBuildID(nsAString& aBuildID, CallerType aCallerType,
                            ErrorResult& aRv) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.buildID"_ns, val);
+    if (!val.IsEmpty()) {
+      aBuildID = std::move(val);
+      return;
+    }
+  }
+
   if (aCallerType != CallerType::System) {
     // If fingerprinting resistance is on, we will spoof this value. See
     // nsRFPService.h for details about spoofed values.
@@ -677,6 +769,15 @@ void Navigator::GetBuildID(nsAString& aBuildID, CallerType aCallerType,
 }
 
 void Navigator::GetDoNotTrack(nsAString& aResult) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.doNotTrack"_ns, val);
+    if (!val.IsEmpty()) {
+      aResult = std::move(val);
+      return;
+    }
+  }
+
   if (StaticPrefs::privacy_donottrackheader_enabled()) {
     aResult.AssignLiteral("1");
   } else {
@@ -696,6 +797,12 @@ bool Navigator::GlobalPrivacyControl() {
 }
 
 uint64_t Navigator::HardwareConcurrency() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetUint32("navigator.hardwareConcurrency"_ns)) {
+      return *val;
+    }
+  }
+
   workerinternals::RuntimeService* rts =
       workerinternals::RuntimeService::GetOrCreateService();
   if (!rts) {
@@ -896,6 +1003,12 @@ bool Navigator::Vibrate(const nsTArray<uint32_t>& aPattern) {
 //*****************************************************************************
 
 uint32_t Navigator::MaxTouchPoints(CallerType aCallerType) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetUint32("navigator.maxTouchPoints"_ns)) {
+      return *val;
+    }
+  }
+
   nsIDocShell* docshell = GetDocShell();
   BrowsingContext* bc = docshell ? docshell->GetBrowsingContext() : nullptr;
 
@@ -2032,6 +2145,15 @@ nsresult Navigator::GetPlatform(nsAString& aPlatform, Document* aCallerDoc,
                                 bool aUsePrefOverriddenValue) {
   MOZ_ASSERT(NS_IsMainThread());
 
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.platform"_ns, val);
+    if (!val.IsEmpty()) {
+      aPlatform = std::move(val);
+      return NS_OK;
+    }
+  }
+
   // navigator.platform is the same for default and spoofed values. The
   // "general.platform.override" pref should override the default platform,
   // but the spoofed platform should override the pref.
@@ -2065,6 +2187,15 @@ nsresult Navigator::GetPlatform(nsAString& aPlatform, Document* aCallerDoc,
 nsresult Navigator::GetAppVersion(nsAString& aAppVersion, Document* aCallerDoc,
                                   bool aUsePrefOverriddenValue) {
   MOZ_ASSERT(NS_IsMainThread());
+
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.appVersion"_ns, val);
+    if (!val.IsEmpty()) {
+      aAppVersion = std::move(val);
+      return NS_OK;
+    }
+  }
 
   if (aUsePrefOverriddenValue) {
     // If fingerprinting resistance is on, we will spoof this value. See
@@ -2115,6 +2246,15 @@ nsresult Navigator::GetUserAgent(nsPIDOMWindowInner* aWindow,
                                  Maybe<bool> aShouldResistFingerprinting,
                                  nsAString& aUserAgent) {
   MOZ_ASSERT(NS_IsMainThread());
+
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.userAgent"_ns, val);
+    if (!val.IsEmpty()) {
+      aUserAgent = std::move(val);
+      return NS_OK;
+    }
+  }
 
   /*
     ResistFingerprinting is migrating to fine-grained control based off
@@ -2350,6 +2490,12 @@ dom::PrivateAttribution* Navigator::PrivateAttribution() {
 
 /* static */
 bool Navigator::Webdriver() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetBool("navigator.webdriver"_ns)) {
+      return *val;
+    }
+  }
+
 #ifdef ENABLE_WEBDRIVER
   nsCOMPtr<nsIMarionette> marionette = do_GetService(NS_MARIONETTE_CONTRACTID);
   if (marionette) {

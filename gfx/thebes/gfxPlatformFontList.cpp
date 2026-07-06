@@ -25,6 +25,7 @@
 #include "nsUnicodeProperties.h"
 #include "nsXULAppAPI.h"
 
+#include "FerifoxConfig.h"
 #include "mozilla/AppShutdown.h"
 #include "mozilla/BinarySearch.h"
 #include "mozilla/Likely.h"
@@ -1172,6 +1173,22 @@ bool gfxPlatformFontList::IsVisibleToCSS(const fontlist::Family& aFamily,
   return aFamily.Visibility() <= aVisibility || IsFontFamilyWhitelistActive();
 }
 
+static bool IsFontAllowedByConfig(const nsAString& aFontName) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsTArray<nsString> allowedFonts;
+    cfg->GetStringList("fonts.visible"_ns, allowedFonts);
+    if (!allowedFonts.IsEmpty()) {
+      for (const auto& allowed : allowedFonts) {
+        if (aFontName.Equals(allowed, nsCaseInsensitiveStringComparator)) {
+          return true;
+        }
+      }
+      return false;
+    }
+  }
+  return true;
+}
+
 void gfxPlatformFontList::GetFontList(nsAtom* aLangGroup,
                                       const nsACString& aGenericFamily,
                                       nsTArray<nsString>& aListOfFonts) {
@@ -1186,10 +1203,13 @@ void gfxPlatformFontList::GetFontList(nsAtom* aLangGroup,
         if (!IsVisibleToCSS(f, FontVisibility::User) || f.IsAltLocaleFamily()) {
           continue;
         }
+        nsString name = NS_ConvertUTF8toUTF16(list->LocalizedFamilyName(&f));
+        if (!IsFontAllowedByConfig(name)) {
+          continue;
+        }
         // XXX TODO: filter families for aGenericFamily, if supported by
         // platform
-        aListOfFonts.AppendElement(
-            NS_ConvertUTF8toUTF16(list->LocalizedFamilyName(&f)));
+        aListOfFonts.AppendElement(std::move(name));
       }
     }
     return;
@@ -1202,7 +1222,11 @@ void gfxPlatformFontList::GetFontList(nsAtom* aLangGroup,
     if (family->FilterForFontList(aLangGroup, aGenericFamily)) {
       nsAutoCString localizedFamilyName;
       family->LocalizedName(localizedFamilyName);
-      aListOfFonts.AppendElement(NS_ConvertUTF8toUTF16(localizedFamilyName));
+      nsString name = NS_ConvertUTF8toUTF16(localizedFamilyName);
+      if (!IsFontAllowedByConfig(name)) {
+        continue;
+      }
+      aListOfFonts.AppendElement(std::move(name));
     }
   }
 

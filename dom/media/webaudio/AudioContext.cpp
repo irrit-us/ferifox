@@ -5,6 +5,7 @@
 #include "AudioContext.h"
 
 #include "AudioBuffer.h"
+#include "FerifoxConfig.h"
 #include "AudioBufferSourceNode.h"
 #include "AudioChannelService.h"
 #include "AudioDestinationNode.h"
@@ -138,6 +139,12 @@ NS_INTERFACE_MAP_END_INHERITING(DOMEventTargetHelper)
 
 static float GetSampleRateForAudioContext(bool aIsOffline, float aSampleRate,
                                           bool aShouldResistFingerprinting) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetDouble("audio.sampleRate"_ns)) {
+      return static_cast<float>(*val);
+    }
+  }
+
   if (aIsOffline || aSampleRate != 0.0) {
     return aSampleRate;
   } else {
@@ -552,6 +559,13 @@ double AudioContext::OutputLatency() {
   if (mIsShutDown) {
     return 0.0;
   }
+
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetDouble("audio.outputLatency"_ns)) {
+      return *val;
+    }
+  }
+
   // When reduceFingerprinting is enabled, return a latency figure that is
   // fixed, but plausible for the platform.
   double latency_s = 0.0;
@@ -707,6 +721,12 @@ void AudioContext::UnregisterActiveNode(AudioNode* aNode) {
 }
 
 uint32_t AudioContext::MaxChannelCount() const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetUint32("audio.maxChannelCount"_ns)) {
+      return *val;
+    }
+  }
+
   if (mShouldResistFingerprinting) {
     return 2;
   }

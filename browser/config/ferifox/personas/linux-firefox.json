@@ -1,0 +1,57 @@
+{
+  "navigator": {
+    "webdriver": false,
+    "platform": "Linux x86_64",
+    "oscpu": "Linux x86_64",
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0",
+    "hardwareConcurrency": 4,
+    "maxTouchPoints": 0,
+    "vendor": "",
+    "vendorSub": "",
+    "productSub": "20100101",
+    "buildID": "20250701000000",
+    "appVersion": "5.0 (X11)",
+    "languages": ["en-US", "en"],
+    "appCodeName": "Mozilla",
+    "appName": "Netscape",
+    "cookieEnabled": true,
+    "pdfViewerEnabled": true,
+    "doNotTrack": "unspecified"
+  },
+  "screen": {
+    "width": 1920,
+    "height": 1080,
+    "availWidth": 1920,
+    "availHeight": 1040,
+    "colorDepth": 24,
+    "pixelDepth": 24,
+    "devicePixelRatio": 1.0
+  },
+  "window": {
+    "outerWidth": 1920,
+    "outerHeight": 1080
+  },
+  "webgl": {
+    "unmaskedVendor": "Mozilla",
+    "unmaskedRenderer": "Mozilla"
+  },
+  "audio": {
+    "sampleRate": 44100,
+    "outputLatency": 0.025,
+    "maxChannelCount": 2
+  },
+  "intl": {
+    "timezone": "America/Chicago",
+    "locale": "en_US.UTF-8"
+  },
+  "fonts": {
+    "visible": []
+  },
+  "headers": {
+    "acceptLanguage": "en-US,en;q=0.5"
+  },
+  "webrtc": {
+    "noHostCandidates": true,
+    "defaultAddressOnly": true
+  }
+}

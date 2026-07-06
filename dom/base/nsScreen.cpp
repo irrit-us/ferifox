@@ -4,6 +4,7 @@
 
 #include "nsScreen.h"
 
+#include "FerifoxConfig.h"
 #include "mozilla/GeckoBindings.h"
 #include "mozilla/dom/BrowsingContextBinding.h"
 #include "mozilla/dom/Document.h"
@@ -44,6 +45,12 @@ NS_IMPL_CYCLE_COLLECTION_INHERITED(nsScreen, DOMEventTargetHelper,
                                    mScreenOrientation)
 
 int32_t nsScreen::PixelDepth() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetInt32("screen.pixelDepth"_ns)) {
+      return *val;
+    }
+  }
+
   // Return 24 to prevent fingerprinting.
   if (ShouldResistFingerprinting(RFPTarget::ScreenPixelDepth)) {
     return 24;
@@ -67,6 +74,14 @@ nsDeviceContext* nsScreen::GetDeviceContext() const {
 }
 
 CSSIntRect nsScreen::GetRect() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    auto w = cfg->GetInt32("screen.width"_ns);
+    auto h = cfg->GetInt32("screen.height"_ns);
+    if (w && h) {
+      return {0, 0, *w, *h};
+    }
+  }
+
   // Return window inner rect to prevent fingerprinting.
   if (ShouldResistFingerprinting(RFPTarget::ScreenRect)) {
     return GetTopWindowInnerRectForRFP();
@@ -99,6 +114,14 @@ CSSIntRect nsScreen::GetRect() {
 }
 
 CSSIntRect nsScreen::GetAvailRect() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    auto w = cfg->GetInt32("screen.availWidth"_ns);
+    auto h = cfg->GetInt32("screen.availHeight"_ns);
+    if (w && h) {
+      return {0, 0, *w, *h};
+    }
+  }
+
   // Return window inner rect to prevent fingerprinting.
   if (ShouldResistFingerprinting(RFPTarget::ScreenAvailRect)) {
     return GetTopWindowInnerRectForRFP();

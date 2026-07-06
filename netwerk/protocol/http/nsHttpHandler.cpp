@@ -8,6 +8,7 @@
 #include "prsystem.h"
 
 #include "AltServiceChild.h"
+#include "FerifoxConfig.h"
 #include "nsCORSListenerProxy.h"
 #include "nsError.h"
 #include "nsHttp.h"
@@ -784,14 +785,25 @@ nsresult nsHttpHandler::AddStandardRequestHeaders(
   } else {
     // Add the "Accept-Language" header.  This header is also exposed to the
     // service worker.
-    if (mAcceptLanguagesIsDirty) {
-      rv = SetAcceptLanguages();
-      MOZ_ASSERT(NS_SUCCEEDED(rv));
+    nsCString acceptLang;
+    if (auto* cfg = FerifoxConfig::GetSingleton()) {
+      nsString al;
+      cfg->GetString("headers.acceptLanguage"_ns, al);
+      if (!al.IsEmpty()) {
+        acceptLang = NS_ConvertUTF16toUTF8(al);
+      }
+    }
+    if (acceptLang.IsEmpty()) {
+      if (mAcceptLanguagesIsDirty) {
+        rv = SetAcceptLanguages();
+        MOZ_ASSERT(NS_SUCCEEDED(rv));
+      }
+      acceptLang = mAcceptLanguages;
     }
 
     // Add the "Accept-Language" header
-    if (!mAcceptLanguages.IsEmpty()) {
-      rv = request->SetHeader(nsHttp::Accept_Language, mAcceptLanguages, false,
+    if (!acceptLang.IsEmpty()) {
+      rv = request->SetHeader(nsHttp::Accept_Language, acceptLang, false,
                               nsHttpHeaderArray::eVarietyRequestOverride);
       if (NS_FAILED(rv)) return rv;
     }
@@ -1002,6 +1014,16 @@ const nsCString& nsHttpHandler::UserAgent(bool aShouldResistFingerprinting) {
   if (!mUserAgentOverride.IsVoid()) {
     LOG(("using general.useragent.override : %s\n", mUserAgentOverride.get()));
     return mUserAgentOverride;
+  }
+
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString ua;
+    cfg->GetString("navigator.userAgent"_ns, ua);
+    if (!ua.IsEmpty()) {
+      mUserAgentOverride = NS_ConvertUTF16toUTF8(ua);
+      LOG(("using ferifox config userAgent : %s\n", mUserAgentOverride.get()));
+      return mUserAgentOverride;
+    }
   }
 
   if (mUserAgentIsDirty) {

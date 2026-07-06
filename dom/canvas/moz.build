@@ -186,6 +186,8 @@ SOURCES["MurmurHash3.cpp"].flags += ["-Wno-implicit-fallthrough"]
 
 LOCAL_INCLUDES += [
     "/js/xpconnect/wrappers",
+    "/toolkit/components/ferifox",
+    "/toolkit/components/jsoncpp/include",
 ]
 
 include("/ipc/chromium/chromium-config.mozbuild")

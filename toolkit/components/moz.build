@@ -45,6 +45,7 @@ DIRS += [
     "enterprisepolicies",
     "extensions",
     "formautofill",
+    "ferifox",
     "finalizationwitness",
     "find",
     "forgetaboutsite",

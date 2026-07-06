@@ -4,6 +4,7 @@
 
 #include "HeadlessScreenHelper.h"
 
+#include "FerifoxConfig.h"
 #include "prenv.h"
 #include "mozilla/dom/DOMTypes.h"
 #include "mozilla/RefPtr.h"
@@ -14,6 +15,14 @@ namespace widget {
 
 /* static */
 LayoutDeviceIntRect HeadlessScreenHelper::GetScreenRect() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    auto w = cfg->GetInt32("screen.width"_ns);
+    auto h = cfg->GetInt32("screen.height"_ns);
+    if (w && h) {
+      return LayoutDeviceIntRect(0, 0, *w, *h);
+    }
+  }
+
   char* ev = PR_GetEnv("MOZ_HEADLESS_WIDTH");
   int width = 1366;
   if (ev) {

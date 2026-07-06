@@ -16,6 +16,7 @@
 #include "AudioChannelService.h"
 #include "AutoplayPolicy.h"
 #include "Crypto.h"
+#include "FerifoxConfig.h"
 #include "MainThreadUtils.h"
 #include "Navigator.h"
 #include "PaintWorkletImpl.h"
@@ -3784,6 +3785,12 @@ static nsPresContext* GetPresContextForRatio(Document* aDoc) {
 
 double nsGlobalWindowInner::GetDevicePixelRatio(CallerType aCallerType,
                                                 ErrorResult& aError) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetDouble("screen.devicePixelRatio"_ns)) {
+      return *val;
+    }
+  }
+
   ENSURE_ACTIVE_DOCUMENT(aError, 0.0);
 
   RefPtr<nsPresContext> presContext = GetPresContextForRatio(mDoc);

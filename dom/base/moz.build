@@ -593,6 +593,8 @@ LOCAL_INCLUDES += [
     "/parser/htmlparser",
     "/security/manager/ssl",
     "/third_party/xsimd/include",
+    "/toolkit/components/ferifox",
+    "/toolkit/components/jsoncpp/include",
     "/widget",
     "/xpcom/build",
     "/xpcom/ds",

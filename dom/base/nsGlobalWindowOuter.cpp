@@ -48,6 +48,7 @@
 #include "mozilla/dom/WindowFeatures.h"  // WindowFeatures
 #include "mozilla/dom/WindowGlobalChild.h"
 #include "mozilla/dom/WindowProxyHolder.h"
+#include "FerifoxConfig.h"
 #include "mozilla/intl/LocaleService.h"
 #include "nsArrayUtils.h"
 #include "nsBaseCommandController.h"
@@ -3539,11 +3540,21 @@ CSSIntSize nsGlobalWindowOuter::GetOuterSize(CallerType aCallerType,
 
 int32_t nsGlobalWindowOuter::GetOuterWidthOuter(CallerType aCallerType,
                                                 ErrorResult& aError) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetInt32("window.outerWidth"_ns)) {
+      return *val;
+    }
+  }
   return GetOuterSize(aCallerType, aError).width;
 }
 
 int32_t nsGlobalWindowOuter::GetOuterHeightOuter(CallerType aCallerType,
                                                  ErrorResult& aError) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetInt32("window.outerHeight"_ns)) {
+      return *val;
+    }
+  }
   return GetOuterSize(aCallerType, aError).height;
 }
 
