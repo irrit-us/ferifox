@@ -3582,6 +3582,14 @@ CSSPoint nsGlobalWindowOuter::ScreenEdgeSlop() {
 
 CSSIntPoint nsGlobalWindowOuter::GetScreenXY(CallerType aCallerType,
                                              ErrorResult& aError) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    auto x = cfg->GetInt32("window.screenX"_ns);
+    auto y = cfg->GetInt32("window.screenY"_ns);
+    if (x && y) {
+      return CSSIntPoint(*x, *y);
+    }
+  }
+
   // When resisting fingerprinting, always return (0,0)
   if (nsIGlobalObject::ShouldResistFingerprinting(aCallerType,
                                                   RFPTarget::WindowScreenXY)) {
@@ -3668,6 +3676,12 @@ Maybe<CSSIntSize> nsGlobalWindowOuter::GetRDMDeviceSize(
 }
 
 float nsGlobalWindowOuter::GetMozInnerScreenXOuter(CallerType aCallerType) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetDouble("window.mozInnerScreenX"_ns)) {
+      return *val;
+    }
+  }
+
   // When resisting fingerprinting, always return 0.
   if (nsIGlobalObject::ShouldResistFingerprinting(
           aCallerType, RFPTarget::WindowInnerScreenXY)) {
@@ -3679,6 +3693,12 @@ float nsGlobalWindowOuter::GetMozInnerScreenXOuter(CallerType aCallerType) {
 }
 
 float nsGlobalWindowOuter::GetMozInnerScreenYOuter(CallerType aCallerType) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetDouble("window.mozInnerScreenY"_ns)) {
+      return *val;
+    }
+  }
+
   // Return 0 to prevent fingerprinting.
   if (nsIGlobalObject::ShouldResistFingerprinting(
           aCallerType, RFPTarget::WindowInnerScreenXY)) {

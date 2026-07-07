@@ -31,6 +31,7 @@ Browser anonymity requires addressing detection at **five layers**:
 - **Program-driven operation is broader than script evaluation** — evaluator APIs are only one subset; input, screenshot, storage, network, permissions, emulation, window, and session commands have separate protocol algorithms that can diverge from regular UI behavior
 - **Crawler inspection should be narrow and native** — DOM structure, attributes, text nodes, links, and form/resource metadata can be captured without a general side-effect-free page-runtime inspector; dynamic JS values remain unsafe unless explicitly evaluated
 - **Cloudflare robot checks cannot be declared solved by local API patching alone** — a personal computer and residential network help, but Cloudflare also scores client-side challenge execution, request fingerprints, bot scores, heuristics, and IP/proxy reputation
+- **Geometry consistency extends into input events** — screen size, outer window size, window origin, inner-screen origin, orientation, and trusted mouse/pointer `screenX/Y` need to align with the same persona
 - **Passive request context also matters** — HTTP Priority and top-window URI state can reveal automation/browser context even when JS-visible APIs are patched
 - **TLS fingerprint spoofing** remains the hardest unsolved problem — no fully general open-source solution exists
 - **IP reputation trumps everything** — the best fingerprint spoofing fails with datacenter IPs; residential proxies are essential

@@ -33,11 +33,19 @@
     "availHeight": 824,
     "colorDepth": 24,
     "pixelDepth": 24,
-    "devicePixelRatio": 1.25
+    "devicePixelRatio": 1.25,
+    "orientation": {
+      "type": "landscape-primary",
+      "angle": 0
+    }
   },
   "window": {
     "outerWidth": 1536,
-    "outerHeight": 864
+    "outerHeight": 864,
+    "screenX": 0,
+    "screenY": 0,
+    "mozInnerScreenX": 0.0,
+    "mozInnerScreenY": 88.0
   },
   "webgl": {
     "unmaskedVendor": "Google Inc. (Intel)",

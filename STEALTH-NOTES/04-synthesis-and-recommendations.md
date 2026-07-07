@@ -137,6 +137,8 @@ The current branch audit found additional surfaces that must be controlled along
 - `navigator.plugins` and `navigator.mimeTypes` need consistent length, indexed getter, named getter, and supported-name behavior. Returning a spoofed length while leaving named entries reachable is detectable.
 - `navigator.geolocation` should be replaced at the position update source so both `getCurrentPosition()` and `watchPosition()` receive the configured position.
 - `navigator.connection.type` needs config handling in the Network Information implementation, not just the object presence or scalar metrics.
+- Window origin and viewport-origin geometry must be coherent. `window.screenX/screenY`, `window.mozInnerScreenX/Y`, `screen.orientation`, legacy orientation APIs, and trusted `MouseEvent`/`PointerEvent` `screenX/screenY` values should tell the same screen story as `screen.width/height`, `devicePixelRatio`, and `outerWidth/outerHeight`.
+- `window.innerWidth/innerHeight` are high-risk to spoof as standalone getters because layout APIs, CSS media queries, `documentElement.clientWidth`, `visualViewport`, and screenshots can expose the real viewport. The recommended default is to make the actual launch viewport match the persona, then only spoof origin and screen metadata that do not control layout.
 - HTTP `Priority` and top-window URI state are passive network/context signals. They are not JS getters, but they can expose request scheduling or embedding context to browser-side observers and should be stripped by stealth profiles.
 - Automation recommended prefs such as popup blocking, delayed input security, permission testing, push connection, focus test mode, offline status, and `dump()` exposure should inherit regular headed Firefox state unless a caller explicitly opts into a test-only behavior.
 
@@ -197,10 +199,14 @@ This means Ferifox does not need a broad side-effect-free evaluator for default 
 
 The current branch is not sufficient to guarantee Cloudflare robot-check passage, even on a personal computer. It removes several obvious Firefox automation differences, normalizes many page-facing fingerprint surfaces, and makes program-driven prefs inherit normal browser/profile state, which is a meaningful improvement over stock automation. But Cloudflare's public documentation describes challenge and bot products that consider client-side browser signals, JavaScript Detections, bot scores, static detections such as header-order mismatches, and proxy/network classifications.
 
+For the Cloudflare-relevant JavaScript interface layer, Ferifox now treats these signal families as a coherent group: navigator identity and automation state, language/locale/timezone, screen and window geometry, screen orientation, trusted pointer/mouse event screen coordinates, WebGL adapter strings, WebGPU's standard adapter-info fields, audio context metadata, font availability, geolocation, Network Information, cookies/PDF/plugins/mimeTypes, and DNT/GPC. The latest geometry patch closes a concrete mismatch where a persona could report a spoofed screen and outer window while page-visible `screenX`, `mozInnerScreenX/Y`, orientation, and trusted event `screenX/Y` still reflected the host window.
+
 Running on a personal computer with a normal residential network improves the network and hardware story compared with a datacenter VM, but it does not close the remaining gaps:
 
 - TLS/HTTP2/HTTP3 transport fingerprinting is not configurable in this branch.
 - Cloudflare challenge execution can still observe Firefox-specific rendering, timing, WebGL/canvas/audio/font behavior, and interaction patterns.
+- Viewport sizing must be real. A launcher should size the actual window and automation viewport to the persona; spoofing only `innerWidth/innerHeight` would create layout and screenshot contradictions.
+- Trusted mouse/pointer event `screenX/Y` now align with configured `window.mozInnerScreenX/Y` for content callers, but touch event screen coordinates remain a separate surface and should not be enabled in personas that declare `maxTouchPoints: 0`.
 - Remote Agent, Marionette, WebDriver BiDi, and Puppeteer/Playwright command algorithms remain distinct program-driven paths unless the crawler avoids them or limits them to native snapshot reads.
 - No native crawler snapshot API exists yet in this branch; if the crawler uses evaluator-based reads, getter/proxy/serialization side effects remain possible.
 - Behavioral quality is not covered. A real user on a personal computer can solve interactive challenges; an automated flow still needs human-like timing, focus, input, navigation, and retry behavior.
@@ -233,6 +239,14 @@ geolocation.longitude
 geolocation.accuracy
 network.stripTopWindowURI
 network.stripPriorityHeader
+window.screenX
+window.screenY
+window.mozInnerScreenX
+window.mozInnerScreenY
+window.outerWidth
+window.outerHeight
+screen.orientation.type
+screen.orientation.angle
 ```
 
 The important constraint is still consistency: geolocation must match proxy egress, timezone, locale, `Accept-Language`, and the persona's regional assumptions. Plugin and MIME counts must match the actual objects exposed by the engine unless the implementation also creates synthetic entries.

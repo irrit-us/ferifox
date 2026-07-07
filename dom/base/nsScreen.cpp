@@ -34,6 +34,43 @@ nsScreen::nsScreen(nsPIDOMWindowInner* aWindow)
 
 nsScreen::~nsScreen() = default;
 
+static Maybe<hal::ScreenOrientation> GetConfiguredScreenOrientationType() {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return Nothing();
+  }
+
+  nsString type;
+  cfg->GetString("screen.orientation.type"_ns, type);
+  if (type.EqualsLiteral("portrait-primary")) {
+    return Some(hal::ScreenOrientation::PortraitPrimary);
+  }
+  if (type.EqualsLiteral("portrait-secondary")) {
+    return Some(hal::ScreenOrientation::PortraitSecondary);
+  }
+  if (type.EqualsLiteral("landscape-primary")) {
+    return Some(hal::ScreenOrientation::LandscapePrimary);
+  }
+  if (type.EqualsLiteral("landscape-secondary")) {
+    return Some(hal::ScreenOrientation::LandscapeSecondary);
+  }
+  return Nothing();
+}
+
+static Maybe<uint16_t> GetConfiguredScreenOrientationAngle() {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return Nothing();
+  }
+
+  auto angle = cfg->GetUint32("screen.orientation.angle"_ns);
+  if (!angle ||
+      (*angle != 0 && *angle != 90 && *angle != 180 && *angle != 270)) {
+    return Nothing();
+  }
+  return Some(static_cast<uint16_t>(*angle));
+}
+
 // QueryInterface implementation for nsScreen
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsScreen)
 NS_INTERFACE_MAP_END_INHERITING(DOMEventTargetHelper)
@@ -192,6 +229,10 @@ bool nsScreen::IsFullscreen() const {
 }
 
 uint16_t nsScreen::GetOrientationAngle() const {
+  if (auto angle = GetConfiguredScreenOrientationAngle()) {
+    return *angle;
+  }
+
   nsDeviceContext* context = GetDeviceContext();
   if (context) {
     return context->GetScreenOrientationAngle();
@@ -202,6 +243,10 @@ uint16_t nsScreen::GetOrientationAngle() const {
 }
 
 hal::ScreenOrientation nsScreen::GetOrientationType() const {
+  if (auto type = GetConfiguredScreenOrientationType()) {
+    return *type;
+  }
+
   nsDeviceContext* context = GetDeviceContext();
   if (context) {
     return context->GetScreenOrientationType();

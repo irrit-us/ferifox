@@ -33,11 +33,19 @@
     "availHeight": 944,
     "colorDepth": 24,
     "pixelDepth": 24,
-    "devicePixelRatio": 2.0
+    "devicePixelRatio": 2.0,
+    "orientation": {
+      "type": "landscape-primary",
+      "angle": 0
+    }
   },
   "window": {
     "outerWidth": 1512,
-    "outerHeight": 982
+    "outerHeight": 982,
+    "screenX": 0,
+    "screenY": 0,
+    "mozInnerScreenX": 0.0,
+    "mozInnerScreenY": 80.0
   },
   "webgl": {
     "unmaskedVendor": "Apple Inc.",

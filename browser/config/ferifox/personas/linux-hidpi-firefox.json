@@ -33,11 +33,19 @@
     "availHeight": 860,
     "colorDepth": 24,
     "pixelDepth": 24,
-    "devicePixelRatio": 1.5
+    "devicePixelRatio": 1.5,
+    "orientation": {
+      "type": "landscape-primary",
+      "angle": 0
+    }
   },
   "window": {
     "outerWidth": 1600,
-    "outerHeight": 900
+    "outerHeight": 900,
+    "screenX": 0,
+    "screenY": 0,
+    "mozInnerScreenX": 0.0,
+    "mozInnerScreenY": 86.0
   },
   "webgl": {
     "unmaskedVendor": "Mesa/X.org",

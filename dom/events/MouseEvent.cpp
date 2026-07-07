@@ -4,6 +4,7 @@
 
 #include "MouseEvent.h"
 
+#include "FerifoxConfig.h"
 #include "mozilla/BasePrincipal.h"
 #include "mozilla/EventForwards.h"
 #include "mozilla/MouseEvents.h"
@@ -21,6 +22,20 @@ static nsIntPoint DevPixelsToCSSPixels(const LayoutDeviceIntPoint& aPoint,
                                        nsPresContext* aContext) {
   return nsIntPoint(aContext->DevPixelsToIntCSSPixels(aPoint.x),
                     aContext->DevPixelsToIntCSSPixels(aPoint.y));
+}
+
+static Maybe<CSSDoublePoint> GetConfiguredInnerScreenPoint() {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return Nothing();
+  }
+
+  auto x = cfg->GetDouble("window.mozInnerScreenX"_ns);
+  auto y = cfg->GetDouble("window.mozInnerScreenY"_ns);
+  if (x && y) {
+    return Some(CSSDoublePoint(*x, *y));
+  }
+  return Nothing();
 }
 
 MouseEvent::MouseEvent(EventTarget* aOwner, nsPresContext* aPresContext,
@@ -315,6 +330,13 @@ CSSDoublePoint MouseEvent::ScreenPoint(CallerType aCallerType) const {
         mPresContext, mEvent, mWidgetOrScreenRelativePoint,
         CSSDoublePoint{0, 0});
     return mUseFractionalCoords ? clientPoint : RoundedToInt(clientPoint);
+  }
+
+  if (aCallerType != CallerType::System && IsTrusted()) {
+    if (auto innerScreenPoint = GetConfiguredInnerScreenPoint()) {
+      const CSSDoublePoint screenPoint = *innerScreenPoint + ClientPoint();
+      return mUseFractionalCoords ? screenPoint : RoundedToInt(screenPoint);
+    }
   }
 
   const CSSDoublePoint screenPoint =
