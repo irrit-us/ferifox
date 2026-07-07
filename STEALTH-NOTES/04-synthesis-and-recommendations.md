@@ -138,7 +138,7 @@ The current branch audit found additional surfaces that must be controlled along
 - `navigator.geolocation` should be replaced at the position update source so both `getCurrentPosition()` and `watchPosition()` receive the configured position.
 - `navigator.connection.type` needs config handling in the Network Information implementation, not just the object presence or scalar metrics.
 - HTTP `Priority` and top-window URI state are passive network/context signals. They are not JS getters, but they can expose request scheduling or embedding context to browser-side observers and should be stripped by stealth profiles.
-- Automation recommended prefs such as popup blocking, delayed input security, permission testing, push connection, focus test mode, offline status, and `dump()` exposure need to be blocked or restored before Playwright, Puppeteer, Marionette, or WebDriver BiDi startup can make them effective.
+- Automation recommended prefs such as popup blocking, delayed input security, permission testing, push connection, focus test mode, offline status, and `dump()` exposure should inherit regular headed Firefox state unless a caller explicitly opts into a test-only behavior.
 
 ### Other Entry-Point Paths
 
@@ -146,11 +146,28 @@ The follow-up audit expanded beyond Playwright and Puppeteer into the other path
 
 - Remote Agent starts from `--remote-debugging-port` and creates the WebDriver BiDi server. It also marks the Remote Agent as active in process shared data and can apply recommended automation prefs during command-line startup.
 - Marionette starts from `--marionette` or `MOZ_MARIONETTE`, then applies the same recommended automation prefs unless `remote.prefs.recommended` has already been disabled. The Marionette Python harness launches with `-marionette` and `-remote-allow-system-access`.
-- geckodriver and Puppeteer's Firefox browser-data path write profile prefs before startup. The repeated identifiable values are `focusmanager.testmode=true`, `geo.provider.testing=true`, `geo.wifi.scan=false`, `network.manage-offline-status=false`, and `hangmonitor.timeout=0`; Puppeteer also disables the Firefox Screenshots component and enables a BiDi file-picker workaround.
+- geckodriver and Puppeteer's Firefox browser-data path write profile prefs before startup. This branch removes the repeated high-signal automation defaults so focus test mode, geolocation testing, Wi-Fi scanning, hang-monitor behavior, online/offline status management, Screenshots, and file-picker behavior inherit the regular browser/profile state.
 - DevTools' `--start-debugger-server` path is separate from Marionette and Remote Agent, but it opens an incoming debugging socket when `devtools.debugger.remote-enabled` allows it. Non-Browser-Toolbox DevTools sockets feed the same browser "remote control" visual cue used for Marionette and Remote Agent.
 - Headless and screenshot startup paths (`MOZ_HEADLESS`, `--headless`, `--screenshot`, and `--window-size`) can still create identifiable screen and viewport behavior. Ferifox screen persona fields should therefore be applied before headless screen fallback dimensions become observable.
 
 External references checked in July 2026 are consistent with the local source audit: Puppeteer's [WebDriver BiDi](https://pptr.dev/webdriver-bidi) documentation covers the Firefox automation path, Firefox Source Docs describe the [Remote Agent](https://firefox-source-docs.mozilla.org/remote/index.html) around WebDriver BiDi and Marionette remote control, and Playwright's [browser documentation](https://playwright.dev/docs/browsers) keeps Firefox as a first-class automation target. In this tree, the startup risk is mediated by Firefox's own remote automation and profile-pref surfaces.
+
+### Recommended Preference Baseline
+
+The shared Remote Agent/Marionette recommended preferences, geckodriver defaults, Marionette Python profile defaults, and Puppeteer's Firefox profile writer should not seed browser behavior that contradicts a regular headed Firefox profile. For stealth, the standard browser/profile/header state is the source of truth; the program-driven state should synchronize to it rather than modifying it. This branch therefore stops seeding the following startup defaults where they were previously automation-specific:
+
+- `browser.dom.window.dump.enabled=true` and `devtools.console.stdout.chrome=true`
+- `dom.disable_open_during_load=false`
+- `dom.input_events.security.minNumTicks=0` and `dom.input_events.security.minTimeElapsedInMS=0`
+- `dom.max_script_run_time=0`, `dom.navigation.navigationRateLimit.count=0`, and `dom.successive_dialog_time_limit=0`
+- `dom.permissions.testing.enabled=true` and `dom.push.connection.enabled=false`
+- `focusmanager.testmode=true` and `geo.provider.testing=true`
+- `geo.wifi.scan=false` and `hangmonitor.timeout=0`
+- `mousewheel.allow_scrolling_more_than_one_page=true` and `network.manage-offline-status=false`
+- `security.fileuri.strict_origin_policy=false` and `security.notification_enable_delay=0`
+- Puppeteer-specific seeds for `network.http.speculative-parallel-limit=0`, `remote.bidi.dismiss_file_pickers.enabled=true`, `screenshots.browser.component.enabled=false`, and `toolkit.cosmeticAnimations.enabled=false`
+
+These changes keep the automation server usable, but they intentionally remove test shortcuts that made program-driven sessions easier to classify. Workflows that require the old behavior should pass explicit per-session preferences rather than relying on a stealth/default profile to expose them.
 
 ### Program-Driven Interfaces and Evaluators
 

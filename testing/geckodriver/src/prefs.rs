@@ -27,11 +27,6 @@ lazy_static! {
         // updates to be downloaded and applied.
         ("app.update.disabledForTesting", Pref::new(true)),
 
-        // Enable the dump function, which sends messages to the system
-        // console
-        ("browser.dom.window.dump.enabled", Pref::new(true)),
-        ("devtools.console.stdout.chrome", Pref::new(true)),
-
         // Do not restore the last open set of tabs if the browser crashed
         ("browser.sessionstore.resume_from_crash", Pref::new(false)),
 
@@ -78,22 +73,8 @@ lazy_static! {
         ("extensions.update.enabled", Pref::new(false)),
         ("extensions.update.notifyUser", Pref::new(false)),
 
-        // Allow the application to have focus even it runs in the
-        // background
-        ("focusmanager.testmode", Pref::new(true)),
-
         // Disable useragent updates
         ("general.useragent.updates.enabled", Pref::new(false)),
-
-        // Always use network provider for geolocation tests so we bypass
-        // the macOS dialog raised by the corelocation provider
-        ("geo.provider.testing", Pref::new(true)),
-
-        // Do not scan wi-fi
-        ("geo.wifi.scan", Pref::new(false)),
-
-        // No hang monitor
-        ("hangmonitor.timeout", Pref::new(0)),
 
         // Disable idle-daily notifications to avoid expensive operations
         // that may cause unexpected test timeouts.
@@ -104,9 +85,6 @@ lazy_static! {
 
         // Disable the GFX sanity window
         ("media.sanity-test.disabled", Pref::new(true)),
-
-        // Do not automatically switch between offline and online
-        ("network.manage-offline-status", Pref::new(false)),
 
         // Make sure SNTP requests do not hit the network
         ("network.sntp.pools", Pref::new("%(server)s")),
