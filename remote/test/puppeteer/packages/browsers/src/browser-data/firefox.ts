@@ -230,10 +230,6 @@ function defaultProfilePreferences(
     'browser.contentblocking.features.standard':
       '-tp,tpPrivate,cookieBehavior0,-cryptoTP,-fp',
 
-    // Enable the dump function: which sends messages to the system
-    // console
-    // https://bugzilla.mozilla.org/show_bug.cgi?id=1543115
-    'browser.dom.window.dump.enabled': true,
     // Disable topstories
     'browser.newtabpage.activity-stream.feeds.system.topstories': false,
     // Always display a blank page
@@ -299,19 +295,12 @@ function defaultProfilePreferences(
     // This doesn't affect Puppeteer but spams console (Bug 1424372)
     'devtools.jsonview.enabled': false,
 
-    // Disable popup-blocker
-    'dom.disable_open_during_load': false,
-
     // Enable the support for File object creation in the content process
     // Required for |Page.setFileInputFiles| protocol method.
     'dom.file.createInChild': true,
 
     // Disable the ProcessHangMonitor
     'dom.ipc.reportProcessHangs': false,
-
-    // Disable slow script dialogues
-    'dom.max_chrome_script_run_time': 0,
-    'dom.max_script_run_time': 0,
 
     // Only load extensions from the application and user profile
     // AddonManager.SCOPE_PROFILE + AddonManager.SCOPE_APPLICATION
@@ -333,21 +322,8 @@ function defaultProfilePreferences(
     // Make sure opening about:addons will not hit the network
     'extensions.webservice.discoverURL': `http://${server}/dummy/discoveryURL`,
 
-    // Allow the application to have focus even it runs in the background
-    'focusmanager.testmode': true,
-
     // Disable useragent updates
     'general.useragent.updates.enabled': false,
-
-    // Always use network provider for geolocation tests so we bypass the
-    // macOS dialog raised by the corelocation provider
-    'geo.provider.testing': true,
-
-    // Do not scan Wifi
-    'geo.wifi.scan': false,
-
-    // No hang monitor
-    'hangmonitor.timeout': 0,
 
     // Show chrome errors and warnings in the error console
     'javascript.options.showInConsole': true,
@@ -364,13 +340,6 @@ function defaultProfilePreferences(
     // Do not prompt for temporary redirects
     'network.http.prompt-temp-redirect': false,
 
-    // Disable speculative connections so they are not reported as leaking
-    // when they are hanging around
-    'network.http.speculative-parallel-limit': 0,
-
-    // Do not automatically switch between offline and online
-    'network.manage-offline-status': false,
-
     // Make sure SNTP requests do not hit the network
     'network.sntp.pools': server,
 
@@ -383,22 +352,8 @@ function defaultProfilePreferences(
     // https://bugzilla.mozilla.org/show_bug.cgi?id=1710839
     'remote.enabled': true,
 
-    // Until Bug 1999693 is resolved, this preference needs to be set to allow
-    // Webdriver BiDi to automatically dismiss file pickers.
-    'remote.bidi.dismiss_file_pickers.enabled': true,
-
-    // Disabled screenshots component
-    'screenshots.browser.component.enabled': false,
-
     // Don't do network connections for mitm priming
     'security.certerrors.mitm.priming.enabled': false,
-
-    // Local documents have access to all other local documents,
-    // including directory listings
-    'security.fileuri.strict_origin_policy': false,
-
-    // Do not wait for the notification button security delay
-    'security.notification_enable_delay': 0,
 
     // Ensure blocklist updates do not hit the network
     'services.settings.server': `http://${server}/dummy/blocklist/`,
@@ -416,9 +371,6 @@ function defaultProfilePreferences(
 
     // Disable first-run welcome page
     'startup.homepage_welcome_url.additional': '',
-
-    // Disable browser animations (tabs, fullscreen, sliding alerts)
-    'toolkit.cosmeticAnimations.enabled': false,
 
     // Prevent starting into safe mode after application crashes
     'toolkit.startup.max_resumed_crashes': -1,

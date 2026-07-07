@@ -145,6 +145,8 @@ All fingerprint manipulation happens **inside the browser engine's C++ code**, b
 **Screen & Window (patched in `nsScreen.cpp`, `nsGlobalWindowInner.cpp`)**
 - `screen.width/height`, `screen.availWidth/availHeight`, `screen.colorDepth`
 - `window.innerWidth/innerHeight`, `window.outerWidth/outerHeight`
+- `window.screenX/screenY`, `window.mozInnerScreenX/Y`, event `screenX/screenY`
+- `screen.orientation.type/angle`, legacy `screen.mozOrientation`, `window.orientation`
 - `window.devicePixelRatio`
 
 **WebGL (patched in `WebGLParamsManager.cpp`)**

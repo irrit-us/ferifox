@@ -188,4 +188,5 @@ LOCAL_INCLUDES += [
     "/layout/generic",
     "/layout/xul",
     "/layout/xul/tree/",
+    "/toolkit/components/ferifox",
 ]

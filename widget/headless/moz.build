@@ -8,6 +8,7 @@ with Files("**"):
 DIRS += ["tests"]
 
 LOCAL_INCLUDES += [
+    "/toolkit/components/ferifox",
     "/widget",
     "/widget/headless",
 ]

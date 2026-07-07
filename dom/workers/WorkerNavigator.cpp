@@ -5,6 +5,7 @@
 #include "mozilla/dom/WorkerNavigator.h"
 
 #include "ErrorList.h"
+#include "FerifoxConfig.h"
 #include "MainThreadUtils.h"
 #include "RuntimeService.h"
 #include "WorkerRunnable.h"
@@ -106,6 +107,12 @@ JSObject* WorkerNavigator::WrapObject(JSContext* aCx,
 }
 
 bool WorkerNavigator::GlobalPrivacyControl() const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetBool("navigator.globalPrivacyControl"_ns)) {
+      return *val;
+    }
+  }
+
   bool gpcStatus = StaticPrefs::privacy_globalprivacycontrol_enabled();
   if (!gpcStatus) {
     JSObject* jso = GetWrapper();
@@ -118,6 +125,46 @@ bool WorkerNavigator::GlobalPrivacyControl() const {
   }
   return StaticPrefs::privacy_globalprivacycontrol_functionality_enabled() &&
          gpcStatus;
+}
+
+void WorkerNavigator::GetAppCodeName(nsString& aAppCodeName,
+                                     ErrorResult& /* unused */) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.appCodeName"_ns, val);
+    if (!val.IsEmpty()) {
+      aAppCodeName = std::move(val);
+      return;
+    }
+  }
+
+  aAppCodeName.AssignLiteral("Mozilla");
+}
+
+void WorkerNavigator::GetAppName(nsString& aAppName) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.appName"_ns, val);
+    if (!val.IsEmpty()) {
+      aAppName = std::move(val);
+      return;
+    }
+  }
+
+  aAppName.AssignLiteral("Netscape");
+}
+
+void WorkerNavigator::GetProduct(nsString& aProduct) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.product"_ns, val);
+    if (!val.IsEmpty()) {
+      aProduct = std::move(val);
+      return;
+    }
+  }
+
+  aProduct.AssignLiteral("Gecko");
 }
 
 void WorkerNavigator::SetLanguages(const nsTArray<nsString>& aLanguages) {
@@ -221,6 +268,14 @@ void WorkerNavigator::GetUserAgent(nsString& aUserAgent, CallerType aCallerType,
 }
 
 uint64_t WorkerNavigator::HardwareConcurrency() const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetUint32("navigator.hardwareConcurrency"_ns)) {
+      if (*val > 0) {
+        return *val;
+      }
+    }
+  }
+
   RuntimeService* rts = RuntimeService::GetService();
   MOZ_ASSERT(rts);
 
@@ -231,6 +286,16 @@ uint64_t WorkerNavigator::HardwareConcurrency() const {
           RFPTarget::NavigatorHWConcurrency),
       aWorkerPrivate->ShouldResistFingerprinting(
           RFPTarget::NavigatorHWConcurrencyTiered));
+}
+
+bool WorkerNavigator::OnLine() const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetBool("navigator.onLine"_ns)) {
+      return *val;
+    }
+  }
+
+  return mOnline;
 }
 
 StorageManager* WorkerNavigator::Storage() {

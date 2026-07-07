@@ -1,0 +1,101 @@
+{
+  "navigator": {
+    "webdriver": false,
+    "platform": "MacIntel",
+    "oscpu": "Intel Mac OS X 10.15",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:152.0) Gecko/20100101 Firefox/152.0",
+    "hardwareConcurrency": 8,
+    "maxTouchPoints": 0,
+    "vendor": "",
+    "vendorSub": "",
+    "product": "Gecko",
+    "productSub": "20100101",
+    "buildID": "20250701000000",
+    "appVersion": "5.0 (Macintosh)",
+    "languages": ["en-US", "en"],
+    "appCodeName": "Mozilla",
+    "appName": "Netscape",
+    "cookieEnabled": true,
+    "pdfViewerEnabled": true,
+    "pluginsLength": 5,
+    "mimeTypesLength": 2,
+    "doNotTrack": "unspecified",
+    "globalPrivacyControl": false,
+    "onLine": true,
+    "connection": {
+      "type": "wifi"
+    }
+  },
+  "screen": {
+    "width": 1512,
+    "height": 982,
+    "availWidth": 1512,
+    "availHeight": 944,
+    "colorDepth": 24,
+    "pixelDepth": 24,
+    "devicePixelRatio": 2.0,
+    "orientation": {
+      "type": "landscape-primary",
+      "angle": 0
+    }
+  },
+  "window": {
+    "outerWidth": 1512,
+    "outerHeight": 982,
+    "screenX": 0,
+    "screenY": 0,
+    "mozInnerScreenX": 0.0,
+    "mozInnerScreenY": 80.0
+  },
+  "webgl": {
+    "unmaskedVendor": "Apple Inc.",
+    "unmaskedRenderer": "Apple M2"
+  },
+  "audio": {
+    "sampleRate": 48000,
+    "outputLatency": 0.021,
+    "maxChannelCount": 2
+  },
+  "intl": {
+    "timezone": "America/Los_Angeles",
+    "locale": "en_US.UTF-8"
+  },
+  "geolocation": {
+    "latitude": 34.0522,
+    "longitude": -118.2437,
+    "accuracy": 80
+  },
+  "fonts": {
+    "visible": [
+      ".AppleSystemUIFont",
+      "Arial",
+      "Avenir",
+      "Courier",
+      "Courier New",
+      "Geneva",
+      "Helvetica",
+      "Helvetica Neue",
+      "Menlo",
+      "Monaco",
+      "New York",
+      "SF Compact",
+      "SF Pro",
+      "Times",
+      "Times New Roman"
+    ]
+  },
+  "headers": {
+    "acceptLanguage": "en-US,en;q=0.5"
+  },
+  "network": {
+    "stripTopWindowURI": true,
+    "stripPriorityHeader": true
+  },
+  "webrtc": {
+    "noHostCandidates": true,
+    "defaultAddressOnly": true
+  },
+  "automation": {
+    "stealth": true
+  }
+}

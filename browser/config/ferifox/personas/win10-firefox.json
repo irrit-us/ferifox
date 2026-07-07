@@ -1,0 +1,102 @@
+{
+  "navigator": {
+    "webdriver": false,
+    "platform": "Win32",
+    "oscpu": "Windows NT 10.0; Win64; x64",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0",
+    "hardwareConcurrency": 8,
+    "maxTouchPoints": 0,
+    "vendor": "",
+    "vendorSub": "",
+    "product": "Gecko",
+    "productSub": "20100101",
+    "buildID": "20250701000000",
+    "appVersion": "5.0 (Windows)",
+    "languages": ["en-US", "en"],
+    "appCodeName": "Mozilla",
+    "appName": "Netscape",
+    "cookieEnabled": true,
+    "pdfViewerEnabled": true,
+    "pluginsLength": 5,
+    "mimeTypesLength": 2,
+    "doNotTrack": "unspecified",
+    "globalPrivacyControl": false,
+    "onLine": true,
+    "connection": {
+      "type": "wifi"
+    }
+  },
+  "screen": {
+    "width": 1920,
+    "height": 1080,
+    "availWidth": 1920,
+    "availHeight": 1040,
+    "colorDepth": 24,
+    "pixelDepth": 24,
+    "devicePixelRatio": 1.0,
+    "orientation": {
+      "type": "landscape-primary",
+      "angle": 0
+    }
+  },
+  "window": {
+    "outerWidth": 1920,
+    "outerHeight": 1080,
+    "screenX": 0,
+    "screenY": 0,
+    "mozInnerScreenX": 0.0,
+    "mozInnerScreenY": 88.0
+  },
+  "webgl": {
+    "unmaskedVendor": "Google Inc. (Intel)",
+    "unmaskedRenderer": "ANGLE (Intel, Intel(R) UHD Graphics 620 Direct3D11 vs_5_0 ps_5_0, D3D11-27.20.100.9316)"
+  },
+  "audio": {
+    "sampleRate": 48000,
+    "outputLatency": 0.04,
+    "maxChannelCount": 2
+  },
+  "intl": {
+    "timezone": "America/Chicago",
+    "locale": "en_US.UTF-8"
+  },
+  "geolocation": {
+    "latitude": 41.8781,
+    "longitude": -87.6298,
+    "accuracy": 120
+  },
+  "fonts": {
+    "visible": [
+      "Arial",
+      "Calibri",
+      "Cambria",
+      "Cambria Math",
+      "Candara",
+      "Comic Sans MS",
+      "Consolas",
+      "Courier New",
+      "Georgia",
+      "Segoe UI",
+      "Tahoma",
+      "Times New Roman",
+      "Trebuchet MS",
+      "Verdana",
+      "Webdings",
+      "Wingdings"
+    ]
+  },
+  "headers": {
+    "acceptLanguage": "en-US,en;q=0.5"
+  },
+  "network": {
+    "stripTopWindowURI": true,
+    "stripPriorityHeader": true
+  },
+  "webrtc": {
+    "noHostCandidates": true,
+    "defaultAddressOnly": true
+  },
+  "automation": {
+    "stealth": true
+  }
+}

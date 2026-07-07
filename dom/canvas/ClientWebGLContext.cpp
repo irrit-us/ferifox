@@ -9,6 +9,7 @@
 #include <bitset>
 
 #include "ClientWebGLExtensions.h"
+#include "FerifoxConfig.h"
 #include "HostWebGLContext.h"
 #include "TexUnpackBlob.h"
 #include "WebGLChild.h"
@@ -2351,6 +2352,24 @@ void ClientWebGLContext::GetParameter(JSContext* cx, GLenum pname,
         if (!IsExtensionEnabled(WebGLExtensionID::WEBGL_debug_renderer_info)) {
           EnqueueError_ArgEnum("pname", pname);
           return;
+        }
+
+        {
+          if (auto* cfg = FerifoxConfig::GetSingleton()) {
+            nsString val;
+            cfg->GetString(pname == dom::WEBGL_debug_renderer_info_Binding::
+                                        UNMASKED_RENDERER_WEBGL
+                               ? "webgl.unmaskedRenderer"_ns
+                               : "webgl.unmaskedVendor"_ns,
+                           val);
+            if (!val.IsEmpty()) {
+              NS_ConvertUTF16toUTF8 utf8(val);
+              ret = Some(std::string(utf8.get(), utf8.Length()));
+            }
+          }
+        }
+        if (ret) {
+          break;
         }
 
         switch (pname) {

@@ -654,6 +654,7 @@ class nsHttpHandler final : public nsIHttpProtocolHandler,
   nsCString mDeviceModelId;
 
   nsCString mUserAgent;
+  nsCString mFerifoxUserAgent;
   nsCString mSpoofedUserAgent;
   nsCString mUserAgentOverride;
   bool mUserAgentIsDirty{true};  // true if mUserAgent should be rebuilt

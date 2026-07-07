@@ -543,7 +543,7 @@ class HttpBaseChannel : public nsHashPropertyBag,
     return mRequestHead.ClearHeader(nsHttp::Referer);
   }
 
-  void SetTopWindowURI(nsIURI* aTopWindowURI) { mTopWindowURI = aTopWindowURI; }
+  void SetTopWindowURI(nsIURI* aTopWindowURI);
 
   // Set referrerInfo and compute the referrer header if neccessary.
   // Pass true for aSetOriginal if this is a new referrer and should

@@ -4,6 +4,7 @@
 
 #include "nsScreen.h"
 
+#include "FerifoxConfig.h"
 #include "mozilla/GeckoBindings.h"
 #include "mozilla/dom/BrowsingContextBinding.h"
 #include "mozilla/dom/Document.h"
@@ -33,6 +34,43 @@ nsScreen::nsScreen(nsPIDOMWindowInner* aWindow)
 
 nsScreen::~nsScreen() = default;
 
+static Maybe<hal::ScreenOrientation> GetConfiguredScreenOrientationType() {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return Nothing();
+  }
+
+  nsString type;
+  cfg->GetString("screen.orientation.type"_ns, type);
+  if (type.EqualsLiteral("portrait-primary")) {
+    return Some(hal::ScreenOrientation::PortraitPrimary);
+  }
+  if (type.EqualsLiteral("portrait-secondary")) {
+    return Some(hal::ScreenOrientation::PortraitSecondary);
+  }
+  if (type.EqualsLiteral("landscape-primary")) {
+    return Some(hal::ScreenOrientation::LandscapePrimary);
+  }
+  if (type.EqualsLiteral("landscape-secondary")) {
+    return Some(hal::ScreenOrientation::LandscapeSecondary);
+  }
+  return Nothing();
+}
+
+static Maybe<uint16_t> GetConfiguredScreenOrientationAngle() {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return Nothing();
+  }
+
+  auto angle = cfg->GetUint32("screen.orientation.angle"_ns);
+  if (!angle ||
+      (*angle != 0 && *angle != 90 && *angle != 180 && *angle != 270)) {
+    return Nothing();
+  }
+  return Some(static_cast<uint16_t>(*angle));
+}
+
 // QueryInterface implementation for nsScreen
 NS_INTERFACE_MAP_BEGIN_CYCLE_COLLECTION(nsScreen)
 NS_INTERFACE_MAP_END_INHERITING(DOMEventTargetHelper)
@@ -44,6 +82,19 @@ NS_IMPL_CYCLE_COLLECTION_INHERITED(nsScreen, DOMEventTargetHelper,
                                    mScreenOrientation)
 
 int32_t nsScreen::PixelDepth() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetInt32("screen.pixelDepth"_ns)) {
+      if (*val > 0) {
+        return *val;
+      }
+    }
+    if (auto val = cfg->GetInt32("screen.colorDepth"_ns)) {
+      if (*val > 0) {
+        return *val;
+      }
+    }
+  }
+
   // Return 24 to prevent fingerprinting.
   if (ShouldResistFingerprinting(RFPTarget::ScreenPixelDepth)) {
     return 24;
@@ -67,6 +118,14 @@ nsDeviceContext* nsScreen::GetDeviceContext() const {
 }
 
 CSSIntRect nsScreen::GetRect() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    auto w = cfg->GetInt32("screen.width"_ns);
+    auto h = cfg->GetInt32("screen.height"_ns);
+    if (w && h && *w > 0 && *h > 0) {
+      return {0, 0, *w, *h};
+    }
+  }
+
   // Return window inner rect to prevent fingerprinting.
   if (ShouldResistFingerprinting(RFPTarget::ScreenRect)) {
     return GetTopWindowInnerRectForRFP();
@@ -99,6 +158,14 @@ CSSIntRect nsScreen::GetRect() {
 }
 
 CSSIntRect nsScreen::GetAvailRect() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    auto w = cfg->GetInt32("screen.availWidth"_ns);
+    auto h = cfg->GetInt32("screen.availHeight"_ns);
+    if (w && h && *w > 0 && *h > 0) {
+      return {0, 0, *w, *h};
+    }
+  }
+
   // Return window inner rect to prevent fingerprinting.
   if (ShouldResistFingerprinting(RFPTarget::ScreenAvailRect)) {
     return GetTopWindowInnerRectForRFP();
@@ -162,6 +229,10 @@ bool nsScreen::IsFullscreen() const {
 }
 
 uint16_t nsScreen::GetOrientationAngle() const {
+  if (auto angle = GetConfiguredScreenOrientationAngle()) {
+    return *angle;
+  }
+
   nsDeviceContext* context = GetDeviceContext();
   if (context) {
     return context->GetScreenOrientationAngle();
@@ -172,6 +243,10 @@ uint16_t nsScreen::GetOrientationAngle() const {
 }
 
 hal::ScreenOrientation nsScreen::GetOrientationType() const {
+  if (auto type = GetConfiguredScreenOrientationType()) {
+    return *type;
+  }
+
   nsDeviceContext* context = GetDeviceContext();
   if (context) {
     return context->GetScreenOrientationType();

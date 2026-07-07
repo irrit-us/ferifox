@@ -111,9 +111,6 @@ const COMMON_PREFERENCES = new Map([
   // Disable extension discovery
   ["browser.discovery.enabled", false],
 
-  // Set global `dump` function to log strings to `stdout` for release builds as well.
-  ["browser.dom.window.dump.enabled", true],
-
   // Indicate that the download panel has been shown once so that
   // whichever download test runs first doesn't show the popup
   // inconsistently.
@@ -227,15 +224,8 @@ const COMMON_PREFERENCES = new Map([
   ["datareporting.usage.uploadEnabled", false],
   ["telemetry.fog.test.localhost_port", -1],
 
-  // Disable popup-blocker
-  ["dom.disable_open_during_load", false],
-
   // Enabling the support for File object creation in the content process
   ["dom.file.createInChild", true],
-
-  // Disable delayed user input event handling
-  ["dom.input_events.security.minNumTicks", 0],
-  ["dom.input_events.security.minTimeElapsedInMS", 0],
 
   // Disable the ProcessHangMonitor
   ["dom.ipc.reportProcessHangs", false],
@@ -248,24 +238,8 @@ const COMMON_PREFERENCES = new Map([
   ["threads.lower_mainthread_priority_in_background.enabled", false],
   ["dom.ipc.processPriorityManager.enabled", false],
 
-  // Disable slow script dialogues
-  ["dom.max_chrome_script_run_time", 0],
-  ["dom.max_script_run_time", 0],
-
-  // Disable location change rate limitation
-  ["dom.navigation.navigationRateLimit.count", 0],
-
-  // Disable system permission checks for navigator.permissions.query
-  ["dom.permissions.testing.enabled", true],
-
-  // DOM Push
-  ["dom.push.connection.enabled", false],
-
   // Screen Orientation API
   ["dom.screenorientation.allow-lock", true],
-
-  // Disable dialog abuse if alerts are triggered too quickly.
-  ["dom.successive_dialog_time_limit", 0],
 
   // Only load extensions from the application and user profile
   // AddonManager.SCOPE_PROFILE + AddonManager.SCOPE_APPLICATION
@@ -320,9 +294,6 @@ const COMMON_PREFERENCES = new Map([
     "http://%(server)s/extensions-dummy/repositoryBrowseURL",
   ],
 
-  // Allow the application to have focus even it runs in the background
-  ["focusmanager.testmode", true],
-
   // Disable useragent updates
   ["general.useragent.updates.enabled", false],
 
@@ -332,18 +303,8 @@ const COMMON_PREFERENCES = new Map([
   // Disable geolocation ping(#2)
   ["geo.provider.network.url", ""],
 
-  // Always use network provider for geolocation tests so we bypass the
-  // macOS dialog raised by the corelocation provider
-  ["geo.provider.testing", true],
-
-  // Do not scan Wifi
-  ["geo.wifi.scan", false],
-
   // Disable Firefox accounts ping
   ["identity.fxaccounts.auth.uri", "https://{server}/dummy/fxa"],
-
-  // Allow scroll amount larger than one page on a single mouse wheel event.
-  ["mousewheel.allow_scrolling_more_than_one_page", true],
 
   // Disable captive portal service
   ["network.captive-portal-service.enabled", false],
@@ -353,9 +314,6 @@ const COMMON_PREFERENCES = new Map([
 
   // Do not prompt for temporary redirects
   ["network.http.prompt-temp-redirect", false],
-
-  // Do not automatically switch between offline and online
-  ["network.manage-offline-status", false],
 
   // Make sure SNTP requests do not hit the network
   ["network.sntp.pools", "%(server)s"],
@@ -373,13 +331,6 @@ const COMMON_PREFERENCES = new Map([
 
   // Don't do network connections for mitm priming
   ["security.certerrors.mitm.priming.enabled", false],
-
-  // Local documents have access to all other local documents,
-  // including directory listings
-  ["security.fileuri.strict_origin_policy", false],
-
-  // Tests do not wait for the notification button security delay
-  ["security.notification_enable_delay", 0],
 
   // Do not download intermediate certificates
   ["security.remote_settings.intermediates.enabled", false],

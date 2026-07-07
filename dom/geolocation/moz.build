@@ -67,6 +67,7 @@ FINAL_LIBRARY = "xul"
 LOCAL_INCLUDES += [
     "/dom/base",
     "/dom/ipc",
+    "/toolkit/components/ferifox",
 ]
 
 if CONFIG["MOZ_WIDGET_TOOLKIT"] == "android":

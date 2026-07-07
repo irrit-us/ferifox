@@ -50,4 +50,8 @@ IPDL_SOURCES += [
 
 include("/ipc/chromium/chromium-config.mozbuild")
 
+LOCAL_INCLUDES += [
+    "/toolkit/components/ferifox",
+]
+
 FINAL_LIBRARY = "xul"

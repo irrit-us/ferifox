@@ -275,6 +275,7 @@ LOCAL_INCLUDES += [
     "/gfx/cairo/cairo/src",
     "/image/encoders/jpeg",
     "/third_party/xsimd/include",
+    "/toolkit/components/ferifox",
     "/widget/gtk",
 ]
 

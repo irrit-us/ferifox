@@ -33,7 +33,7 @@ class nsMimeTypeArray final : public nsISupports, public nsWrapperCache {
                                JS::Handle<JSObject*> aGivenProto) override;
 
   // MimeTypeArray WebIDL methods
-  uint32_t Length() { return ForceNoPlugins() ? 0 : std::size(mMimeTypes); }
+  uint32_t Length();
 
   nsMimeType* Item(uint32_t aIndex) {
     bool unused;
@@ -54,6 +54,7 @@ class nsMimeTypeArray final : public nsISupports, public nsWrapperCache {
  protected:
   virtual ~nsMimeTypeArray();
 
+  uint32_t EffectiveLength();
   bool ForceNoPlugins();
 
   nsCOMPtr<nsPIDOMWindowInner> mWindow;

@@ -49,6 +49,7 @@
 #include "nsScriptError.h"
 #include "nsJSUtils.h"
 #include "nsRFPService.h"
+#include "FerifoxConfig.h"
 #include "prsystem.h"
 
 #include "xpcprivate.h"
@@ -213,6 +214,8 @@ void nsXPConnect::InitStatics() {
   gScriptSecurityManager = nsScriptSecurityManager::GetScriptSecurityManager();
   gScriptSecurityManager->GetSystemPrincipal(&gSystemPrincipal);
   MOZ_RELEASE_ASSERT(gSystemPrincipal);
+
+  FerifoxConfig::GetSingleton();
 }
 
 // static
@@ -544,18 +547,41 @@ void InitGlobalObjectOptions(JS::RealmOptions& aOptions,
     aOptions.creationOptions().setSecureContext(aSecureContext);
   }
 
-  if (aForceUTC) {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  bool hasFerifoxTimeZone = false;
+  if (cfg) {
+    nsAutoString timeZone;
+    if (cfg->GetString("intl.timezone"_ns, timeZone) && !timeZone.IsEmpty()) {
+      aOptions.behaviors().setTimeZoneOverride(
+          NS_ConvertUTF16toUTF8(timeZone).get());
+      hasFerifoxTimeZone = true;
+    }
+  }
+
+  if (!hasFerifoxTimeZone && aForceUTC) {
     nsCString timeZone = nsRFPService::GetSpoofedJSTimeZone();
     aOptions.behaviors().setTimeZoneOverride(timeZone.get());
-  } else if (!aTimezoneOverride.IsEmpty()) {
+  } else if (!hasFerifoxTimeZone && !aTimezoneOverride.IsEmpty()) {
     aOptions.behaviors().setTimeZoneOverride(
         NS_ConvertUTF16toUTF8(aTimezoneOverride).get());
   }
   aOptions.creationOptions().setAlwaysUseFdlibm(aAlwaysUseFdlibm);
-  if (aLocaleEnUS) {
+
+  bool hasFerifoxLocale = false;
+  if (cfg) {
+    nsTArray<nsString> languages;
+    cfg->GetStringList("navigator.languages"_ns, languages);
+    if (!languages.IsEmpty()) {
+      aOptions.behaviors().setLocaleOverride(
+          NS_ConvertUTF16toUTF8(languages[0]).get());
+      hasFerifoxLocale = true;
+    }
+  }
+
+  if (!hasFerifoxLocale && aLocaleEnUS) {
     nsCString locale = nsRFPService::GetSpoofedJSLocale();
     aOptions.behaviors().setLocaleOverride(locale.get());
-  } else if (!aLanguageOverride.IsEmpty()) {
+  } else if (!hasFerifoxLocale && !aLanguageOverride.IsEmpty()) {
     aOptions.behaviors().setLocaleOverride(
         PromiseFlatCString(aLanguageOverride).get());
   }
