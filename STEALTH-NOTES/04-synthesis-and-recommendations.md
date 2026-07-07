@@ -152,6 +152,22 @@ The follow-up audit expanded beyond Playwright and Puppeteer into the other path
 
 External references checked in July 2026 are consistent with the local source audit: Puppeteer's [WebDriver BiDi](https://pptr.dev/webdriver-bidi) documentation covers the Firefox automation path, Firefox Source Docs describe the [Remote Agent](https://firefox-source-docs.mozilla.org/remote/index.html) around WebDriver BiDi and Marionette remote control, and Playwright's [browser documentation](https://playwright.dev/docs/browsers) keeps Firefox as a first-class automation target. In this tree, the startup risk is mediated by Firefox's own remote automation and profile-pref surfaces.
 
+### Program-Driven Interfaces and Evaluators
+
+Program-driven operation is not synonymous with evaluator-based execution. In Marionette, the evaluator path is the `WebDriver:ExecuteScript` and `WebDriver:ExecuteAsyncScript` subset: `driver.sys.mjs` dispatches those commands to `MarionetteCommandsChild.executeScript()`, which creates or reuses a sandbox and calls `evaluate.sandbox()`. The same command table also exposes non-evaluator commands for element lookup, element click/send keys, actions, cookies, alerts, navigation, screenshots, printing, window rects, frame switching, session lifecycle, and add-on installation.
+
+WebDriver BiDi has the same split. The `script` module owns evaluator-style operations such as `script.evaluate` and `script.callFunction`, but the module registry also exposes `browsingContext`, `input`, `network`, `storage`, `permissions`, `emulation`, `session`, `webExtension`, `browser`, and `log` modules. Those commands are protocol algorithms, not JavaScript evaluation in the page realm.
+
+For stealth review, this means there are three interfaces to keep consistent:
+
+1. The regular user interface path: page-visible APIs, native browser input, rendering, storage, network, and chrome/UI state observed during ordinary browsing.
+2. The evaluator path: Marionette `ExecuteScript` and BiDi `script.evaluate`/`script.callFunction`, including sandbox realm behavior, serialization, exception formatting, user-activation handling, locale/timezone overrides, and object lifetime.
+3. The non-evaluator protocol path: input dispatch, screenshots, PDF printing, browsing-context enumeration, element discovery, cookies/storage, permission changes, geolocation/timezone/locale/user-agent emulation, network interception, extension installation, and session/window management.
+
+Pure mouse and keyboard simulation can reduce evaluator-specific artifacts, but it cannot provide full automation functionality by itself. It can drive visible UI workflows, but it cannot reliably return arbitrary JavaScript values, inspect DOM/storage/network state, configure permissions or emulation overrides, install extensions, enumerate cross-origin frames/windows, capture protocol-grade screenshots or PDFs, or receive network and console events with protocol semantics. It also does not guarantee regular-browser equivalence if the simulation enters through browser protocol input algorithms rather than OS-native devices; timing, focus, occlusion, viewport selection, event construction, and trusted-event handling remain observable.
+
+The practical target is therefore a hybrid: avoid content evaluator calls when a user-like workflow is sufficient, but treat every non-evaluator automation command as its own fingerprint surface. Ferifox patches should continue normalizing page-facing APIs at the source, while also guarding protocol/session state and protocol algorithms whose results can disagree with the persona seen by ordinary page code.
+
 ### Ferifox Config Keys Added or Audited
 
 Stealth personas should set these fields as a coherent group:
