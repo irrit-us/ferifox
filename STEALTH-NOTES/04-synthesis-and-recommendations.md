@@ -140,13 +140,33 @@ The current branch audit found additional surfaces that must be controlled along
 - HTTP `Priority` and top-window URI state are passive network/context signals. They are not JS getters, but they can expose request scheduling or embedding context to browser-side observers and should be stripped by stealth profiles.
 - Automation recommended prefs such as popup blocking, delayed input security, permission testing, push connection, focus test mode, offline status, and `dump()` exposure need to be blocked or restored before Playwright, Puppeteer, Marionette, or WebDriver BiDi startup can make them effective.
 
+### Other Entry-Point Paths
+
+The follow-up audit expanded beyond Playwright and Puppeteer into the other paths that can reach Firefox's automation entry points or seed automation-specific profile state before the browser window is ready:
+
+- Remote Agent starts from `--remote-debugging-port` and creates the WebDriver BiDi server. It also marks the Remote Agent as active in process shared data and can apply recommended automation prefs during command-line startup.
+- Marionette starts from `--marionette` or `MOZ_MARIONETTE`, then applies the same recommended automation prefs unless `remote.prefs.recommended` has already been disabled. The Marionette Python harness launches with `-marionette` and `-remote-allow-system-access`.
+- geckodriver and Puppeteer's Firefox browser-data path write profile prefs before startup. The repeated identifiable values are `focusmanager.testmode=true`, `geo.provider.testing=true`, `geo.wifi.scan=false`, `network.manage-offline-status=false`, and `hangmonitor.timeout=0`; Puppeteer also disables the Firefox Screenshots component and enables a BiDi file-picker workaround.
+- DevTools' `--start-debugger-server` path is separate from Marionette and Remote Agent, but it opens an incoming debugging socket when `devtools.debugger.remote-enabled` allows it. Non-Browser-Toolbox DevTools sockets feed the same browser "remote control" visual cue used for Marionette and Remote Agent.
+- Headless and screenshot startup paths (`MOZ_HEADLESS`, `--headless`, `--screenshot`, and `--window-size`) can still create identifiable screen and viewport behavior. Ferifox screen persona fields should therefore be applied before headless screen fallback dimensions become observable.
+
+External references checked in July 2026 are consistent with the local source audit: Puppeteer's [WebDriver BiDi](https://pptr.dev/webdriver-bidi) documentation covers the Firefox automation path, Firefox Source Docs describe the [Remote Agent](https://firefox-source-docs.mozilla.org/remote/index.html) around WebDriver BiDi and Marionette remote control, and Playwright's [browser documentation](https://playwright.dev/docs/browsers) keeps Firefox as a first-class automation target. In this tree, the startup risk is mediated by Firefox's own remote automation and profile-pref surfaces.
+
 ### Ferifox Config Keys Added or Audited
 
 Stealth personas should set these fields as a coherent group:
 
 ```
 automation.stealth
+devtools.debugger.remote-enabled
+devtools.debugger.remote-websocket
+focusmanager.testmode
+geo.provider.testing
+geo.wifi.scan
+hangmonitor.timeout
 remote.prefs.recommended
+remote.bidi.dismiss_file_pickers.enabled
+screenshots.browser.component.enabled
 navigator.webdriver
 navigator.pluginsLength
 navigator.mimeTypesLength

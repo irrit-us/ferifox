@@ -157,6 +157,9 @@ void FerifoxConfig::Load() {
 
     if (auto stealth = GetBool("automation.stealth"_ns); stealth && *stealth) {
       Preferences::SetBool("browser.dom.window.dump.enabled", false);
+      Preferences::SetBool("devtools.debugger.remote-enabled", false);
+      Preferences::SetInt("devtools.debugger.remote-port", 6000);
+      Preferences::SetBool("devtools.debugger.remote-websocket", false);
       Preferences::SetBool("dom.disable_open_during_load", true);
       Preferences::SetUint("dom.input_events.security.minNumTicks", 3);
       Preferences::SetUint("dom.input_events.security.minTimeElapsedInMS", 100);
@@ -165,8 +168,13 @@ void FerifoxConfig::Load() {
       Preferences::SetBool("dom.permissions.testing.enabled", false);
       Preferences::SetBool("dom.push.connection.enabled", true);
       Preferences::SetBool("focusmanager.testmode", false);
+      Preferences::SetBool("geo.provider.testing", false);
       Preferences::SetBool("network.manage-offline-status", true);
+      Preferences::SetBool("remote.bidi.dismiss_file_pickers.enabled", false);
       Preferences::SetBool("remote.prefs.recommended", false);
+      Preferences::SetBool("screenshots.browser.component.enabled", true);
+      (void)Preferences::ClearUser("geo.wifi.scan");
+      (void)Preferences::ClearUser("hangmonitor.timeout");
     }
   }
 }

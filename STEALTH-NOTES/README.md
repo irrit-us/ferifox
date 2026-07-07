@@ -26,6 +26,7 @@ Browser anonymity requires addressing detection at **five layers**:
 - **C++-level patching (Camoufox, CloakBrowser)** is the current state of the art — spoofing occurs below the JS runtime, making detection via prototype inspection impossible
 - **The Consistency Principle** is the fundamental constraint: every spoofed value must be internally consistent with every other spoofed value (GPU, OS, fonts, timezone, locale, screen)
 - **Firefox Puppeteer and Playwright automation must be treated as the same startup risk class** for Ferifox: both can enter through Firefox remote automation surfaces that apply WebDriver-oriented recommended prefs before page code runs
+- **Other startup paths seed identifiable state too** — Remote Agent, Marionette, geckodriver, Puppeteer's Firefox profile writer, DevTools' debugger server, and headless/screenshot launch paths all need to be accounted for before the first content page runs
 - **Passive request context also matters** — HTTP Priority and top-window URI state can reveal automation/browser context even when JS-visible APIs are patched
 - **TLS fingerprint spoofing** remains the hardest unsolved problem — no fully general open-source solution exists
 - **IP reputation trumps everything** — the best fingerprint spoofing fails with datacenter IPs; residential proxies are essential
