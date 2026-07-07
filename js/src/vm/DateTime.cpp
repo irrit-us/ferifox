@@ -31,7 +31,6 @@
 #include "js/GCAPI.h"
 #include "js/Utility.h"
 #include "js/Vector.h"
-#include "prenv.h"
 #include "threading/ExclusiveData.h"
 
 #include "util/Text.h"
@@ -548,7 +547,7 @@ mozilla::intl::TimeZone* js::DateTimeInfo::timeZone() {
     if (timeZoneOverride_) {
       timeZoneOverride =
           mozilla::Some(mozilla::MakeStringSpan(timeZoneOverride_->chars()));
-    } else if (const char* ferifoxTZ = PR_GetEnv("FERIFOX_TZ")) {
+    } else if (const char* ferifoxTZ = std::getenv("FERIFOX_TZ")) {
       if (*ferifoxTZ) {
         timeZoneOverride = mozilla::Some(mozilla::MakeStringSpan(ferifoxTZ));
       }
@@ -559,7 +558,7 @@ mozilla::intl::TimeZone* js::DateTimeInfo::timeZone() {
     // If a time zone override was specified, but couldn't be resolved to a
     // valid time zone, then we ignore the override request and instead use the
     // system default time zone.
-    if (timeZone.isErr() && timeZoneOverride_) {
+    if (timeZone.isErr() && timeZoneOverride.isSome()) {
       timeZone = mozilla::intl::TimeZone::TryCreate();
     }
 

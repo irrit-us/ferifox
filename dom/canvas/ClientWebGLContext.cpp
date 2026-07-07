@@ -2357,14 +2357,14 @@ void ClientWebGLContext::GetParameter(JSContext* cx, GLenum pname,
         {
           if (auto* cfg = FerifoxConfig::GetSingleton()) {
             nsString val;
-            cfg->GetString(
-                pname == dom::WEBGL_debug_renderer_info_Binding::
-                             UNMASKED_RENDERER_WEBGL
-                    ? "webgl.unmaskedRenderer"_ns
-                    : "webgl.unmaskedVendor"_ns,
-                val);
+            cfg->GetString(pname == dom::WEBGL_debug_renderer_info_Binding::
+                                        UNMASKED_RENDERER_WEBGL
+                               ? "webgl.unmaskedRenderer"_ns
+                               : "webgl.unmaskedVendor"_ns,
+                           val);
             if (!val.IsEmpty()) {
-              ret = Some(NS_ConvertUTF16toUTF8(val).get());
+              NS_ConvertUTF16toUTF8 utf8(val);
+              ret = Some(std::string(utf8.get(), utf8.Length()));
             }
           }
         }

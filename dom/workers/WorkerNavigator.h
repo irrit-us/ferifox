@@ -69,12 +69,8 @@ class WorkerNavigator final : public nsWrapperCache {
 
   nsISupports* GetParentObject() const { return nullptr; }
 
-  void GetAppCodeName(nsString& aAppCodeName, ErrorResult& /* unused */) const {
-    aAppCodeName.AssignLiteral("Mozilla");
-  }
-  void GetAppName(nsString& aAppName) const {
-    aAppName.AssignLiteral("Netscape");
-  }
+  void GetAppCodeName(nsString& aAppCodeName, ErrorResult& /* unused */) const;
+  void GetAppName(nsString& aAppName) const;
 
   void GetAppVersion(nsString& aAppVersion, CallerType aCallerType,
                      ErrorResult& aRv) const;
@@ -82,7 +78,7 @@ class WorkerNavigator final : public nsWrapperCache {
   void GetPlatform(nsString& aPlatform, CallerType aCallerType,
                    ErrorResult& aRv) const;
 
-  void GetProduct(nsString& aProduct) const { aProduct.AssignLiteral("Gecko"); }
+  void GetProduct(nsString& aProduct) const;
 
   bool TaintEnabled() const { return false; }
 
@@ -98,7 +94,7 @@ class WorkerNavigator final : public nsWrapperCache {
   void GetUserAgent(nsString& aUserAgent, CallerType aCallerType,
                     ErrorResult& aRv) const;
 
-  bool OnLine() const { return mOnline; }
+  bool OnLine() const;
 
   // Worker thread only!
   void SetOnLine(bool aOnline) { mOnline = aOnline; }

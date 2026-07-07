@@ -122,6 +122,44 @@ The single most important principle in browser anonymity: **every fingerprint si
 ### The Firefox Market Share Problem
 At ~3% market share, a Firefox user agent is itself a filter: sites that don't expect Firefox traffic may flag it as suspicious. However, Firefox's smaller attack surface and Juggler protocol mean fewer automation-specific detection vectors exist.
 
+## Ferifox Branch Audit Update
+
+### Puppeteer vs Playwright on Firefox
+
+For this branch, Puppeteer-driven Firefox sessions should be handled as the same class of risk as Playwright-driven sessions, not as a separate one-off path. The practical overlap is the Firefox remote automation stack: WebDriver BiDi, Marionette, and the shared recommended automation preferences that can be applied before content pages execute.
+
+The in-tree risk point is `remote/shared/RecommendedPreferences.sys.mjs`. It is applied from both `remote/components/RemoteAgent.sys.mjs` and `remote/components/Marionette.sys.mjs`, and its own guidance names Puppeteer's Firefox launcher, geckodriver, Marionette's Python client, and testing profiles as sources that can pre-seed the same automation preferences. A stealth configuration therefore has to initialize before these paths can apply visible automation-friendly prefs, and it has to override profile-level prefs that were written before startup.
+
+### New User-Information Findings
+
+The current branch audit found additional surfaces that must be controlled along with the obvious `navigator.userAgent`, `navigator.platform`, screen, WebGL, audio, and timezone values:
+
+- `navigator.plugins` and `navigator.mimeTypes` need consistent length, indexed getter, named getter, and supported-name behavior. Returning a spoofed length while leaving named entries reachable is detectable.
+- `navigator.geolocation` should be replaced at the position update source so both `getCurrentPosition()` and `watchPosition()` receive the configured position.
+- `navigator.connection.type` needs config handling in the Network Information implementation, not just the object presence or scalar metrics.
+- HTTP `Priority` and top-window URI state are passive network/context signals. They are not JS getters, but they can expose request scheduling or embedding context to browser-side observers and should be stripped by stealth profiles.
+- Automation recommended prefs such as popup blocking, delayed input security, permission testing, push connection, focus test mode, offline status, and `dump()` exposure need to be blocked or restored before Playwright, Puppeteer, Marionette, or WebDriver BiDi startup can make them effective.
+
+### Ferifox Config Keys Added or Audited
+
+Stealth personas should set these fields as a coherent group:
+
+```
+automation.stealth
+remote.prefs.recommended
+navigator.webdriver
+navigator.pluginsLength
+navigator.mimeTypesLength
+navigator.connection.type
+geolocation.latitude
+geolocation.longitude
+geolocation.accuracy
+network.stripTopWindowURI
+network.stripPriorityHeader
+```
+
+The important constraint is still consistency: geolocation must match proxy egress, timezone, locale, `Accept-Language`, and the persona's regional assumptions. Plugin and MIME counts must match the actual objects exposed by the engine unless the implementation also creates synthetic entries.
+
 ## What Remains Unsolved
 
 ### TLS Fingerprint Spoofing

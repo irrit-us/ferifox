@@ -235,7 +235,6 @@ LOCAL_INCLUDES += [
     "/netwerk/socket/neqo_glue",
     "/netwerk/url-classifier",
     "/toolkit/components/ferifox",
-    "/toolkit/components/jsoncpp/include",
 ]
 
 DEFINES["MOZ_APP_UA_NAME"] = f'"{CONFIG["MOZ_APP_UA_NAME"]}"'

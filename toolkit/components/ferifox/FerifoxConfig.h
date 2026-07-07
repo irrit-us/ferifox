@@ -5,10 +5,14 @@
 #ifndef mozilla_FerifoxConfig_h
 #define mozilla_FerifoxConfig_h
 
-#include "json/json.h"
 #include "mozilla/Maybe.h"
-#include "nsStringFwd.h"
+#include "mozilla/UniquePtr.h"
+#include "nsString.h"
 #include "nsTArray.h"
+
+namespace Json {
+class Value;
+}
 
 namespace mozilla {
 
@@ -22,21 +26,28 @@ class FerifoxConfig {
   Maybe<int32_t> GetInt32(const nsACString& aPath) const;
   Maybe<uint32_t> GetUint32(const nsACString& aPath) const;
   Maybe<double> GetDouble(const nsACString& aPath) const;
-  void GetString(const nsACString& aPath, nsAString& aResult) const;
-  void GetStringList(const nsACString& aPath,
+  bool GetString(const nsACString& aPath, nsAString& aResult) const;
+  bool GetStringList(const nsACString& aPath,
                      nsTArray<nsString>& aResult) const;
 
  private:
   FerifoxConfig();
-  ~FerifoxConfig() = default;
+  ~FerifoxConfig();
 
   void Load();
+  void SetPersistentEnv(nsCString& aStorage, const nsACString& aName,
+                        const nsACString& aValue);
 
   const Json::Value* Resolve(const nsACString& aPath) const;
 
   static FerifoxConfig* sSingleton;
 
-  Json::Value mRoot;
+  UniquePtr<Json::Value> mRoot;
+  nsCString mTimeZoneEnv;
+  nsCString mLocaleEnv;
+#ifndef XP_WIN
+  nsCString mPosixTimeZoneEnv;
+#endif
   bool mLoaded;
 };
 

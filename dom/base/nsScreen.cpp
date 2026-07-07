@@ -47,7 +47,14 @@ NS_IMPL_CYCLE_COLLECTION_INHERITED(nsScreen, DOMEventTargetHelper,
 int32_t nsScreen::PixelDepth() {
   if (auto* cfg = FerifoxConfig::GetSingleton()) {
     if (auto val = cfg->GetInt32("screen.pixelDepth"_ns)) {
-      return *val;
+      if (*val > 0) {
+        return *val;
+      }
+    }
+    if (auto val = cfg->GetInt32("screen.colorDepth"_ns)) {
+      if (*val > 0) {
+        return *val;
+      }
     }
   }
 
@@ -77,7 +84,7 @@ CSSIntRect nsScreen::GetRect() {
   if (auto* cfg = FerifoxConfig::GetSingleton()) {
     auto w = cfg->GetInt32("screen.width"_ns);
     auto h = cfg->GetInt32("screen.height"_ns);
-    if (w && h) {
+    if (w && h && *w > 0 && *h > 0) {
       return {0, 0, *w, *h};
     }
   }
@@ -117,7 +124,7 @@ CSSIntRect nsScreen::GetAvailRect() {
   if (auto* cfg = FerifoxConfig::GetSingleton()) {
     auto w = cfg->GetInt32("screen.availWidth"_ns);
     auto h = cfg->GetInt32("screen.availHeight"_ns);
-    if (w && h) {
+    if (w && h && *w > 0 && *h > 0) {
       return {0, 0, *w, *h};
     }
   }

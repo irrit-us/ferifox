@@ -5,8 +5,8 @@
 // Needs to be first.
 #include "Navigator.h"
 
-#include "Geolocation.h"
 #include "FerifoxConfig.h"
+#include "Geolocation.h"
 #include "base/basictypes.h"
 #include "mozilla/Components.h"
 #include "mozilla/ContentBlockingNotifier.h"
@@ -271,6 +271,15 @@ void Navigator::Invalidate() {
 
 void Navigator::GetUserAgent(nsAString& aUserAgent, CallerType aCallerType,
                              ErrorResult& aRv) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.userAgent"_ns, val);
+    if (!val.IsEmpty()) {
+      aUserAgent = std::move(val);
+      return;
+    }
+  }
+
   nsCOMPtr<nsPIDOMWindowInner> window;
 
   if (mWindow) {
@@ -370,6 +379,15 @@ void Navigator::GetAcceptLanguages(nsTArray<nsString>& aLanguages,
   MOZ_ASSERT(NS_IsMainThread());
 
   aLanguages.Clear();
+
+  if (!aLanguageOverride) {
+    if (auto* cfg = FerifoxConfig::GetSingleton()) {
+      cfg->GetStringList("navigator.languages"_ns, aLanguages);
+      if (!aLanguages.IsEmpty()) {
+        return;
+      }
+    }
+  }
 
   // E.g. "de-de, en-us,en".
   nsAutoCString acceptLang;
@@ -560,6 +578,15 @@ void Navigator::GetVendorSub(nsAString& aVendorSub) {
 }
 
 void Navigator::GetProduct(nsAString& aProduct) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.product"_ns, val);
+    if (!val.IsEmpty()) {
+      aProduct = std::move(val);
+      return;
+    }
+  }
+
   aProduct.AssignLiteral("Gecko");
 }
 
@@ -685,6 +712,12 @@ bool Navigator::CookieEnabled() {
 }
 
 bool Navigator::OnLine() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetBool("navigator.onLine"_ns)) {
+      return *val;
+    }
+  }
+
   if (nsContentUtils::ShouldResistFingerprinting(
           GetDocShell(), RFPTarget::NetworkConnection)) {
     return true;
@@ -786,6 +819,12 @@ void Navigator::GetDoNotTrack(nsAString& aResult) {
 }
 
 bool Navigator::GlobalPrivacyControl() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetBool("navigator.globalPrivacyControl"_ns)) {
+      return *val;
+    }
+  }
+
   bool gpcStatus = StaticPrefs::privacy_globalprivacycontrol_enabled();
   if (!gpcStatus) {
     nsCOMPtr<nsILoadContext> loadContext = do_GetInterface(mWindow);
@@ -799,7 +838,9 @@ bool Navigator::GlobalPrivacyControl() {
 uint64_t Navigator::HardwareConcurrency() {
   if (auto* cfg = FerifoxConfig::GetSingleton()) {
     if (auto val = cfg->GetUint32("navigator.hardwareConcurrency"_ns)) {
-      return *val;
+      if (*val > 0) {
+        return *val;
+      }
     }
   }
 

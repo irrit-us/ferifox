@@ -18,7 +18,7 @@ LayoutDeviceIntRect HeadlessScreenHelper::GetScreenRect() {
   if (auto* cfg = FerifoxConfig::GetSingleton()) {
     auto w = cfg->GetInt32("screen.width"_ns);
     auto h = cfg->GetInt32("screen.height"_ns);
-    if (w && h) {
+    if (w && h && *w > 0 && *h > 0) {
       return LayoutDeviceIntRect(0, 0, *w, *h);
     }
   }
@@ -36,13 +36,30 @@ LayoutDeviceIntRect HeadlessScreenHelper::GetScreenRect() {
   return LayoutDeviceIntRect(0, 0, width, height);
 }
 
+static uint32_t GetScreenDepth() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto depth = cfg->GetInt32("screen.pixelDepth"_ns)) {
+      if (*depth > 0) {
+        return *depth;
+      }
+    }
+    if (auto depth = cfg->GetInt32("screen.colorDepth"_ns)) {
+      if (*depth > 0) {
+        return *depth;
+      }
+    }
+  }
+  return 24;
+}
+
 HeadlessScreenHelper::HeadlessScreenHelper() {
   AutoTArray<RefPtr<Screen>, 1> screenList;
   LayoutDeviceIntRect rect = GetScreenRect();
+  uint32_t depth = GetScreenDepth();
   auto ret =
-      MakeRefPtr<Screen>(rect, rect, 24, 24, 0, DesktopToLayoutDeviceScale(),
-                         CSSToLayoutDeviceScale(), 96.0f,
-                         Screen::IsPseudoDisplay::No, Screen::IsHDR::No);
+      MakeRefPtr<Screen>(rect, rect, depth, depth, 0,
+                         DesktopToLayoutDeviceScale(), CSSToLayoutDeviceScale(),
+                         96.0f, Screen::IsPseudoDisplay::No, Screen::IsHDR::No);
   screenList.AppendElement(ret.forget());
   ScreenManager::Refresh(std::move(screenList));
 }

@@ -3787,7 +3787,9 @@ double nsGlobalWindowInner::GetDevicePixelRatio(CallerType aCallerType,
                                                 ErrorResult& aError) {
   if (auto* cfg = FerifoxConfig::GetSingleton()) {
     if (auto val = cfg->GetDouble("screen.devicePixelRatio"_ns)) {
-      return *val;
+      if (*val > 0.0) {
+        return *val;
+      }
     }
   }
 

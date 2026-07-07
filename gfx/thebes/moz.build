@@ -276,7 +276,6 @@ LOCAL_INCLUDES += [
     "/image/encoders/jpeg",
     "/third_party/xsimd/include",
     "/toolkit/components/ferifox",
-    "/toolkit/components/jsoncpp/include",
     "/widget/gtk",
 ]
 

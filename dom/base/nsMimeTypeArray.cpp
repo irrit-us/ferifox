@@ -4,6 +4,9 @@
 
 #include "nsMimeTypeArray.h"
 
+#include <algorithm>
+
+#include "FerifoxConfig.h"
 #include "mozilla/StaticPrefs_pdfjs.h"
 #include "mozilla/dom/MimeTypeArrayBinding.h"
 #include "mozilla/dom/MimeTypeBinding.h"
@@ -41,7 +44,7 @@ nsPIDOMWindowInner* nsMimeTypeArray::GetParentObject() const {
 }
 
 nsMimeType* nsMimeTypeArray::IndexedGetter(uint32_t aIndex, bool& aFound) {
-  if (!ForceNoPlugins() && aIndex < std::size(mMimeTypes)) {
+  if (aIndex < EffectiveLength()) {
     aFound = true;
     return mMimeTypes[aIndex];
   }
@@ -51,15 +54,11 @@ nsMimeType* nsMimeTypeArray::IndexedGetter(uint32_t aIndex, bool& aFound) {
 }
 
 nsMimeType* nsMimeTypeArray::NamedGetter(const nsAString& aName, bool& aFound) {
-  if (ForceNoPlugins()) {
-    aFound = false;
-    return nullptr;
-  }
-
-  for (const auto& mimeType : mMimeTypes) {
-    if (mimeType->Name().Equals(aName)) {
+  uint32_t length = EffectiveLength();
+  for (uint32_t i = 0; i < length; ++i) {
+    if (mMimeTypes[i]->Name().Equals(aName)) {
       aFound = true;
-      return mimeType;
+      return mMimeTypes[i];
     }
   }
 
@@ -68,16 +67,35 @@ nsMimeType* nsMimeTypeArray::NamedGetter(const nsAString& aName, bool& aFound) {
 }
 
 void nsMimeTypeArray::GetSupportedNames(nsTArray<nsString>& retval) {
-  if (ForceNoPlugins()) {
-    return;
-  }
-
-  for (auto& mimeType : mMimeTypes) {
-    retval.AppendElement(mimeType->Name());
+  uint32_t length = EffectiveLength();
+  for (uint32_t i = 0; i < length; ++i) {
+    retval.AppendElement(mMimeTypes[i]->Name());
   }
 }
 
+uint32_t nsMimeTypeArray::Length() { return EffectiveLength(); }
+
+uint32_t nsMimeTypeArray::EffectiveLength() {
+  if (ForceNoPlugins()) {
+    return 0;
+  }
+
+  uint32_t length = std::size(mMimeTypes);
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetUint32("navigator.mimeTypesLength"_ns)) {
+      length = std::min(length, *val);
+    }
+  }
+  return length;
+}
+
 bool nsMimeTypeArray::ForceNoPlugins() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetBool("navigator.pdfViewerEnabled"_ns)) {
+      return !*val;
+    }
+  }
+
   return StaticPrefs::pdfjs_disabled() &&
          !nsContentUtils::ShouldResistFingerprinting(
              mWindow ? mWindow->GetDocShell() : nullptr, RFPTarget::PdfjsSpoof);

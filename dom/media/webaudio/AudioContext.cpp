@@ -5,7 +5,6 @@
 #include "AudioContext.h"
 
 #include "AudioBuffer.h"
-#include "FerifoxConfig.h"
 #include "AudioBufferSourceNode.h"
 #include "AudioChannelService.h"
 #include "AudioDestinationNode.h"
@@ -21,6 +20,7 @@
 #include "ConvolverNode.h"
 #include "DelayNode.h"
 #include "DynamicsCompressorNode.h"
+#include "FerifoxConfig.h"
 #include "GainNode.h"
 #include "IIRFilterNode.h"
 #include "MediaElementAudioSourceNode.h"
@@ -139,18 +139,20 @@ NS_INTERFACE_MAP_END_INHERITING(DOMEventTargetHelper)
 
 static float GetSampleRateForAudioContext(bool aIsOffline, float aSampleRate,
                                           bool aShouldResistFingerprinting) {
+  if (aIsOffline || aSampleRate != 0.0) {
+    return aSampleRate;
+  }
+
   if (auto* cfg = FerifoxConfig::GetSingleton()) {
     if (auto val = cfg->GetDouble("audio.sampleRate"_ns)) {
-      return static_cast<float>(*val);
+      if (*val > 0.0) {
+        return static_cast<float>(*val);
+      }
     }
   }
 
-  if (aIsOffline || aSampleRate != 0.0) {
-    return aSampleRate;
-  } else {
-    return static_cast<float>(
-        CubebUtils::PreferredSampleRate(aShouldResistFingerprinting));
-  }
+  return static_cast<float>(
+      CubebUtils::PreferredSampleRate(aShouldResistFingerprinting));
 }
 
 AudioContext::AudioContext(nsPIDOMWindowInner* aWindow, bool aIsOffline,
@@ -562,7 +564,9 @@ double AudioContext::OutputLatency() {
 
   if (auto* cfg = FerifoxConfig::GetSingleton()) {
     if (auto val = cfg->GetDouble("audio.outputLatency"_ns)) {
-      return *val;
+      if (*val >= 0.0) {
+        return *val;
+      }
     }
   }
 
@@ -721,9 +725,13 @@ void AudioContext::UnregisterActiveNode(AudioNode* aNode) {
 }
 
 uint32_t AudioContext::MaxChannelCount() const {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetUint32("audio.maxChannelCount"_ns)) {
-      return *val;
+  if (!mIsOffline) {
+    if (auto* cfg = FerifoxConfig::GetSingleton()) {
+      if (auto val = cfg->GetUint32("audio.maxChannelCount"_ns)) {
+        if (*val > 0) {
+          return *val;
+        }
+      }
     }
   }
 

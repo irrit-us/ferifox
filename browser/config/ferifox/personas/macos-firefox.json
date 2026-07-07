@@ -1,17 +1,17 @@
 {
   "navigator": {
     "webdriver": false,
-    "platform": "Linux x86_64",
-    "oscpu": "Linux x86_64",
-    "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0",
-    "hardwareConcurrency": 4,
+    "platform": "MacIntel",
+    "oscpu": "Intel Mac OS X 10.15",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:152.0) Gecko/20100101 Firefox/152.0",
+    "hardwareConcurrency": 8,
     "maxTouchPoints": 0,
     "vendor": "",
     "vendorSub": "",
     "product": "Gecko",
     "productSub": "20100101",
     "buildID": "20250701000000",
-    "appVersion": "5.0 (X11)",
+    "appVersion": "5.0 (Macintosh)",
     "languages": ["en-US", "en"],
     "appCodeName": "Mozilla",
     "appName": "Netscape",
@@ -27,50 +27,53 @@
     }
   },
   "screen": {
-    "width": 1920,
-    "height": 1080,
-    "availWidth": 1920,
-    "availHeight": 1040,
+    "width": 1512,
+    "height": 982,
+    "availWidth": 1512,
+    "availHeight": 944,
     "colorDepth": 24,
     "pixelDepth": 24,
-    "devicePixelRatio": 1.0
+    "devicePixelRatio": 2.0
   },
   "window": {
-    "outerWidth": 1920,
-    "outerHeight": 1080
+    "outerWidth": 1512,
+    "outerHeight": 982
   },
   "webgl": {
-    "unmaskedVendor": "Mozilla",
-    "unmaskedRenderer": "Mozilla"
+    "unmaskedVendor": "Apple Inc.",
+    "unmaskedRenderer": "Apple M2"
   },
   "audio": {
-    "sampleRate": 44100,
-    "outputLatency": 0.025,
+    "sampleRate": 48000,
+    "outputLatency": 0.021,
     "maxChannelCount": 2
   },
   "intl": {
-    "timezone": "America/Chicago",
+    "timezone": "America/Los_Angeles",
     "locale": "en_US.UTF-8"
   },
   "geolocation": {
-    "latitude": 32.7767,
-    "longitude": -96.797,
-    "accuracy": 120
+    "latitude": 34.0522,
+    "longitude": -118.2437,
+    "accuracy": 80
   },
   "fonts": {
     "visible": [
-      "DejaVu Sans",
-      "DejaVu Serif",
-      "DejaVu Sans Mono",
-      "Liberation Sans",
-      "Liberation Serif",
-      "Liberation Mono",
-      "Noto Sans",
-      "Noto Serif",
-      "Noto Sans Mono",
+      ".AppleSystemUIFont",
       "Arial",
-      "Times New Roman",
-      "Courier New"
+      "Avenir",
+      "Courier",
+      "Courier New",
+      "Geneva",
+      "Helvetica",
+      "Helvetica Neue",
+      "Menlo",
+      "Monaco",
+      "New York",
+      "SF Compact",
+      "SF Pro",
+      "Times",
+      "Times New Roman"
     ]
   },
   "headers": {

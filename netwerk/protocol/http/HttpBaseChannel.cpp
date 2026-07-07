@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "FerifoxConfig.h"
 #include "HttpBaseChannel.h"
 #include "HttpLog.h"
 #include "LoadInfo.h"
@@ -530,6 +531,17 @@ HttpBaseChannel::SetTRRMode(nsIRequest::TRRMode aTRRMode) {
 
 NS_IMETHODIMP
 HttpBaseChannel::SetDocshellUserAgentOverride() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsAutoString userAgent;
+    if (cfg->GetString("navigator.userAgent"_ns, userAgent) &&
+        !userAgent.IsEmpty()) {
+      NS_ConvertUTF16toUTF8 utf8UserAgent(userAgent);
+      return SetRequestHeaderInternal(
+          "User-Agent"_ns, utf8UserAgent, false,
+          nsHttpHeaderArray::eVarietyRequestEnforceDefault);
+    }
+  }
+
   RefPtr<dom::BrowsingContext> bc;
   MOZ_ALWAYS_SUCCEEDS(mLoadInfo->GetBrowsingContext(getter_AddRefs(bc)));
   if (!bc) {
@@ -2478,6 +2490,12 @@ HttpBaseChannel::GetProtocolVersion(nsACString& aProtocolVersion) {
 
 NS_IMETHODIMP
 HttpBaseChannel::SetTopWindowURIIfUnknown(nsIURI* aTopWindowURI) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetBool("network.stripTopWindowURI"_ns); val && *val) {
+      return NS_OK;
+    }
+  }
+
   if (!aTopWindowURI) {
     return NS_ERROR_INVALID_ARG;
   }
@@ -2506,6 +2524,17 @@ HttpBaseChannel::SetTopWindowURIIfUnknown(nsIURI* aTopWindowURI) {
   return NS_OK;
 }
 
+void HttpBaseChannel::SetTopWindowURI(nsIURI* aTopWindowURI) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetBool("network.stripTopWindowURI"_ns); val && *val) {
+      mTopWindowURI = nullptr;
+      return;
+    }
+  }
+
+  mTopWindowURI = aTopWindowURI;
+}
+
 NS_IMETHODIMP
 HttpBaseChannel::GetTopWindowURI(nsIURI** aTopWindowURI) {
   nsCOMPtr<nsIURI> uriBeingLoaded =
@@ -2515,6 +2544,14 @@ HttpBaseChannel::GetTopWindowURI(nsIURI** aTopWindowURI) {
 
 nsresult HttpBaseChannel::GetTopWindowURI(nsIURI* aURIBeingLoaded,
                                           nsIURI** aTopWindowURI) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetBool("network.stripTopWindowURI"_ns); val && *val) {
+      mTopWindowURI = nullptr;
+      *aTopWindowURI = nullptr;
+      return NS_OK;
+    }
+  }
+
   nsresult rv = NS_OK;
   nsCOMPtr<mozIThirdPartyUtil> util;
   // Only compute the top window URI once. In e10s, this must be computed in the

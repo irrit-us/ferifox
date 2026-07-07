@@ -148,4 +148,4 @@ if CONFIG["MOZ_SYSTEM_AV1"]:
 include("/ipc/chromium/chromium-config.mozbuild")
 
 FINAL_LIBRARY = "xul"
-LOCAL_INCLUDES += ["..", "/toolkit/components/ferifox", "/toolkit/components/jsoncpp/include"]
+LOCAL_INCLUDES += ["..", "/toolkit/components/ferifox"]

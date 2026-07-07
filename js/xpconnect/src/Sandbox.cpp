@@ -7,6 +7,7 @@
  */
 
 #include "AccessCheck.h"
+#include "FerifoxConfig.h"
 #include "jsfriendapi.h"
 #include "js/Array.h"             // JS::GetArrayLength, JS::IsArrayObject
 #include "js/CallAndConstruct.h"  // JS::Call, JS::IsCallable
@@ -1369,16 +1370,36 @@ nsresult xpc::CreateSandboxObject(JSContext* cx, MutableHandleValue vp,
     nsGlobalWindowInner* window =
         WindowOrNull(js::UncheckedUnwrap(obj->GetGlobalJSObject(), false));
     if (window) {
+      bool hasFerifoxLocale = false;
+      bool hasFerifoxTimeZone = false;
+      if (auto* cfg = FerifoxConfig::GetSingleton()) {
+        nsTArray<nsString> languages;
+        cfg->GetStringList("navigator.languages"_ns, languages);
+        if (!languages.IsEmpty()) {
+          realmOptions.behaviors().setLocaleOverride(
+              NS_ConvertUTF16toUTF8(languages[0]).get());
+          hasFerifoxLocale = true;
+        }
+
+        nsAutoString timeZone;
+        if (cfg->GetString("intl.timezone"_ns, timeZone) &&
+            !timeZone.IsEmpty()) {
+          realmOptions.behaviors().setTimeZoneOverride(
+              NS_ConvertUTF16toUTF8(timeZone).get());
+          hasFerifoxTimeZone = true;
+        }
+      }
+
       const nsCString& localeOverride =
           window->GetBrowsingContext()->Top()->GetLanguageOverride();
-      if (!localeOverride.IsEmpty()) {
+      if (!localeOverride.IsEmpty() && !hasFerifoxLocale) {
         realmOptions.behaviors().setLocaleOverride(
             PromiseFlatCString(localeOverride).get());
       }
 
       const nsAString& timezoneOverride =
           window->GetBrowsingContext()->Top()->GetTimezoneOverride();
-      if (!timezoneOverride.IsEmpty()) {
+      if (!timezoneOverride.IsEmpty() && !hasFerifoxTimeZone) {
         realmOptions.behaviors().setTimeZoneOverride(
             NS_ConvertUTF16toUTF8(timezoneOverride).get());
       }

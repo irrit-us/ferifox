@@ -71,6 +71,7 @@ LOCAL_INCLUDES += [
     "/layout/base",
     "/layout/style",
     "/netwerk/base",
+    "/toolkit/components/ferifox",
     "/xpcom/components",
 ]
 

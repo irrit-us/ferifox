@@ -83,6 +83,7 @@ LOCAL_INCLUDES += [
     "/dom/workers/remoteworkers",
     "/js/xpconnect/loader",
     "/netwerk/base",
+    "/toolkit/components/ferifox",
     "/xpcom/build",
     "/xpcom/threads",
 ]

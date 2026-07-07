@@ -1173,25 +1173,29 @@ bool gfxPlatformFontList::IsVisibleToCSS(const fontlist::Family& aFamily,
   return aFamily.Visibility() <= aVisibility || IsFontFamilyWhitelistActive();
 }
 
-static bool IsFontAllowedByConfig(const nsAString& aFontName) {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    nsTArray<nsString> allowedFonts;
-    cfg->GetStringList("fonts.visible"_ns, allowedFonts);
-    if (!allowedFonts.IsEmpty()) {
-      for (const auto& allowed : allowedFonts) {
-        if (aFontName.Equals(allowed, nsCaseInsensitiveStringComparator)) {
-          return true;
-        }
-      }
-      return false;
+static bool IsFontAllowedByConfig(const nsAString& aFontName,
+                                  const nsTArray<nsString>& aAllowedFonts,
+                                  bool aFilterFonts) {
+  if (!aFilterFonts) {
+    return true;
+  }
+  for (const auto& allowed : aAllowedFonts) {
+    if (aFontName.Equals(allowed, nsCaseInsensitiveStringComparator)) {
+      return true;
     }
   }
-  return true;
+  return false;
 }
 
 void gfxPlatformFontList::GetFontList(nsAtom* aLangGroup,
                                       const nsACString& aGenericFamily,
                                       nsTArray<nsString>& aListOfFonts) {
+  nsTArray<nsString> allowedFonts;
+  bool filterFonts = false;
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    filterFonts = cfg->GetStringList("fonts.visible"_ns, allowedFonts);
+  }
+
   AutoLock lock(mLock);
 
   if (SharedFontList()) {
@@ -1204,7 +1208,7 @@ void gfxPlatformFontList::GetFontList(nsAtom* aLangGroup,
           continue;
         }
         nsString name = NS_ConvertUTF8toUTF16(list->LocalizedFamilyName(&f));
-        if (!IsFontAllowedByConfig(name)) {
+        if (!IsFontAllowedByConfig(name, allowedFonts, filterFonts)) {
           continue;
         }
         // XXX TODO: filter families for aGenericFamily, if supported by
@@ -1223,7 +1227,7 @@ void gfxPlatformFontList::GetFontList(nsAtom* aLangGroup,
       nsAutoCString localizedFamilyName;
       family->LocalizedName(localizedFamilyName);
       nsString name = NS_ConvertUTF8toUTF16(localizedFamilyName);
-      if (!IsFontAllowedByConfig(name)) {
+      if (!IsFontAllowedByConfig(name, allowedFonts, filterFonts)) {
         continue;
       }
       aListOfFonts.AppendElement(std::move(name));

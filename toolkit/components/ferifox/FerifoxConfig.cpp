@@ -4,14 +4,17 @@
 
 #include "FerifoxConfig.h"
 
+#include "json/json.h"
 #include "js/Date.h"
 #include "mozilla/Logging.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Span.h"
+#include "mozilla/StaticMutex.h"
 #include "mozilla/intl/TimeZone.h"
 #include "nsIFile.h"
 #include "nsIInputStream.h"
 #include "nsNetUtil.h"
+#include "nsXULAppAPI.h"
 #include "prenv.h"
 
 #include <inttypes.h>
@@ -19,24 +22,30 @@
 namespace mozilla {
 
 static LazyLogModule sFerifoxLog("Ferifox");
+static StaticMutex sFerifoxConfigMutex;
 
 FerifoxConfig* FerifoxConfig::sSingleton;
 
 /* static */
 FerifoxConfig* FerifoxConfig::GetSingleton() {
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
   if (!sSingleton) {
     sSingleton = new FerifoxConfig();
   }
   return sSingleton;
 }
 
-FerifoxConfig::FerifoxConfig() : mLoaded(false) { Load(); }
+FerifoxConfig::FerifoxConfig()
+    : mRoot(MakeUnique<Json::Value>()), mLoaded(false) {
+  Load();
+}
+
+FerifoxConfig::~FerifoxConfig() = default;
 
 void FerifoxConfig::Load() {
   const char* path = PR_GetEnv("FERIFOX_CONFIG");
   if (!path || !*path) {
-    MOZ_LOG(sFerifoxLog, LogLevel::Debug,
-            ("FERIFOX_CONFIG not set, skipping"));
+    MOZ_LOG(sFerifoxLog, LogLevel::Debug, ("FERIFOX_CONFIG not set, skipping"));
     return;
   }
 
@@ -50,16 +59,16 @@ void FerifoxConfig::Load() {
   }
 
   bool exists = false;
-  file->Exists(&exists);
-  if (!exists) {
+  rv = file->Exists(&exists);
+  if (NS_FAILED(rv) || !exists) {
     MOZ_LOG(sFerifoxLog, LogLevel::Warning,
             ("FERIFOX_CONFIG: file not found '%s'", path));
     return;
   }
 
   int64_t fileSize = 0;
-  file->GetFileSize(&fileSize);
-  if (fileSize <= 0 || fileSize > 1024 * 1024) {
+  rv = file->GetFileSize(&fileSize);
+  if (NS_FAILED(rv) || fileSize <= 0 || fileSize > 1024 * 1024) {
     MOZ_LOG(sFerifoxLog, LogLevel::Warning,
             ("FERIFOX_CONFIG: bad file size %" PRId64, fileSize));
     return;
@@ -74,7 +83,8 @@ void FerifoxConfig::Load() {
   }
 
   nsAutoCString content;
-  rv = NS_ReadInputStreamToString(inputStream, content, fileSize);
+  rv = NS_ReadInputStreamToString(inputStream, content,
+                                  static_cast<uint64_t>(fileSize));
   if (NS_FAILED(rv)) {
     MOZ_LOG(sFerifoxLog, LogLevel::Warning,
             ("FERIFOX_CONFIG: failed to read file"));
@@ -82,9 +92,15 @@ void FerifoxConfig::Load() {
   }
 
   Json::Reader reader;
-  if (!reader.parse(content.BeginReading(), mRoot, false)) {
+  if (!reader.parse(content.BeginReading(), content.EndReading(), *mRoot,
+                    false)) {
     MOZ_LOG(sFerifoxLog, LogLevel::Warning,
             ("FERIFOX_CONFIG: JSON parse error"));
+    return;
+  }
+  if (!mRoot->isObject()) {
+    MOZ_LOG(sFerifoxLog, LogLevel::Warning,
+            ("FERIFOX_CONFIG: root must be an object"));
     return;
   }
 
@@ -92,55 +108,76 @@ void FerifoxConfig::Load() {
   MOZ_LOG(sFerifoxLog, LogLevel::Info,
           ("FERIFOX_CONFIG: loaded from '%s'", path));
 
-  // Apply timezone override early, before the JS engine first queries it.
   const Json::Value* tz = Resolve("intl.timezone"_ns);
   if (tz && tz->isString()) {
     nsAutoCString tzid(tz->asCString());
+    if (!tzid.IsEmpty()) {
+      mozilla::Span<const char> tzSpan(tzid.BeginReading(), tzid.Length());
+      auto setResult = mozilla::intl::TimeZone::SetDefaultTimeZone(tzSpan);
+      if (setResult.isOk() && setResult.unwrap()) {
+        MOZ_LOG(sFerifoxLog, LogLevel::Info,
+                ("FERIFOX_CONFIG: ICU timezone set to '%s'", tzid.get()));
+      }
 
-    // Set ICU default timezone so all Intl / Date APIs use this timezone.
-    mozilla::Span<const char> tzSpan(tzid.BeginReading(), tzid.Length());
-    auto setResult = mozilla::intl::TimeZone::SetDefaultTimeZone(tzSpan);
-    if (setResult.isOk() && setResult.unwrap()) {
-      MOZ_LOG(sFerifoxLog, LogLevel::Info,
-              ("FERIFOX_CONFIG: ICU timezone set to '%s'", tzid.get()));
+      SetPersistentEnv(mTimeZoneEnv, "FERIFOX_TZ"_ns, tzid);
+#ifndef XP_WIN
+      SetPersistentEnv(mPosixTimeZoneEnv, "TZ"_ns, tzid);
+#endif
+
+      JS::ResetTimeZone();
     }
-
-    // Set env var for js/src C++ code that checks FERIFOX_TZ.
-    nsAutoCString envStr("FERIFOX_TZ="_ns);
-    envStr += tzid;
-    PR_SetEnv(envStr.get());
-
-    // Force the JS engine to discard any cached timezone so it picks up
-    // the new default on next access.
-    JS::ResetTimeZone();
   }
 
   const Json::Value* locale = Resolve("intl.locale"_ns);
   if (locale && locale->isString()) {
     nsAutoCString localeStr(locale->asCString());
-    nsAutoCString envStr("LANG="_ns);
-    envStr += localeStr;
-    PR_SetEnv(envStr.get());
-    MOZ_LOG(sFerifoxLog, LogLevel::Info,
-            ("FERIFOX_CONFIG: locale set to '%s'", localeStr.get()));
+    if (!localeStr.IsEmpty()) {
+      SetPersistentEnv(mLocaleEnv, "LANG"_ns, localeStr);
+      MOZ_LOG(sFerifoxLog, LogLevel::Info,
+              ("FERIFOX_CONFIG: locale set to '%s'", localeStr.get()));
+    }
   }
 
-  // Apply WebRTC privacy prefs to suppress host IP leakage.
-  const Json::Value* webrtc = Resolve("webrtc"_ns);
-  if (webrtc && webrtc->isObject()) {
-    if (const Json::Value& noHost = (*webrtc)["noHostCandidates"];
-        noHost.isBool()) {
-      Preferences::SetBool("media.peerconnection.ice.no_host", noHost.asBool());
+  if (XRE_IsParentProcess()) {
+    const Json::Value* webrtc = Resolve("webrtc"_ns);
+    if (webrtc && webrtc->isObject()) {
+      if (const Json::Value& noHost = (*webrtc)["noHostCandidates"];
+          noHost.isBool()) {
+        Preferences::SetBool("media.peerconnection.ice.no_host",
+                             noHost.asBool());
+      }
+      if (const Json::Value& defaultOnly = (*webrtc)["defaultAddressOnly"];
+          defaultOnly.isBool()) {
+        Preferences::SetBool("media.peerconnection.ice.default_address_only",
+                             defaultOnly.asBool());
+      }
+      MOZ_LOG(sFerifoxLog, LogLevel::Info,
+              ("FERIFOX_CONFIG: WebRTC privacy prefs applied"));
     }
-    if (const Json::Value& defaultOnly =
-            (*webrtc)["defaultAddressOnly"];
-        defaultOnly.isBool()) {
-      Preferences::SetBool("media.peerconnection.ice.default_address_only",
-                            defaultOnly.asBool());
+
+    if (auto stealth = GetBool("automation.stealth"_ns); stealth && *stealth) {
+      Preferences::SetBool("browser.dom.window.dump.enabled", false);
+      Preferences::SetBool("dom.disable_open_during_load", true);
+      Preferences::SetUint("dom.input_events.security.minNumTicks", 3);
+      Preferences::SetUint("dom.input_events.security.minTimeElapsedInMS", 100);
+      Preferences::SetInt("dom.max_script_run_time", 10);
+      Preferences::SetUint("dom.navigation.navigationRateLimit.count", 1000);
+      Preferences::SetBool("dom.permissions.testing.enabled", false);
+      Preferences::SetBool("dom.push.connection.enabled", true);
+      Preferences::SetBool("focusmanager.testmode", false);
+      Preferences::SetBool("network.manage-offline-status", true);
+      Preferences::SetBool("remote.prefs.recommended", false);
     }
-    MOZ_LOG(sFerifoxLog, LogLevel::Info,
-            ("FERIFOX_CONFIG: WebRTC privacy prefs applied"));
   }
+}
+
+void FerifoxConfig::SetPersistentEnv(nsCString& aStorage,
+                                     const nsACString& aName,
+                                     const nsACString& aValue) {
+  aStorage.Assign(aName);
+  aStorage.Append('=');
+  aStorage.Append(aValue);
+  (void)PR_SetEnv(aStorage.get());
 }
 
 const Json::Value* FerifoxConfig::Resolve(const nsACString& aPath) const {
@@ -148,7 +185,7 @@ const Json::Value* FerifoxConfig::Resolve(const nsACString& aPath) const {
     return nullptr;
   }
 
-  const Json::Value* current = &mRoot;
+  const Json::Value* current = mRoot.get();
   nsCString path(aPath);
   int32_t start = 0;
 
@@ -209,21 +246,24 @@ Maybe<double> FerifoxConfig::GetDouble(const nsACString& aPath) const {
   return Some(val->asDouble());
 }
 
-void FerifoxConfig::GetString(const nsACString& aPath,
+bool FerifoxConfig::GetString(const nsACString& aPath,
                               nsAString& aResult) const {
   const Json::Value* val = Resolve(aPath);
   if (!val || !val->isString()) {
-    return;
+    return false;
   }
+  aResult.Truncate();
   CopyUTF8toUTF16(MakeStringSpan(val->asCString()), aResult);
+  return true;
 }
 
-void FerifoxConfig::GetStringList(const nsACString& aPath,
+bool FerifoxConfig::GetStringList(const nsACString& aPath,
                                   nsTArray<nsString>& aResult) const {
   const Json::Value* val = Resolve(aPath);
   if (!val || !val->isArray()) {
-    return;
+    return false;
   }
+  aResult.Clear();
   for (const auto& item : *val) {
     if (item.isString()) {
       nsString str;
@@ -231,6 +271,7 @@ void FerifoxConfig::GetStringList(const nsACString& aPath,
       aResult.AppendElement(str);
     }
   }
+  return true;
 }
 
 }  // namespace mozilla
