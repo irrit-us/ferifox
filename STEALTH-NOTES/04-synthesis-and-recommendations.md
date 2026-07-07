@@ -185,6 +185,30 @@ Pure mouse and keyboard simulation can reduce evaluator-specific artifacts, but 
 
 The practical target is therefore a hybrid: avoid content evaluator calls when a user-like workflow is sufficient, but treat every non-evaluator automation command as its own fingerprint surface. Ferifox patches should continue normalizing page-facing APIs at the source, while also guarding protocol/session state and protocol algorithms whose results can disagree with the persona seen by ordinary page code.
 
+### Crawler Inspection Scope
+
+For crawler discovery, a narrow native snapshot is sufficient and preferable to a general side-effect-free page-runtime inspector. The crawler can collect DOM tree structure, tag names, raw attributes, raw text nodes, links, forms, subresource URLs, document metadata, frame boundaries, and shadow-root boundaries from privileged browser/native DOM storage without executing page JavaScript.
+
+The snapshot must avoid normal JS property access. It should not call getters, proxy traps, iterators, `toString()`, `valueOf()`, `JSON.stringify()`, page functions, event handlers, or framework APIs. If a value is stored behind an accessor or proxy, the safe crawler result is metadata such as "accessor present" or "opaque object", not the computed value.
+
+This means Ferifox does not need a broad side-effect-free evaluator for default crawling. If a workflow needs framework state, virtual DOM state, computed style, layout-derived visibility, or arbitrary object values, that workflow should opt into a separate evaluator/interaction path and accept that it is no longer pure inspection.
+
+### Cloudflare Robot-Check Sufficiency
+
+The current branch is not sufficient to guarantee Cloudflare robot-check passage, even on a personal computer. It removes several obvious Firefox automation differences, normalizes many page-facing fingerprint surfaces, and makes program-driven prefs inherit normal browser/profile state, which is a meaningful improvement over stock automation. But Cloudflare's public documentation describes challenge and bot products that consider client-side browser signals, JavaScript Detections, bot scores, static detections such as header-order mismatches, and proxy/network classifications.
+
+Running on a personal computer with a normal residential network improves the network and hardware story compared with a datacenter VM, but it does not close the remaining gaps:
+
+- TLS/HTTP2/HTTP3 transport fingerprinting is not configurable in this branch.
+- Cloudflare challenge execution can still observe Firefox-specific rendering, timing, WebGL/canvas/audio/font behavior, and interaction patterns.
+- Remote Agent, Marionette, WebDriver BiDi, and Puppeteer/Playwright command algorithms remain distinct program-driven paths unless the crawler avoids them or limits them to native snapshot reads.
+- No native crawler snapshot API exists yet in this branch; if the crawler uses evaluator-based reads, getter/proxy/serialization side effects remain possible.
+- Behavioral quality is not covered. A real user on a personal computer can solve interactive challenges; an automated flow still needs human-like timing, focus, input, navigation, and retry behavior.
+
+The practical conclusion is that this branch may be enough for low-sensitivity pages or manual sessions on a real personal machine, but it should not be treated as sufficient for Cloudflare Managed Challenges, Turnstile, Bot Fight Mode, or enterprise Bot Management without empirical validation against the specific target configuration. The acceptance criterion should be a local test matrix that records challenge type, browser mode, network, persona, automation path, whether evaluator was used, and pass/fail outcome.
+
+Public Cloudflare references checked in July 2026: [Turnstile overview](https://developers.cloudflare.com/turnstile/), [JavaScript Detections](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/javascript-detections/), [Bot scores](https://developers.cloudflare.com/bots/concepts/bot-score/), [Bot detection engines](https://developers.cloudflare.com/bots/concepts/bot-detection-engines/), [Detection IDs](https://developers.cloudflare.com/bots/additional-configurations/detection-ids/), [additional residential-proxy detections](https://developers.cloudflare.com/bots/additional-configurations/detection-ids/additional-detections/), and [JA3/JA4 fingerprinting](https://developers.cloudflare.com/bots/additional-configurations/ja3-ja4-fingerprint/).
+
 ### Ferifox Config Keys Added or Audited
 
 Stealth personas should set these fields as a coherent group:
