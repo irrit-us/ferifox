@@ -5,7 +5,6 @@
 #include "FerifoxConfig.h"
 
 #include "json/json.h"
-#include "js/Date.h"
 #include "mozilla/Logging.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Span.h"
@@ -123,8 +122,6 @@ void FerifoxConfig::Load() {
 #ifndef XP_WIN
       SetPersistentEnv(mPosixTimeZoneEnv, "TZ"_ns, tzid);
 #endif
-
-      JS::ResetTimeZone();
     }
   }
 
@@ -153,6 +150,18 @@ void FerifoxConfig::Load() {
       }
       MOZ_LOG(sFerifoxLog, LogLevel::Info,
               ("FERIFOX_CONFIG: WebRTC privacy prefs applied"));
+    }
+
+    const Json::Value* webgl = Resolve("webgl"_ns);
+    if (webgl && webgl->isObject()) {
+      if (const Json::Value& forceEnabled = (*webgl)["forceEnabled"];
+          forceEnabled.isBool()) {
+        Preferences::SetBool("webgl.force-enabled", forceEnabled.asBool());
+      }
+      if (const Json::Value& forceEGL = (*webgl)["forceEGL"];
+          forceEGL.isBool() && forceEGL.asBool()) {
+        SetPersistentEnv(mWebGLForceEGLEnv, "MOZ_WEBGL_FORCE_EGL"_ns, "1"_ns);
+      }
     }
 
     if (auto stealth = GetBool("automation.stealth"_ns); stealth && *stealth) {

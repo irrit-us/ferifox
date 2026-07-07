@@ -215,6 +215,16 @@ The practical conclusion is that this branch may be enough for low-sensitivity p
 
 Public Cloudflare references checked in July 2026: [Turnstile overview](https://developers.cloudflare.com/turnstile/), [JavaScript Detections](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/javascript-detections/), [Bot scores](https://developers.cloudflare.com/bots/concepts/bot-score/), [Bot detection engines](https://developers.cloudflare.com/bots/concepts/bot-detection-engines/), [Detection IDs](https://developers.cloudflare.com/bots/additional-configurations/detection-ids/), [additional residential-proxy detections](https://developers.cloudflare.com/bots/additional-configurations/detection-ids/additional-detections/), and [JA3/JA4 fingerprinting](https://developers.cloudflare.com/bots/additional-configurations/ja3-ja4-fingerprint/).
 
+### July 2026 Circular.bot Debug Findings
+
+The local Circular.bot checker originally conflated Turnstile presence with failure. Cloudflare's own Turnstile documentation describes normal implicit and explicit rendering through `cf-turnstile`, `challenges.cloudflare.com/turnstile`, `turnstile.render()`, and success/error callbacks, so a script tag or widget container is not by itself a failed robot check. The checker should record presence separately from blocking text such as "Turnstile reported an error" or "Verification failed."
+
+The first Ferifox run failed for a normal browser-capability reason: in headless mode, Cloudflare's Turnstile frame and the page both logged WebGL context creation failures. The geckodriver log showed `WebglAllowWindowsNativeGl:false`, `AllowWebgl2:false`, and `FEATURE_FAILURE_WEBGL_EXHAUSTED_DRIVERS`; the page probe confirmed `webgl.available: false`. For this environment, `webgl.force-enabled=true` alone was insufficient because native GL still required X authorization. The successful compatibility configuration combined `webgl.force-enabled=true` with `MOZ_WEBGL_FORCE_EGL=1`, which produced an EGL software WebGL context (`Mesa` / `llvmpipe, or similar`) and removed the visible verification-failure markers for the sampled `/mev` page.
+
+This is a compatibility fix, not proof of general Cloudflare passage. The same run still exposed a standard WebDriver-controlled session state, and Turnstile resources remained present in the page. Future checks should treat "page loaded with no visible verification failure" as the local pass criterion, while continuing to record WebGL availability, browser mode, persona file, automation path, and browser/geckodriver logs.
+
+The configured persona path also had a startup crash: `FerifoxConfig::Load()` called `JS::ResetTimeZone()` from the singleton constructor before SpiderMonkey's date/time state was initialized, dereferencing a null mutex during XPCOM startup. The loader can safely set ICU/POSIX timezone state before content starts, but it must not reset SpiderMonkey timezone caches from that early constructor path.
+
 ### Ferifox Config Keys Added or Audited
 
 Stealth personas should set these fields as a coherent group:
@@ -247,6 +257,8 @@ window.outerWidth
 window.outerHeight
 screen.orientation.type
 screen.orientation.angle
+webgl.forceEnabled
+webgl.forceEGL
 ```
 
 The important constraint is still consistency: geolocation must match proxy egress, timezone, locale, `Accept-Language`, and the persona's regional assumptions. Plugin and MIME counts must match the actual objects exposed by the engine unless the implementation also creates synthetic entries.

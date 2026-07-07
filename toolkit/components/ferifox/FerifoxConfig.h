@@ -45,6 +45,7 @@ class FerifoxConfig {
   UniquePtr<Json::Value> mRoot;
   nsCString mTimeZoneEnv;
   nsCString mLocaleEnv;
+  nsCString mWebGLForceEGLEnv;
 #ifndef XP_WIN
   nsCString mPosixTimeZoneEnv;
 #endif
