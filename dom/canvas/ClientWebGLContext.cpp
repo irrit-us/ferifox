@@ -5977,11 +5977,27 @@ void ClientWebGLContext::GetSupportedExtensions(
   retval.SetNull();
   if (IsContextLost()) return;
 
+  nsTArray<nsString> allowedExts;
+  bool filterExts = false;
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    filterExts = cfg->GetStringList("webgl.extensions"_ns, allowedExts);
+  }
+
   auto& retarr = retval.SetValue();
   for (const auto i : MakeEnumeratedRange(WebGLExtensionID::Max)) {
     if (!IsSupported(i, callerType)) continue;
 
     const auto& extStr = GetExtensionName(i);
+    if (filterExts) {
+      bool found = false;
+      for (const auto& allowed : allowedExts) {
+        if (allowed.EqualsASCII(extStr)) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) continue;
+    }
     retarr.AppendElement(NS_ConvertUTF8toUTF16(extStr));
   }
 }

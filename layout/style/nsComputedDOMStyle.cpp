@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "AnchorPositioningUtils.h"
+#include "FerifoxConfig.h"
 #include "NonCustomCSSPropertyId.h"
 #include "PseudoStyleType.h"
 #include "mozilla/AppUnits.h"
@@ -1349,7 +1350,20 @@ already_AddRefed<nsROCSSPrimitiveValue> nsComputedDOMStyle::PixelsToCSSValue(
 void nsComputedDOMStyle::SetValueToPixels(nsROCSSPrimitiveValue* aValue,
                                           float aPixels) {
   MOZ_ASSERT(mComputedStyle);
-  aValue->SetPixels(mComputedStyle->EffectiveZoom().Unzoom(aPixels));
+  float pixels = mComputedStyle->EffectiveZoom().Unzoom(aPixels);
+
+  Maybe<uint64_t> seed;
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    seed = cfg->GetUint64("layout.noiseSeed"_ns);
+  }
+  if (seed) {
+    uintptr_t h = ((uintptr_t)mElement.get() ^ (uintptr_t)(*seed)) * 2654435761u;
+    h = h * 1103515245 + 12345;
+    float noise = ((float)(int32_t)(h & 0xFFFF) / 65535.0f - 0.5f) * 0.1f;
+    pixels += noise;
+  }
+
+  aValue->SetPixels(pixels);
 }
 
 already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetMozOsxFontSmoothing() {

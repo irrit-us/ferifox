@@ -128,6 +128,8 @@
 #endif
 #include "mozilla/dom/PeerConnectionObserverEnumsBinding.h"
 
+#include "FerifoxConfig.h"
+
 #define ICE_PARSING \
   "In RTCConfiguration passed to RTCPeerConnection constructor"
 
@@ -146,6 +148,37 @@ static const char* pciLogTag = "PeerConnectionImpl";
 #define LOGTAG pciLogTag
 
 static mozilla::LazyLogModule logModuleInfo("signaling");
+
+static void StripIPv4FromSdp(std::string& s) {
+  size_t i = 0;
+  while (i < s.size()) {
+    if (isdigit(static_cast<unsigned char>(s[i])) &&
+        (i == 0 || !isalnum(static_cast<unsigned char>(s[i - 1])))) {
+      size_t start = i;
+      int dots = 0;
+      size_t j = i;
+      while (j < s.size()) {
+        unsigned char c = static_cast<unsigned char>(s[j]);
+        if (isdigit(c)) {
+          while (j < s.size() && isdigit(static_cast<unsigned char>(s[j]))) j++;
+        } else if (c == '.') {
+          dots++;
+          j++;
+        } else {
+          break;
+        }
+      }
+      if (dots == 3 && j > start &&
+          (j == s.size() || !isalnum(static_cast<unsigned char>(s[j])))) {
+        size_t span = j - start;
+        s.replace(start, span, "0.0.0.0", 7);
+        i = start + 7;
+        continue;
+      }
+    }
+    i++;
+  }
+}
 
 // Getting exceptions back down from PCObserver is generally not harmful.
 namespace {
@@ -1487,6 +1520,12 @@ PeerConnectionImpl::CreateOffer(const JsepOfferOptions& aOptions) {
               *buildJSErrorData(result, errorString), rv);
         } else {
           mJsepSession = std::move(uncommittedJsepSession);
+          if (auto* cfg = FerifoxConfig::GetSingleton()) {
+            auto strip = cfg->GetBool("webrtc.stripSDPIPs"_ns);
+            if (strip && *strip) {
+              StripIPv4FromSdp(offer);
+            }
+          }
           mPCObserver->OnCreateOfferSuccess(ObString(offer.c_str()), rv);
         }
       }));
@@ -1523,6 +1562,12 @@ PeerConnectionImpl::CreateAnswer() {
               *buildJSErrorData(result, errorString), rv);
         } else {
           mJsepSession = std::move(uncommittedJsepSession);
+          if (auto* cfg = FerifoxConfig::GetSingleton()) {
+            auto strip = cfg->GetBool("webrtc.stripSDPIPs"_ns);
+            if (strip && *strip) {
+              StripIPv4FromSdp(answer);
+            }
+          }
           mPCObserver->OnCreateAnswerSuccess(ObString(answer.c_str()), rv);
         }
       }));
@@ -4020,12 +4065,32 @@ RefPtr<dom::RTCStatsReportPromise> PeerConnectionImpl::GetStats(
     }
   }
 
+  bool stripStats = false;
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    auto s = cfg->GetBool("webrtc.stripStats"_ns);
+    if (s && *s) stripStats = true;
+  }
+
   return dom::RTCStatsPromise::All(GetMainThreadSerialEventTarget(), promises)
       ->Then(
           GetMainThreadSerialEventTarget(), __func__,
-          [report = std::move(report), idGen = mIdGenerator](
+          [report = std::move(report), idGen = mIdGenerator, stripStats](
               nsTArray<UniquePtr<dom::RTCStatsCollection>> aStats) mutable {
             idGen->RewriteIds(std::move(aStats), report.get());
+            if (stripStats) {
+              for (auto& entry : report->mSdpHistory) {
+                NS_ConvertUTF16toUTF8 sdp(entry.mSdp);
+                std::string sdpStr(sdp.get());
+                StripIPv4FromSdp(sdpStr);
+                entry.mSdp = NS_ConvertUTF8toUTF16(sdpStr);
+              }
+              for (auto& candidate : report->mRawRemoteCandidates) {
+                NS_ConvertUTF16toUTF8 cand(candidate);
+                std::string candStr(cand.get());
+                StripIPv4FromSdp(candStr);
+                candidate = NS_ConvertUTF8toUTF16(candStr);
+              }
+            }
             return dom::RTCStatsReportPromise::CreateAndResolve(
                 std::move(report), __func__);
           },

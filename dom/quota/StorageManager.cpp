@@ -68,6 +68,9 @@ void SetOptionalUint64(OptionalUint64& aField, uint64_t aValue) {
 
 void ApplyFerifoxStorageEstimate(StorageEstimate& aEstimate) {
   auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return;
+  }
   auto quota = cfg->GetUint64("storage.estimate.quota"_ns);
   auto usage = cfg->GetUint64("storage.estimate.usage"_ns);
   if (quota) {
@@ -88,6 +91,9 @@ void ApplyFerifoxStorageEstimate(StorageEstimate& aEstimate) {
 
 void ApplyFerifoxPersisted(bool& aPersisted) {
   auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return;
+  }
   if (auto persisted = cfg->GetBool("storage.persisted"_ns)) {
     aPersisted = *persisted;
   }

@@ -10,7 +10,7 @@
 #include "nsString.h"
 #include "nsTArray.h"
 
-#include <stdint.h>
+#include <cstdint>
 
 namespace Json {
 class Value;

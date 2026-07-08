@@ -42,7 +42,7 @@ class DynamicsCompressorNode final : public AudioNode {
   // Called GetRelease to prevent clashing with the nsISupports::Release name
   AudioParam* GetRelease() const { return mRelease; }
 
-  float Reduction() const { return mReduction; }
+  float Reduction() const;
 
   const char* NodeType() const override { return "DynamicsCompressorNode"; }
 

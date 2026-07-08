@@ -32,6 +32,9 @@ Maybe<PermissionState> StringToPermissionState(const nsAString& aValue) {
 
 Maybe<PermissionState> GetFerifoxPermissionState(PermissionName aName) {
   auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return Nothing();
+  }
 
   nsAutoCString path("permissions."_ns);
   path.Append(GetEnumString(aName));

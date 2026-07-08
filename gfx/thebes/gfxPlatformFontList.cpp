@@ -1176,6 +1176,18 @@ bool gfxPlatformFontList::IsVisibleToCSS(const fontlist::Family& aFamily,
 static bool IsFontAllowedByConfig(const nsAString& aFontName,
                                   const nsTArray<nsString>& aAllowedFonts,
                                   bool aFilterFonts) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsTArray<nsString> whitelist;
+    if (cfg->GetStringList("fonts.visible"_ns, whitelist)) {
+      for (const auto& allowed : whitelist) {
+        if (aFontName.Equals(allowed, nsCaseInsensitiveStringComparator)) {
+          return true;
+        }
+      }
+      return false;
+    }
+  }
+
   if (!aFilterFonts) {
     return true;
   }

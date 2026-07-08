@@ -38,6 +38,7 @@
 #include "mozilla/EventDispatcher.h"
 #include "mozilla/EventListenerManager.h"
 #include "mozilla/EventStateManager.h"
+#include "FerifoxConfig.h"
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/FullscreenChange.h"
 #include "mozilla/HTMLEditor.h"
@@ -1197,7 +1198,29 @@ already_AddRefed<DOMRect> Element::GetBoundingClientRect() {
     return rect.forget();
   }
 
-  rect->SetLayoutRect(frame->GetBoundingClientRect());
+  nsRect r = frame->GetBoundingClientRect();
+
+  Maybe<uint64_t> seed;
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    seed = cfg->GetUint64("layout.noiseSeed"_ns);
+  }
+  if (seed) {
+    uintptr_t h =
+        ((uintptr_t)this ^ (uintptr_t)frame ^ (uintptr_t)(*seed)) * 2654435761u;
+    auto perturb = [&](nscoord& val) {
+      h = h * 1103515245 + 12345;
+      int32_t halfPixel = AppUnitsPerCSSPixel() / 2;
+      int32_t delta =
+          (int32_t)(h % (uint32_t)(2 * halfPixel + 1)) - halfPixel;
+      val += delta;
+    };
+    perturb(r.x);
+    perturb(r.y);
+    perturb(r.width);
+    perturb(r.height);
+  }
+
+  rect->SetLayoutRect(r);
   return rect.forget();
 }
 
@@ -6558,6 +6581,26 @@ Element* Element::GetOffsetRect(CSSIntRect& aRect) {
     OffsetResult result = GetUnretargetedOffsetsFor(*parent);
     rect += result.mRect.TopLeft();
     parent = result.mParent;
+  }
+
+  Maybe<uint64_t> seed;
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    seed = cfg->GetUint64("layout.noiseSeed"_ns);
+  }
+  if (seed) {
+    uintptr_t h =
+        ((uintptr_t)this ^ (uintptr_t)frame ^ (uintptr_t)(*seed)) * 2654435761u;
+    auto perturb = [&](nscoord& val) {
+      h = h * 1103515245 + 12345;
+      int32_t halfPixel = AppUnitsPerCSSPixel() / 2;
+      int32_t delta =
+          (int32_t)(h % (uint32_t)(2 * halfPixel + 1)) - halfPixel;
+      val += delta;
+    };
+    perturb(rect.x);
+    perturb(rect.y);
+    perturb(rect.width);
+    perturb(rect.height);
   }
 
   aRect = CSSIntRect::FromAppUnitsRounded(

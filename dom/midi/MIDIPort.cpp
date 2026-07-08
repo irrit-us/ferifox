@@ -4,6 +4,7 @@
 
 #include "mozilla/dom/MIDIPort.h"
 
+#include "FerifoxConfig.h"
 #include "MIDILog.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/MIDIAccess.h"
@@ -115,16 +116,37 @@ void MIDIPort::GetId(nsString& aRetVal) const {
 
 void MIDIPort::GetManufacturer(nsString& aRetVal) const {
   MOZ_ASSERT(Port());
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    if (cfg->GetString("midi.manufacturer"_ns, val)) {
+      aRetVal = val;
+      return;
+    }
+  }
   aRetVal = Port()->Manufacturer();
 }
 
 void MIDIPort::GetName(nsString& aRetVal) const {
   MOZ_ASSERT(Port());
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    if (cfg->GetString("midi.name"_ns, val)) {
+      aRetVal = val;
+      return;
+    }
+  }
   aRetVal = Port()->Name();
 }
 
 void MIDIPort::GetVersion(nsString& aRetVal) const {
   MOZ_ASSERT(Port());
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    if (cfg->GetString("midi.version"_ns, val)) {
+      aRetVal = val;
+      return;
+    }
+  }
   aRetVal = Port()->Version();
 }
 

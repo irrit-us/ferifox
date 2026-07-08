@@ -8,6 +8,7 @@
 
 #include "CanvasImageCache.h"
 #include "CanvasUtils.h"
+#include "FerifoxConfig.h"
 #include "GeckoBindings.h"
 #include "ImageEncoder.h"
 #include "ImageRegion.h"
@@ -139,6 +140,38 @@ using namespace mozilla::layers;
 static mozilla::LazyLogModule gFingerprinterDetection("FingerprinterDetection");
 
 namespace mozilla::dom {
+
+static uint32_t GetCanvasNoiseSeed() {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return 0;
+  }
+  auto seed = cfg->GetUint32("canvas.noiseSeed"_ns);
+  return seed ? *seed : 0;
+}
+
+static void FerifoxRandomizePixels(uint8_t* aData, uint32_t aWidth,
+                                   uint32_t aHeight, uint32_t aStride,
+                                   uint32_t aSeed) {
+  if (!aSeed) return;
+  uint32_t state = aSeed;
+  for (uint32_t y = 0; y < aHeight; ++y) {
+    for (uint32_t x = 0; x < aWidth; ++x) {
+      uint32_t offset = y * aStride + x * 4;
+      state = state * 1103515245 + 12345;
+      uint32_t channel = (state >> 3) & 3;
+      if (channel == 3) continue;
+      uint8_t& pixel = aData[offset + channel];
+      if (pixel == 0) continue;
+      uint32_t dir = (state >> 8) & 1;
+      if (dir && pixel < 255) {
+        ++pixel;
+      } else if (!dir && pixel > 1) {
+        --pixel;
+      }
+    }
+  }
+}
 
 // Cap sigma to avoid overly large temp surfaces.
 const Float SIGMA_MAX = 100;
@@ -2293,6 +2326,12 @@ UniquePtr<uint8_t[]> CanvasRenderingContext2D::GetImageBuffer(
           out_imageSize->width, out_imageSize->height,
           out_imageSize->width * out_imageSize->height * 4,
           SurfaceFormat::A8R8G8B8_UINT32);
+    }
+    uint32_t noiseSeed = GetCanvasNoiseSeed();
+    if (noiseSeed) {
+      FerifoxRandomizePixels(ret.get(), out_imageSize->width,
+                             out_imageSize->height,
+                             out_imageSize->width * 4, noiseSeed);
     }
   }
 
@@ -6714,6 +6753,12 @@ nsresult CanvasRenderingContext2D::GetImageDataArray(
                                     rawData.mData, size.width, size.height,
                                     size.height * size.width * 4,
                                     SurfaceFormat::A8R8G8B8_UINT32);
+    }
+
+    uint32_t noiseSeed = GetCanvasNoiseSeed();
+    if (noiseSeed) {
+      FerifoxRandomizePixels(rawData.mData, size.width, size.height,
+                             rawData.mStride, noiseSeed);
     }
 
     JS::AutoCheckCannotGC nogc;

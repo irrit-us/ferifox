@@ -6,6 +6,7 @@
 
 #include "AudioNodeEngine.h"
 #include "AudioNodeTrack.h"
+#include "FerifoxConfig.h"
 #include "Tracing.h"
 #include "mozilla/Mutex.h"
 #include "mozilla/PodOperations.h"
@@ -22,6 +23,17 @@ static_assert((CHUNK_COUNT & (CHUNK_COUNT - 1)) == 0,
               "CHUNK_COUNT must be power of 2 for remainder behavior");
 
 namespace dom {
+
+namespace {
+uint32_t GetAudioNoiseSeed() {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return 0;
+  }
+  auto seed = cfg->GetUint32("audio.noiseSeed"_ns);
+  return seed ? *seed : 0;
+}
+}  // namespace
 
 class AnalyserNodeEngine final : public AudioNodeEngine {
   class TransferBuffer final : public Runnable {
@@ -302,6 +314,16 @@ bool AnalyserNode::FFTAnalysis() {
                        (1.0 - mSmoothingTimeConstant) * scalarMagnitude;
   }
 
+  uint32_t noiseSeed = GetAudioNoiseSeed();
+  if (noiseSeed) {
+    uint32_t state = noiseSeed;
+    for (uint32_t i = 0; i < mOutputBuffer.Length(); ++i) {
+      state = state * 1103515245 + 12345;
+      double noise = ((state & 0x7fffffff) / 2147483648.0) * 0.008;
+      mOutputBuffer[i] *= (1.0 + noise - 0.004);
+    }
+  }
+
   return true;
 }
 
@@ -380,6 +402,16 @@ void AnalyserNode::GetTimeDomainData(float* aData, size_t aLength) {
 
     readChunk++;
     writeIndex += copyLength;
+  }
+
+  uint32_t noiseSeed = GetAudioNoiseSeed();
+  if (noiseSeed) {
+    uint32_t state = noiseSeed;
+    for (size_t i = 0; i < aLength; ++i) {
+      state = state * 1103515245 + 12345;
+      double noise = ((state & 0x7fffffff) / 2147483648.0) * 0.0001;
+      aData[i] += static_cast<float>(noise);
+    }
   }
 }
 

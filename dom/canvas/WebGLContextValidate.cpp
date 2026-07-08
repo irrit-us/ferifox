@@ -5,6 +5,7 @@
 #include <algorithm>
 
 #include "CanvasUtils.h"
+#include "FerifoxConfig.h"
 #include "GLContext.h"
 #include "GLSLANG/ShaderLang.h"
 #include "WebGLBuffer.h"
@@ -474,6 +475,54 @@ bool WebGLContext::InitAndValidateGL(FailureReason* const out_failReason) {
       GenerateWarning(
           "Unable to restrict WebGL limits in order to resist fingerprinting");
       return false;
+    }
+  }
+
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetUint32("webgl.maxTex2dSize"_ns)) {
+      if (*val > 0 && *val < limits.maxTex2dSize) {
+        limits.maxTex2dSize = *val;
+      }
+    }
+    if (auto val = cfg->GetUint32("webgl.maxTexCubeSize"_ns)) {
+      if (*val > 0 && *val < limits.maxTexCubeSize) {
+        limits.maxTexCubeSize = *val;
+      }
+    }
+    if (auto val = cfg->GetUint32("webgl.maxViewportDim"_ns)) {
+      if (*val > 0 && *val < limits.maxViewportDim) {
+        limits.maxViewportDim = *val;
+      }
+    }
+    if (auto val = cfg->GetUint32("webgl.maxVertexAttribs"_ns)) {
+      if (*val > 0 && *val < limits.maxVertexAttribs) {
+        limits.maxVertexAttribs = *val;
+      }
+    }
+    if (auto val = cfg->GetUint32("webgl.maxTexUnits"_ns)) {
+      if (*val > 0 && *val < limits.maxTexUnits) {
+        limits.maxTexUnits = *val;
+      }
+    }
+    if (auto val = cfg->GetDouble("webgl.pointSizeRangeMin"_ns)) {
+      if (*val > 0 && static_cast<float>(*val) > limits.pointSizeRange[0]) {
+        limits.pointSizeRange[0] = static_cast<float>(*val);
+      }
+    }
+    if (auto val = cfg->GetDouble("webgl.pointSizeRangeMax"_ns)) {
+      if (*val > 0 && static_cast<float>(*val) < limits.pointSizeRange[1]) {
+        limits.pointSizeRange[1] = static_cast<float>(*val);
+      }
+    }
+    if (auto val = cfg->GetDouble("webgl.lineWidthRangeMin"_ns)) {
+      if (*val > 0 && static_cast<float>(*val) > limits.lineWidthRange[0]) {
+        limits.lineWidthRange[0] = static_cast<float>(*val);
+      }
+    }
+    if (auto val = cfg->GetDouble("webgl.lineWidthRangeMax"_ns)) {
+      if (*val > 0 && static_cast<float>(*val) < limits.lineWidthRange[1]) {
+        limits.lineWidthRange[1] = static_cast<float>(*val);
+      }
     }
   }
 
