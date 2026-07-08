@@ -4,7 +4,7 @@
 
 #include "SpeechSynthesis.h"
 
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Logging.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/Element.h"

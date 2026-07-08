@@ -20,7 +20,7 @@
 #include "ConvolverNode.h"
 #include "DelayNode.h"
 #include "DynamicsCompressorNode.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "GainNode.h"
 #include "IIRFilterNode.h"
 #include "MediaElementAudioSourceNode.h"

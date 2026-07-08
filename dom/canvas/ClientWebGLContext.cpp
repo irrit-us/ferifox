@@ -9,7 +9,7 @@
 #include <bitset>
 
 #include "ClientWebGLExtensions.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "HostWebGLContext.h"
 #include "TexUnpackBlob.h"
 #include "WebGLChild.h"

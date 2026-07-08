@@ -4,7 +4,7 @@
 
 #include "mozilla/dom/MIDIPort.h"
 
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "MIDILog.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/MIDIAccess.h"

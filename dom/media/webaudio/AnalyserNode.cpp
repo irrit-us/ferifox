@@ -6,7 +6,7 @@
 
 #include "AudioNodeEngine.h"
 #include "AudioNodeTrack.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "Tracing.h"
 #include "mozilla/Mutex.h"
 #include "mozilla/PodOperations.h"

@@ -4,7 +4,7 @@
 
 #include "ScreenOrientation.h"
 
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/DOMEventTargetHelper.h"
 #include "mozilla/Hal.h"
 #include "mozilla/Preferences.h"

@@ -17,7 +17,7 @@
 
 #include "DOMMatrix.h"
 #include "ExpandedPrincipal.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "PresShellInlines.h"
 #include "PseudoStyleType.h"
 #include "jsapi.h"

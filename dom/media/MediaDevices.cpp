@@ -5,7 +5,7 @@
 #include "mozilla/dom/MediaDevices.h"
 
 #include "AudioDeviceInfo.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "MediaEngine.h"
 #include "MediaEngineFake.h"
 #include "MediaTrackConstraints.h"

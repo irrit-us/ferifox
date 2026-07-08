@@ -21,6 +21,8 @@ namespace mozilla {
 class FerifoxConfig {
  public:
   static FerifoxConfig* GetSingleton();
+  static void SetConfigForTesting(const nsACString& aJson);
+  static void ClearConfigForTesting();
 
   bool IsLoaded() const { return mLoaded; }
 
@@ -38,12 +40,14 @@ class FerifoxConfig {
   ~FerifoxConfig();
 
   void Load();
+  bool LoadFromJSONString(const nsACString& aContent, const char* aSource);
   void SetPersistentEnv(nsCString& aStorage, const nsACString& aName,
                         const nsACString& aValue);
 
   const Json::Value* Resolve(const nsACString& aPath) const;
 
   static FerifoxConfig* sSingleton;
+  static nsCString sTestingConfigJson;
 
   UniquePtr<Json::Value> mRoot;
   nsCString mTimeZoneEnv;

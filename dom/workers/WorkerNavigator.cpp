@@ -5,7 +5,7 @@
 #include "mozilla/dom/WorkerNavigator.h"
 
 #include "ErrorList.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "MainThreadUtils.h"
 #include "RuntimeService.h"
 #include "WorkerRunnable.h"

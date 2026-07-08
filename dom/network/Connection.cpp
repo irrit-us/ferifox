@@ -7,7 +7,7 @@
 #include "ConnectionMainThread.h"
 #include "ConnectionWorker.h"
 #include "Constants.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/dom/WorkerPrivate.h"
 #include "nsString.h"

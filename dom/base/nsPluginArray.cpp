@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/StaticPrefs_pdfjs.h"
 #include "mozilla/dom/PluginArrayBinding.h"
 #include "mozilla/dom/PluginBinding.h"

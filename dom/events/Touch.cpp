@@ -4,7 +4,7 @@
 
 #include "mozilla/dom/Touch.h"
 
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/dom/EventTarget.h"
 #include "mozilla/dom/TouchEvent.h"
 #include "nsContentUtils.h"

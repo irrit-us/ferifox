@@ -11,7 +11,7 @@
 
 #include "AccessCheck.h"
 #include "CompositableHost.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "GLBlitHelper.h"
 #include "GLContext.h"
 #include "GLContextProvider.h"

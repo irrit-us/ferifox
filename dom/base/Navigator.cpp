@@ -5,7 +5,7 @@
 // Needs to be first.
 #include "Navigator.h"
 
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "Geolocation.h"
 #include "base/basictypes.h"
 #include "mozilla/Components.h"

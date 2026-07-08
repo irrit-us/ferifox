@@ -4,7 +4,7 @@
 
 #include "Geolocation.h"
 
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "GeolocationIPCUtils.h"
 #include "GeolocationSystem.h"
 #include "mozilla/ClearOnShutdown.h"

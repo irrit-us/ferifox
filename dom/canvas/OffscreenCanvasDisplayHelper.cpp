@@ -4,7 +4,7 @@
 
 #include "OffscreenCanvasDisplayHelper.h"
 
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/SVGObserverUtils.h"
 #include "mozilla/StaticPrefs_gfx.h"
 #include "mozilla/dom/Document.h"

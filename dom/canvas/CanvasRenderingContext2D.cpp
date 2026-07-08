@@ -8,7 +8,7 @@
 
 #include "CanvasImageCache.h"
 #include "CanvasUtils.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "GeckoBindings.h"
 #include "ImageEncoder.h"
 #include "ImageRegion.h"

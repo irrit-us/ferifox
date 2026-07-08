@@ -25,7 +25,7 @@
 #include "nsUnicodeProperties.h"
 #include "nsXULAppAPI.h"
 
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/AppShutdown.h"
 #include "mozilla/BinarySearch.h"
 #include "mozilla/Likely.h"

@@ -7,7 +7,7 @@
 #include "AudioDestinationNode.h"
 #include "AudioNodeEngine.h"
 #include "AudioNodeTrack.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "Tracing.h"
 #include "WebAudioUtils.h"
 #include "blink/DynamicsCompressor.h"

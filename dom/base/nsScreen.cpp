@@ -4,7 +4,7 @@
 
 #include "nsScreen.h"
 
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/GeckoBindings.h"
 #include "mozilla/dom/BrowsingContextBinding.h"
 #include "mozilla/dom/Document.h"

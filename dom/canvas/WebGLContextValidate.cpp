@@ -5,7 +5,7 @@
 #include <algorithm>
 
 #include "CanvasUtils.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "GLContext.h"
 #include "GLSLANG/ShaderLang.h"
 #include "WebGLBuffer.h"

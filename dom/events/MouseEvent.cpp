@@ -4,7 +4,7 @@
 
 #include "MouseEvent.h"
 
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/BasePrincipal.h"
 #include "mozilla/EventForwards.h"
 #include "mozilla/MouseEvents.h"

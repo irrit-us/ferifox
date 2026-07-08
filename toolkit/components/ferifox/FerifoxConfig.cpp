@@ -24,12 +24,15 @@ static LazyLogModule sFerifoxLog("Ferifox");
 static StaticMutex sFerifoxConfigMutex;
 
 FerifoxConfig* FerifoxConfig::sSingleton;
+nsCString FerifoxConfig::sTestingConfigJson;
 
 /* static */
 FerifoxConfig* FerifoxConfig::GetSingleton() {
   StaticMutexAutoLock lock(sFerifoxConfigMutex);
   if (!sSingleton) {
     sSingleton = new FerifoxConfig();
+  } else if (!sSingleton->mLoaded) {
+    sSingleton->Load();
   }
   return sSingleton;
 }
@@ -42,6 +45,11 @@ FerifoxConfig::FerifoxConfig()
 FerifoxConfig::~FerifoxConfig() = default;
 
 void FerifoxConfig::Load() {
+  if (!sTestingConfigJson.IsEmpty()) {
+    (void)LoadFromJSONString(sTestingConfigJson, "ferifox testing override");
+    return;
+  }
+
   const char* path = PR_GetEnv("FERIFOX_CONFIG");
   if (!path || !*path) {
     MOZ_LOG(sFerifoxLog, LogLevel::Debug, ("FERIFOX_CONFIG not set, skipping"));
@@ -89,23 +97,29 @@ void FerifoxConfig::Load() {
             ("FERIFOX_CONFIG: failed to read file"));
     return;
   }
+  if (!LoadFromJSONString(content, path)) {
+    return;
+  }
+}
 
+bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,
+                                       const char* aSource) {
   Json::Reader reader;
-  if (!reader.parse(content.BeginReading(), content.EndReading(), *mRoot,
+  if (!reader.parse(aContent.BeginReading(), aContent.EndReading(), *mRoot,
                     false)) {
     MOZ_LOG(sFerifoxLog, LogLevel::Warning,
             ("FERIFOX_CONFIG: JSON parse error"));
-    return;
+    return false;
   }
   if (!mRoot->isObject()) {
     MOZ_LOG(sFerifoxLog, LogLevel::Warning,
             ("FERIFOX_CONFIG: root must be an object"));
-    return;
+    return false;
   }
 
   mLoaded = true;
   MOZ_LOG(sFerifoxLog, LogLevel::Info,
-          ("FERIFOX_CONFIG: loaded from '%s'", path));
+          ("FERIFOX_CONFIG: loaded from '%s'", aSource));
 
   const Json::Value* tz = Resolve("intl.timezone"_ns);
   if (tz && tz->isString()) {
@@ -186,6 +200,35 @@ void FerifoxConfig::Load() {
       (void)Preferences::ClearUser("hangmonitor.timeout");
     }
   }
+
+  return true;
+}
+
+/* static */
+void FerifoxConfig::SetConfigForTesting(const nsACString& aJson) {
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  sTestingConfigJson = aJson;
+  if (!sSingleton) {
+    sSingleton = new FerifoxConfig();
+    return;
+  }
+
+  sSingleton->mRoot = MakeUnique<Json::Value>();
+  sSingleton->mLoaded = false;
+  sSingleton->Load();
+}
+
+/* static */
+void FerifoxConfig::ClearConfigForTesting() {
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  sTestingConfigJson.Truncate();
+  if (!sSingleton) {
+    return;
+  }
+
+  sSingleton->mRoot = MakeUnique<Json::Value>();
+  sSingleton->mLoaded = false;
+  sSingleton->Load();
 }
 
 void FerifoxConfig::SetPersistentEnv(nsCString& aStorage,

@@ -126,7 +126,7 @@
 #else
 #  include "mozilla/dom/PeerConnectionObserverBinding.h"
 #endif
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/dom/PeerConnectionObserverEnumsBinding.h"
 
 #define ICE_PARSING \
@@ -4084,7 +4084,8 @@ RefPtr<dom::RTCStatsReportPromise> PeerConnectionImpl::GetStats(
   return dom::RTCStatsPromise::All(GetMainThreadSerialEventTarget(), promises)
       ->Then(
           GetMainThreadSerialEventTarget(), __func__,
-          [report = std::move(report), idGen = mIdGenerator, stripStats](
+          [report = std::move(report), idGen = mIdGenerator, stripStats,
+           aInternalStats](
               nsTArray<UniquePtr<dom::RTCStatsCollection>> aStats) mutable {
             idGen->RewriteIds(std::move(aStats), report.get());
             if (stripStats) {
@@ -4099,23 +4100,25 @@ RefPtr<dom::RTCStatsReportPromise> PeerConnectionImpl::GetStats(
                   candidate.mAddress.Value() = NS_ConvertUTF8toUTF16(addrStr);
                 }
               };
-              for (auto& entry : report->mSdpHistory) {
-                NS_ConvertUTF16toUTF8 sdp(entry.mSdp);
-                std::string sdpStr(sdp.get());
-                StripIPv4FromSdp(sdpStr);
-                entry.mSdp = NS_ConvertUTF8toUTF16(sdpStr);
-              }
-              for (auto& candidate : report->mRawLocalCandidates) {
-                NS_ConvertUTF16toUTF8 cand(candidate);
-                std::string candStr(cand.get());
-                StripIPv4FromSdp(candStr);
-                candidate = NS_ConvertUTF8toUTF16(candStr);
-              }
-              for (auto& candidate : report->mRawRemoteCandidates) {
-                NS_ConvertUTF16toUTF8 cand(candidate);
-                std::string candStr(cand.get());
-                StripIPv4FromSdp(candStr);
-                candidate = NS_ConvertUTF8toUTF16(candStr);
+              if (aInternalStats) {
+                for (auto& entry : report->mSdpHistory) {
+                  NS_ConvertUTF16toUTF8 sdp(entry.mSdp);
+                  std::string sdpStr(sdp.get());
+                  StripIPv4FromSdp(sdpStr);
+                  entry.mSdp = NS_ConvertUTF8toUTF16(sdpStr);
+                }
+                for (auto& candidate : report->mRawLocalCandidates) {
+                  NS_ConvertUTF16toUTF8 cand(candidate);
+                  std::string candStr(cand.get());
+                  StripIPv4FromSdp(candStr);
+                  candidate = NS_ConvertUTF8toUTF16(candStr);
+                }
+                for (auto& candidate : report->mRawRemoteCandidates) {
+                  NS_ConvertUTF16toUTF8 cand(candidate);
+                  std::string candStr(cand.get());
+                  StripIPv4FromSdp(candStr);
+                  candidate = NS_ConvertUTF8toUTF16(candStr);
+                }
               }
               stripCandidateAddresses(report->mIceCandidateStats);
               stripCandidateAddresses(report->mTrickledIceCandidateStats);

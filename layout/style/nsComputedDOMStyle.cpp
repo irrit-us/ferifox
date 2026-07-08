@@ -9,7 +9,7 @@
 #include <algorithm>
 
 #include "AnchorPositioningUtils.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "NonCustomCSSPropertyId.h"
 #include "PseudoStyleType.h"
 #include "mozilla/AppUnits.h"
