@@ -6,8 +6,8 @@
 
 #include "AudioNodeEngine.h"
 #include "AudioNodeTrack.h"
-#include "mozilla/FerifoxConfig.h"
 #include "Tracing.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Mutex.h"
 #include "mozilla/PodOperations.h"
 #include "mozilla/dom/AnalyserNodeBinding.h"
@@ -32,6 +32,16 @@ uint32_t GetAudioNoiseSeed() {
   }
   auto seed = cfg->GetUint32("audio.noiseSeed"_ns);
   return seed ? *seed : 0;
+}
+
+double NextAudioFrequencyNoiseMultiplier(uint32_t& aState) {
+  if (!aState) {
+    return 1.0;
+  }
+
+  aState = aState * 1103515245 + 12345;
+  double noise = ((aState & 0x7fffffff) / 2147483648.0) * 0.008;
+  return 1.0 + noise - 0.004;
 }
 }  // namespace
 
@@ -228,10 +238,13 @@ void AnalyserNode::GetFloatFrequencyData(const Float32Array& aArray) {
 
   aArray.ProcessData([&](const Span<float>& aData, JS::AutoCheckCannotGC&&) {
     size_t length = std::min(size_t(aData.Length()), mOutputBuffer.Length());
+    uint32_t noiseSeed = GetAudioNoiseSeed();
+    uint32_t noiseState = noiseSeed;
 
     for (size_t i = 0; i < length; ++i) {
       aData[i] = WebAudioUtils::ConvertLinearToDecibels(
-          mOutputBuffer[i], -std::numeric_limits<float>::infinity());
+          mOutputBuffer[i] * NextAudioFrequencyNoiseMultiplier(noiseState),
+          -std::numeric_limits<float>::infinity());
     }
   });
 }
@@ -246,10 +259,13 @@ void AnalyserNode::GetByteFrequencyData(const Uint8Array& aArray) {
 
   aArray.ProcessData([&](const Span<uint8_t>& aData, JS::AutoCheckCannotGC&&) {
     size_t length = std::min(size_t(aData.Length()), mOutputBuffer.Length());
+    uint32_t noiseSeed = GetAudioNoiseSeed();
+    uint32_t noiseState = noiseSeed;
 
     for (size_t i = 0; i < length; ++i) {
       const double decibels = WebAudioUtils::ConvertLinearToDecibels(
-          mOutputBuffer[i], mMinDecibels);
+          mOutputBuffer[i] * NextAudioFrequencyNoiseMultiplier(noiseState),
+          mMinDecibels);
       // scale down the value to the range of [0, UCHAR_MAX]
       const double scaled = std::max(
           0.0,
@@ -312,16 +328,6 @@ bool AnalyserNode::FFTAnalysis() {
         magnitudeScale;
     mOutputBuffer[i] = mSmoothingTimeConstant * mOutputBuffer[i] +
                        (1.0 - mSmoothingTimeConstant) * scalarMagnitude;
-  }
-
-  uint32_t noiseSeed = GetAudioNoiseSeed();
-  if (noiseSeed) {
-    uint32_t state = noiseSeed;
-    for (uint32_t i = 0; i < mOutputBuffer.Length(); ++i) {
-      state = state * 1103515245 + 12345;
-      double noise = ((state & 0x7fffffff) / 2147483648.0) * 0.008;
-      mOutputBuffer[i] *= (1.0 + noise - 0.004);
-    }
   }
 
   return true;

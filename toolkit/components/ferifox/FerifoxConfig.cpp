@@ -4,15 +4,18 @@
 
 #include "FerifoxConfig.h"
 
+#include "MainThreadUtils.h"
 #include "json/json.h"
 #include "mozilla/Logging.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Span.h"
 #include "mozilla/StaticMutex.h"
+#include "mozilla/SyncRunnable.h"
 #include "mozilla/intl/TimeZone.h"
 #include "nsIFile.h"
 #include "nsIInputStream.h"
 #include "nsNetUtil.h"
+#include "nsThreadUtils.h"
 #include "nsXULAppAPI.h"
 #include "prenv.h"
 
@@ -28,6 +31,26 @@ nsCString FerifoxConfig::sTestingConfigJson;
 
 /* static */
 FerifoxConfig* FerifoxConfig::GetSingleton() {
+  {
+    StaticMutexAutoLock lock(sFerifoxConfigMutex);
+    if (sSingleton) {
+      return sSingleton;
+    }
+  }
+
+  if (!NS_IsMainThread()) {
+    nsresult rv = SyncRunnable::DispatchToThread(
+        GetMainThreadSerialEventTarget(),
+        NS_NewRunnableFunction("FerifoxConfig::GetSingleton",
+                               [] { (void)FerifoxConfig::GetSingleton(); }));
+    if (NS_FAILED(rv)) {
+      return nullptr;
+    }
+
+    StaticMutexAutoLock lock(sFerifoxConfigMutex);
+    return sSingleton;
+  }
+
   StaticMutexAutoLock lock(sFerifoxConfigMutex);
   if (!sSingleton) {
     sSingleton = new FerifoxConfig();

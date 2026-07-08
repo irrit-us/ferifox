@@ -207,7 +207,7 @@ The common detection methods to keep in scope are:
 - Behavioral probes: pointer, mouse, touch, focus, scroll, typing, navigation, retry timing, challenge solving, and visibility/occlusion state.
 - Inconsistency probes: contradictions between claimed browser/OS/GPU/locale/network, differences between main-window and worker APIs, and differences between page-visible APIs and automation protocol state.
 
-For the Cloudflare-relevant JavaScript interface layer, Ferifox now treats these signal families as a coherent group: navigator identity and automation state, language/locale/timezone, screen and window geometry, screen orientation, trusted pointer/mouse event screen coordinates, WebGL adapter strings, WebGPU's standard adapter-info fields, audio context metadata, font availability, geolocation, Network Information, Permissions API query state, storage estimate, cookies/PDF/plugins/mimeTypes, and DNT/GPC. The latest geometry patch closes concrete mismatches where a persona could report a spoofed screen and outer window while page-visible `screenX`, `mozInnerScreenX/Y`, orientation, trusted event `screenX/Y`, `getBoundingClientRect()`, and `getClientRects()` still reflected conflicting geometry or host state. The storage patches add persona-configurable `navigator.storage.estimate()` usage/quota values for window and worker callers without changing actual quota enforcement. The permissions patch can clamp `navigator.permissions.query()` states for window and worker callers after normal descriptor validation, but it does not report a state more permissive than the real browser/system permission state.
+For the Cloudflare-relevant JavaScript interface layer, Ferifox now treats these signal families as a coherent group: navigator identity and automation state, language/locale/timezone, screen and window geometry, screen orientation, trusted pointer/mouse event screen coordinates, WebGL adapter strings, WebGPU's standard adapter-info fields, audio context metadata, font availability, geolocation, Network Information, Permissions API query state, storage estimate and persisted state, cookies/PDF/plugins/mimeTypes, and DNT/GPC. The latest geometry patch closes concrete mismatches where a persona could report a spoofed screen and outer window while page-visible `screenX`, `mozInnerScreenX/Y`, orientation, trusted event `screenX/Y`, `getBoundingClientRect()`, and `getClientRects()` still reflected conflicting geometry or host state. The storage patches add persona-configurable `navigator.storage.estimate()` usage/quota values and `persisted()`/`persist()` result values for window and worker callers without changing actual quota enforcement. The permissions patch can clamp `navigator.permissions.query()` states for window and worker callers after normal descriptor validation, but it does not report a state more permissive than the real browser/system permission state.
 
 Running on a personal computer with a normal residential network improves the network and hardware story compared with a datacenter VM, but it does not close the remaining gaps:
 
@@ -275,6 +275,7 @@ geolocation.longitude
 geolocation.accuracy
 storage.estimate.usage
 storage.estimate.quota
+storage.persisted
 permissions.geolocation
 permissions.notifications
 permissions.push

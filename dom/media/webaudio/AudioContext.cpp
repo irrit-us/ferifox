@@ -20,7 +20,6 @@
 #include "ConvolverNode.h"
 #include "DelayNode.h"
 #include "DynamicsCompressorNode.h"
-#include "mozilla/FerifoxConfig.h"
 #include "GainNode.h"
 #include "IIRFilterNode.h"
 #include "MediaElementAudioSourceNode.h"
@@ -38,6 +37,7 @@
 #include "blink/PeriodicWave.h"
 #include "js/ArrayBuffer.h"  // JS::StealArrayBufferContents
 #include "mozilla/ErrorResult.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/OwningNonNull.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/RefPtr.h"
@@ -145,7 +145,8 @@ static float GetSampleRateForAudioContext(bool aIsOffline, float aSampleRate,
 
   if (auto* cfg = FerifoxConfig::GetSingleton()) {
     if (auto val = cfg->GetDouble("audio.sampleRate"_ns)) {
-      if (*val > 0.0) {
+      if (*val >= WebAudioUtils::MinSampleRate &&
+          *val <= WebAudioUtils::MaxSampleRate) {
         return static_cast<float>(*val);
       }
     }
@@ -729,7 +730,10 @@ uint32_t AudioContext::MaxChannelCount() const {
     if (auto* cfg = FerifoxConfig::GetSingleton()) {
       if (auto val = cfg->GetUint32("audio.maxChannelCount"_ns)) {
         if (*val > 0) {
-          return *val;
+          uint32_t maxChannelCount =
+              std::min<uint32_t>(WebAudioUtils::MaxChannelCount,
+                                 CubebUtils::MaxNumberOfChannels());
+          return std::min(*val, maxChannelCount);
         }
       }
     }

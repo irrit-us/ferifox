@@ -10,15 +10,27 @@ const PAGE_URL =
   ) + "dummy.html";
 const EXPECTED_STORAGE_QUOTA = 222222;
 const EXPECTED_STORAGE_USAGE = 111111;
+const EXPECTED_STORAGE_PERSISTED = true;
+const EXPECTED_NAVIGATOR_APP_VERSION = "5.0 (X11; Linux x86_64) Ferifox/128.0";
+const EXPECTED_NAVIGATOR_PLATFORM = "Linux x86_64";
+const EXPECTED_NAVIGATOR_LANGUAGES = ["en-US", "en"];
+const EXPECTED_NAVIGATOR_HARDWARE_CONCURRENCY = 8;
 const WEBRTC_PLACEHOLDER_ADDRESSES = new Set(["0.0.0.0", "::"]);
 const PERSONA_CONFIG_CONTENT = JSON.stringify({
   layout: { noiseSeed: 1311768467463790320 },
   audio: { noiseSeed: 305419896 },
+  navigator: {
+    appVersion: EXPECTED_NAVIGATOR_APP_VERSION,
+    platform: EXPECTED_NAVIGATOR_PLATFORM,
+    languages: EXPECTED_NAVIGATOR_LANGUAGES,
+    hardwareConcurrency: EXPECTED_NAVIGATOR_HARDWARE_CONCURRENCY,
+  },
   storage: {
     estimate: {
       usage: EXPECTED_STORAGE_USAGE,
       quota: EXPECTED_STORAGE_QUOTA,
     },
+    persisted: EXPECTED_STORAGE_PERSISTED,
   },
   webrtc: {
     stripStats: true,
@@ -92,6 +104,19 @@ async function withFerifoxContentTask(task) {
       "Ferifox usage override is active"
     );
 
+    const persisted = await SpecialPowers.spawn(
+      tab.linkedBrowser,
+      [],
+      async () => {
+        return content.navigator.storage.persisted();
+      }
+    );
+    is(
+      persisted,
+      EXPECTED_STORAGE_PERSISTED,
+      "Ferifox persisted override is active"
+    );
+
     await task(tab.linkedBrowser);
   } finally {
     await SpecialPowers.spawn(tab.linkedBrowser, [], () => {
@@ -112,6 +137,109 @@ add_setup(async function setup() {
   registerCleanupFunction(async () => {
     await SpecialPowers.popPrefEnv();
     Services.ppmm.releaseCachedProcesses();
+  });
+});
+
+add_task(async function test_ferifox_worker_navigator_and_storage_overrides() {
+  await withFerifoxContentTask(async browser => {
+    const snapshot = await SpecialPowers.spawn(browser, [], async () => {
+      const source = `
+        self.onmessage = async () => {
+          try {
+            const estimate = await navigator.storage.estimate();
+            const persisted = await navigator.storage.persisted();
+            self.postMessage({
+              appVersion: navigator.appVersion,
+              platform: navigator.platform,
+              languages: Array.from(navigator.languages),
+              hardwareConcurrency: navigator.hardwareConcurrency,
+              storage: {
+                quota: estimate.quota,
+                usage: estimate.usage,
+                persisted,
+              },
+            });
+          } catch (error) {
+            self.postMessage({ error: String(error && error.message || error) });
+          }
+        };
+      `;
+      const url = content.URL.createObjectURL(
+        new content.Blob([source], { type: "text/javascript" })
+      );
+      let worker;
+      try {
+        const workerSnapshot = await new content.Promise((resolve, reject) => {
+          worker = new content.Worker(url);
+          worker.onmessage = event => {
+            if (event.data.error) {
+              reject(new Error(event.data.error));
+              return;
+            }
+            resolve(event.data);
+          };
+          worker.onerror = event => {
+            event.preventDefault();
+            reject(new Error(event.message));
+          };
+          worker.postMessage(null);
+        });
+
+        return {
+          window: {
+            appVersion: content.navigator.appVersion,
+            platform: content.navigator.platform,
+            languages: Array.from(content.navigator.languages),
+            hardwareConcurrency: content.navigator.hardwareConcurrency,
+          },
+          worker: workerSnapshot,
+        };
+      } finally {
+        if (worker) {
+          worker.terminate();
+        }
+        content.URL.revokeObjectURL(url);
+      }
+    });
+
+    for (const scope of ["window", "worker"]) {
+      is(
+        snapshot[scope].appVersion,
+        EXPECTED_NAVIGATOR_APP_VERSION,
+        `Ferifox ${scope} appVersion override is active`
+      );
+      is(
+        snapshot[scope].platform,
+        EXPECTED_NAVIGATOR_PLATFORM,
+        `Ferifox ${scope} platform override is active`
+      );
+      Assert.deepEqual(
+        snapshot[scope].languages,
+        EXPECTED_NAVIGATOR_LANGUAGES,
+        `Ferifox ${scope} languages override is active`
+      );
+      is(
+        snapshot[scope].hardwareConcurrency,
+        EXPECTED_NAVIGATOR_HARDWARE_CONCURRENCY,
+        `Ferifox ${scope} hardwareConcurrency override is active`
+      );
+    }
+
+    is(
+      snapshot.worker.storage.quota,
+      EXPECTED_STORAGE_QUOTA,
+      "Ferifox worker quota override is active"
+    );
+    is(
+      snapshot.worker.storage.usage,
+      EXPECTED_STORAGE_USAGE,
+      "Ferifox worker usage override is active"
+    );
+    is(
+      snapshot.worker.storage.persisted,
+      EXPECTED_STORAGE_PERSISTED,
+      "Ferifox worker persisted override is active"
+    );
   });
 });
 
