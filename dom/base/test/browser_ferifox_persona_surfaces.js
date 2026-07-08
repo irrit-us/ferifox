@@ -77,7 +77,7 @@ async function withFerifoxContentTask(task) {
     await SpecialPowers.spawn(tab.linkedBrowser, [], () => {
       SpecialPowers.setFerifoxConfigForTesting("");
     });
-    BrowserTestUtils.removeTab(tab);
+    await BrowserTestUtils.removeTab(tab);
   }
 }
 
@@ -183,8 +183,10 @@ add_task(async function test_ferifox_audio_noise_is_clamped() {
       const context = new win.AudioContext();
       await context.resume();
 
-      const source = new win.ConstantSourceNode(context, { offset: 1 });
-      const analyser = new win.AnalyserNode(context, { fftSize: 32 });
+      const source = new win.ConstantSourceNode(context);
+      source.offset.value = 1;
+      const analyser = new win.AnalyserNode(context);
+      analyser.fftSize = 32;
       source.connect(analyser);
       analyser.connect(context.destination);
       source.start();

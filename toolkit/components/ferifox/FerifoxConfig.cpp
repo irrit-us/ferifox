@@ -31,8 +31,6 @@ FerifoxConfig* FerifoxConfig::GetSingleton() {
   StaticMutexAutoLock lock(sFerifoxConfigMutex);
   if (!sSingleton) {
     sSingleton = new FerifoxConfig();
-  } else if (!sSingleton->mLoaded) {
-    sSingleton->Load();
   }
   return sSingleton;
 }
