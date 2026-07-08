@@ -2330,8 +2330,8 @@ UniquePtr<uint8_t[]> CanvasRenderingContext2D::GetImageBuffer(
     uint32_t noiseSeed = GetCanvasNoiseSeed();
     if (noiseSeed) {
       FerifoxRandomizePixels(ret.get(), out_imageSize->width,
-                             out_imageSize->height,
-                             out_imageSize->width * 4, noiseSeed);
+                             out_imageSize->height, out_imageSize->width * 4,
+                             noiseSeed);
     }
   }
 
@@ -6722,7 +6722,9 @@ nsresult CanvasRenderingContext2D::GetImageDataArray(
   //
   // Note that we don't need to clone if we will use the place holder because
   // the place holder doesn't use actual image data.
-  if (extractionBehavior == CanvasUtils::ImageExtraction::Randomize) {
+  uint32_t noiseSeed = GetCanvasNoiseSeed();
+  if (extractionBehavior == CanvasUtils::ImageExtraction::Randomize ||
+      noiseSeed) {
     if (readback) {
       readback = CreateDataSourceSurfaceByCloning(readback);
     }
@@ -6755,7 +6757,6 @@ nsresult CanvasRenderingContext2D::GetImageDataArray(
                                     SurfaceFormat::A8R8G8B8_UINT32);
     }
 
-    uint32_t noiseSeed = GetCanvasNoiseSeed();
     if (noiseSeed) {
       FerifoxRandomizePixels(rawData.mData, size.width, size.height,
                              rawData.mStride, noiseSeed);

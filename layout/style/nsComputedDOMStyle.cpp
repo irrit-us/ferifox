@@ -1357,10 +1357,11 @@ void nsComputedDOMStyle::SetValueToPixels(nsROCSSPrimitiveValue* aValue,
     seed = cfg->GetUint64("layout.noiseSeed"_ns);
   }
   if (seed) {
-    uintptr_t h = ((uintptr_t)mElement.get() ^ (uintptr_t)(*seed)) * 2654435761u;
+    uintptr_t h =
+        ((uintptr_t)mElement.get() ^ (uintptr_t)(*seed)) * 2654435761u;
     h = h * 1103515245 + 12345;
     float noise = ((float)(int32_t)(h & 0xFFFF) / 65535.0f - 0.5f) * 0.1f;
-    pixels += noise;
+    pixels = pixels >= 0.0f ? std::max(0.0f, pixels + noise) : pixels + noise;
   }
 
   aValue->SetPixels(pixels);

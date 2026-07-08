@@ -46,6 +46,18 @@ Maybe<PermissionState> GetFerifoxPermissionState(PermissionName aName) {
   return StringToPermissionState(value);
 }
 
+uint8_t PermissionStateRank(PermissionState aState) {
+  switch (aState) {
+    case PermissionState::Denied:
+      return 0;
+    case PermissionState::Prompt:
+      return 1;
+    case PermissionState::Granted:
+      return 2;
+  }
+  MOZ_CRASH("Unknown PermissionState");
+}
+
 }  // namespace
 
 PermissionStatus::PermissionStatus(nsIGlobalObject* aGlobal,
@@ -91,14 +103,16 @@ JSObject* PermissionStatus::WrapObject(JSContext* aCx,
 }
 
 PermissionState PermissionStatus::State() const {
-  if (mFerifoxState) {
-    return *mFerifoxState;
-  }
+  PermissionState state = mState;
   if (mState == PermissionState::Granted &&
       mSystemState != PermissionState::Granted) {
-    return mSystemState;
+    state = mSystemState;
   }
-  return mState;
+  if (!mFerifoxState ||
+      PermissionStateRank(*mFerifoxState) > PermissionStateRank(state)) {
+    return state;
+  }
+  return *mFerifoxState;
 }
 
 nsLiteralCString PermissionStatus::GetPermissionType() const {

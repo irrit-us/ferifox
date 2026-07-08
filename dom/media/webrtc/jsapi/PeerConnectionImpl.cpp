@@ -126,9 +126,8 @@
 #else
 #  include "mozilla/dom/PeerConnectionObserverBinding.h"
 #endif
-#include "mozilla/dom/PeerConnectionObserverEnumsBinding.h"
-
 #include "FerifoxConfig.h"
+#include "mozilla/dom/PeerConnectionObserverEnumsBinding.h"
 
 #define ICE_PARSING \
   "In RTCConfiguration passed to RTCPeerConnection constructor"
@@ -4078,11 +4077,28 @@ RefPtr<dom::RTCStatsReportPromise> PeerConnectionImpl::GetStats(
               nsTArray<UniquePtr<dom::RTCStatsCollection>> aStats) mutable {
             idGen->RewriteIds(std::move(aStats), report.get());
             if (stripStats) {
+              auto stripCandidateAddresses = [](auto& candidates) {
+                for (auto& candidate : candidates) {
+                  if (!candidate.mAddress.WasPassed()) {
+                    continue;
+                  }
+                  NS_ConvertUTF16toUTF8 addr(candidate.mAddress.Value());
+                  std::string addrStr(addr.get());
+                  StripIPv4FromSdp(addrStr);
+                  candidate.mAddress.Value() = NS_ConvertUTF8toUTF16(addrStr);
+                }
+              };
               for (auto& entry : report->mSdpHistory) {
                 NS_ConvertUTF16toUTF8 sdp(entry.mSdp);
                 std::string sdpStr(sdp.get());
                 StripIPv4FromSdp(sdpStr);
                 entry.mSdp = NS_ConvertUTF8toUTF16(sdpStr);
+              }
+              for (auto& candidate : report->mRawLocalCandidates) {
+                NS_ConvertUTF16toUTF8 cand(candidate);
+                std::string candStr(cand.get());
+                StripIPv4FromSdp(candStr);
+                candidate = NS_ConvertUTF8toUTF16(candStr);
               }
               for (auto& candidate : report->mRawRemoteCandidates) {
                 NS_ConvertUTF16toUTF8 cand(candidate);
@@ -4090,6 +4106,8 @@ RefPtr<dom::RTCStatsReportPromise> PeerConnectionImpl::GetStats(
                 StripIPv4FromSdp(candStr);
                 candidate = NS_ConvertUTF8toUTF16(candStr);
               }
+              stripCandidateAddresses(report->mIceCandidateStats);
+              stripCandidateAddresses(report->mTrickledIceCandidateStats);
             }
             return dom::RTCStatsReportPromise::CreateAndResolve(
                 std::move(report), __func__);

@@ -17,6 +17,7 @@
 
 #include "DOMMatrix.h"
 #include "ExpandedPrincipal.h"
+#include "FerifoxConfig.h"
 #include "PresShellInlines.h"
 #include "PseudoStyleType.h"
 #include "jsapi.h"
@@ -38,7 +39,6 @@
 #include "mozilla/EventDispatcher.h"
 #include "mozilla/EventListenerManager.h"
 #include "mozilla/EventStateManager.h"
-#include "FerifoxConfig.h"
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/FullscreenChange.h"
 #include "mozilla/HTMLEditor.h"
@@ -1210,14 +1210,19 @@ already_AddRefed<DOMRect> Element::GetBoundingClientRect() {
     auto perturb = [&](nscoord& val) {
       h = h * 1103515245 + 12345;
       int32_t halfPixel = AppUnitsPerCSSPixel() / 2;
-      int32_t delta =
-          (int32_t)(h % (uint32_t)(2 * halfPixel + 1)) - halfPixel;
+      int32_t delta = (int32_t)(h % (uint32_t)(2 * halfPixel + 1)) - halfPixel;
       val += delta;
     };
     perturb(r.x);
     perturb(r.y);
     perturb(r.width);
     perturb(r.height);
+    if (r.width < 0) {
+      r.width = 0;
+    }
+    if (r.height < 0) {
+      r.height = 0;
+    }
   }
 
   rect->SetLayoutRect(r);
@@ -6593,14 +6598,19 @@ Element* Element::GetOffsetRect(CSSIntRect& aRect) {
     auto perturb = [&](nscoord& val) {
       h = h * 1103515245 + 12345;
       int32_t halfPixel = AppUnitsPerCSSPixel() / 2;
-      int32_t delta =
-          (int32_t)(h % (uint32_t)(2 * halfPixel + 1)) - halfPixel;
+      int32_t delta = (int32_t)(h % (uint32_t)(2 * halfPixel + 1)) - halfPixel;
       val += delta;
     };
     perturb(rect.x);
     perturb(rect.y);
     perturb(rect.width);
     perturb(rect.height);
+    if (rect.width < 0) {
+      rect.width = 0;
+    }
+    if (rect.height < 0) {
+      rect.height = 0;
+    }
   }
 
   aRect = CSSIntRect::FromAppUnitsRounded(

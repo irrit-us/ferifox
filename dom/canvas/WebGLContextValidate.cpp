@@ -82,6 +82,14 @@ static bool RestrictCap(T* const cap, const T restrictedVal) {
   return true;
 }
 
+template <class T>
+static void RestrictConfiguredCap(T* const cap, const T configuredVal,
+                                  const T minVal) {
+  if (configuredVal >= minVal && configuredVal < *cap) {
+    *cap = configuredVal;
+  }
+}
+
 ////////////////////
 
 namespace mozilla {
@@ -480,48 +488,49 @@ bool WebGLContext::InitAndValidateGL(FailureReason* const out_failReason) {
 
   if (auto* cfg = FerifoxConfig::GetSingleton()) {
     if (auto val = cfg->GetUint32("webgl.maxTex2dSize"_ns)) {
-      if (*val > 0 && *val < limits.maxTex2dSize) {
-        limits.maxTex2dSize = *val;
-      }
+      RestrictConfiguredCap(&limits.maxTex2dSize, *val, kMinMaxTextureSize);
     }
     if (auto val = cfg->GetUint32("webgl.maxTexCubeSize"_ns)) {
-      if (*val > 0 && *val < limits.maxTexCubeSize) {
-        limits.maxTexCubeSize = *val;
-      }
+      RestrictConfiguredCap(&limits.maxTexCubeSize, *val,
+                            kMinMaxCubeMapTextureSize);
     }
     if (auto val = cfg->GetUint32("webgl.maxViewportDim"_ns)) {
-      if (*val > 0 && *val < limits.maxViewportDim) {
-        limits.maxViewportDim = *val;
-      }
+      RestrictConfiguredCap(&limits.maxViewportDim, *val, 1u);
     }
     if (auto val = cfg->GetUint32("webgl.maxVertexAttribs"_ns)) {
-      if (*val > 0 && *val < limits.maxVertexAttribs) {
-        limits.maxVertexAttribs = *val;
-      }
+      RestrictConfiguredCap(&limits.maxVertexAttribs, *val,
+                            kMinMaxVertexAttribs);
     }
     if (auto val = cfg->GetUint32("webgl.maxTexUnits"_ns)) {
-      if (*val > 0 && *val < limits.maxTexUnits) {
-        limits.maxTexUnits = *val;
-      }
+      RestrictConfiguredCap(&limits.maxTexUnits, *val,
+                            kMinMaxCombinedTextureImageUnits);
     }
     if (auto val = cfg->GetDouble("webgl.pointSizeRangeMin"_ns)) {
-      if (*val > 0 && static_cast<float>(*val) > limits.pointSizeRange[0]) {
-        limits.pointSizeRange[0] = static_cast<float>(*val);
+      float configured = static_cast<float>(*val);
+      if (configured > 0 && configured > limits.pointSizeRange[0] &&
+          configured <= limits.pointSizeRange[1]) {
+        limits.pointSizeRange[0] = configured;
       }
     }
     if (auto val = cfg->GetDouble("webgl.pointSizeRangeMax"_ns)) {
-      if (*val > 0 && static_cast<float>(*val) < limits.pointSizeRange[1]) {
-        limits.pointSizeRange[1] = static_cast<float>(*val);
+      float configured = static_cast<float>(*val);
+      if (configured >= limits.pointSizeRange[0] &&
+          configured < limits.pointSizeRange[1]) {
+        limits.pointSizeRange[1] = configured;
       }
     }
     if (auto val = cfg->GetDouble("webgl.lineWidthRangeMin"_ns)) {
-      if (*val > 0 && static_cast<float>(*val) > limits.lineWidthRange[0]) {
-        limits.lineWidthRange[0] = static_cast<float>(*val);
+      float configured = static_cast<float>(*val);
+      if (configured > 0 && configured > limits.lineWidthRange[0] &&
+          configured <= limits.lineWidthRange[1]) {
+        limits.lineWidthRange[0] = configured;
       }
     }
     if (auto val = cfg->GetDouble("webgl.lineWidthRangeMax"_ns)) {
-      if (*val > 0 && static_cast<float>(*val) < limits.lineWidthRange[1]) {
-        limits.lineWidthRange[1] = static_cast<float>(*val);
+      float configured = static_cast<float>(*val);
+      if (configured >= limits.lineWidthRange[0] &&
+          configured < limits.lineWidthRange[1]) {
+        limits.lineWidthRange[1] = configured;
       }
     }
   }
