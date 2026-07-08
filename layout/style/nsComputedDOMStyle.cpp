@@ -100,7 +100,10 @@ HashNumber GetFerifoxLayoutNoiseHash(const Element& aElement, uint64_t aSeed) {
   for (const nsINode* node = &aElement; node;) {
     if (const auto* element = Element::FromNodeOrNull(node)) {
       const auto* nodeInfo = element->NodeInfo();
-      hash = AddToHash(hash, nodeInfo->NamespaceID(), nodeInfo->NameAtom());
+      const nsString& localName = nodeInfo->LocalName();
+      hash = AddToHash(
+          hash, nodeInfo->NamespaceID(),
+          mozilla::HashString(localName.BeginReading(), localName.Length()));
     } else {
       hash = AddToHash(hash, node->NodeType());
     }
