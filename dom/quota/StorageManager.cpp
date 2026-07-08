@@ -8,13 +8,13 @@
 #include <cstdlib>
 
 #include "ErrorList.h"
-#include "FerifoxConfig.h"
 #include "MainThreadUtils.h"
 #include "fs/FileSystemRequestHandler.h"
 #include "js/CallArgs.h"
 #include "js/TypeDecls.h"
 #include "mozilla/Attributes.h"
 #include "mozilla/ErrorResult.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/Mutex.h"
 #include "mozilla/RefPtr.h"
