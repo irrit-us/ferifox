@@ -119,7 +119,7 @@ bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,
   MOZ_LOG(sFerifoxLog, LogLevel::Info,
           ("FERIFOX_CONFIG: loaded from '%s'", aSource));
 
-  const Json::Value* tz = Resolve("intl.timezone"_ns);
+  const Json::Value* tz = ResolveNoLock("intl.timezone"_ns);
   if (tz && tz->isString()) {
     nsAutoCString tzid(tz->asCString());
     if (!tzid.IsEmpty()) {
@@ -137,7 +137,7 @@ bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,
     }
   }
 
-  const Json::Value* locale = Resolve("intl.locale"_ns);
+  const Json::Value* locale = ResolveNoLock("intl.locale"_ns);
   if (locale && locale->isString()) {
     nsAutoCString localeStr(locale->asCString());
     if (!localeStr.IsEmpty()) {
@@ -148,7 +148,7 @@ bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,
   }
 
   if (XRE_IsParentProcess()) {
-    const Json::Value* webrtc = Resolve("webrtc"_ns);
+    const Json::Value* webrtc = ResolveNoLock("webrtc"_ns);
     if (webrtc && webrtc->isObject()) {
       if (const Json::Value& noHost = (*webrtc)["noHostCandidates"];
           noHost.isBool()) {
@@ -164,7 +164,7 @@ bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,
               ("FERIFOX_CONFIG: WebRTC privacy prefs applied"));
     }
 
-    const Json::Value* webgl = Resolve("webgl"_ns);
+    const Json::Value* webgl = ResolveNoLock("webgl"_ns);
     if (webgl && webgl->isObject()) {
       if (const Json::Value& forceEnabled = (*webgl)["forceEnabled"];
           forceEnabled.isBool()) {
@@ -176,7 +176,8 @@ bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,
       }
     }
 
-    if (auto stealth = GetBool("automation.stealth"_ns); stealth && *stealth) {
+    if (auto stealth = GetBoolNoLock("automation.stealth"_ns);
+        stealth && *stealth) {
       Preferences::SetBool("browser.dom.window.dump.enabled", false);
       Preferences::SetBool("devtools.debugger.remote-enabled", false);
       Preferences::SetInt("devtools.debugger.remote-port", 6000);
@@ -238,7 +239,12 @@ void FerifoxConfig::SetPersistentEnv(nsCString& aStorage,
   (void)PR_SetEnv(aStorage.get());
 }
 
-const Json::Value* FerifoxConfig::Resolve(const nsACString& aPath) const {
+bool FerifoxConfig::IsLoaded() const {
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  return mLoaded;
+}
+
+const Json::Value* FerifoxConfig::ResolveNoLock(const nsACString& aPath) const {
   if (!mLoaded) {
     return nullptr;
   }
@@ -272,16 +278,22 @@ const Json::Value* FerifoxConfig::Resolve(const nsACString& aPath) const {
   return current;
 }
 
-Maybe<bool> FerifoxConfig::GetBool(const nsACString& aPath) const {
-  const Json::Value* val = Resolve(aPath);
+Maybe<bool> FerifoxConfig::GetBoolNoLock(const nsACString& aPath) const {
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isBool()) {
     return Nothing();
   }
   return Some(val->asBool());
 }
 
+Maybe<bool> FerifoxConfig::GetBool(const nsACString& aPath) const {
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  return GetBoolNoLock(aPath);
+}
+
 Maybe<int32_t> FerifoxConfig::GetInt32(const nsACString& aPath) const {
-  const Json::Value* val = Resolve(aPath);
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isInt()) {
     return Nothing();
   }
@@ -289,7 +301,8 @@ Maybe<int32_t> FerifoxConfig::GetInt32(const nsACString& aPath) const {
 }
 
 Maybe<uint32_t> FerifoxConfig::GetUint32(const nsACString& aPath) const {
-  const Json::Value* val = Resolve(aPath);
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isUInt()) {
     return Nothing();
   }
@@ -297,7 +310,8 @@ Maybe<uint32_t> FerifoxConfig::GetUint32(const nsACString& aPath) const {
 }
 
 Maybe<uint64_t> FerifoxConfig::GetUint64(const nsACString& aPath) const {
-  const Json::Value* val = Resolve(aPath);
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isUInt64()) {
     return Nothing();
   }
@@ -305,7 +319,8 @@ Maybe<uint64_t> FerifoxConfig::GetUint64(const nsACString& aPath) const {
 }
 
 Maybe<double> FerifoxConfig::GetDouble(const nsACString& aPath) const {
-  const Json::Value* val = Resolve(aPath);
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isDouble()) {
     return Nothing();
   }
@@ -314,7 +329,8 @@ Maybe<double> FerifoxConfig::GetDouble(const nsACString& aPath) const {
 
 bool FerifoxConfig::GetString(const nsACString& aPath,
                               nsAString& aResult) const {
-  const Json::Value* val = Resolve(aPath);
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isString()) {
     return false;
   }
@@ -325,7 +341,8 @@ bool FerifoxConfig::GetString(const nsACString& aPath,
 
 bool FerifoxConfig::GetStringList(const nsACString& aPath,
                                   nsTArray<nsString>& aResult) const {
-  const Json::Value* val = Resolve(aPath);
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isArray()) {
     return false;
   }

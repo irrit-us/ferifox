@@ -10,6 +10,7 @@ const PAGE_URL =
   ) + "dummy.html";
 const EXPECTED_STORAGE_QUOTA = 222222;
 const EXPECTED_STORAGE_USAGE = 111111;
+const WEBRTC_PLACEHOLDER_ADDRESSES = new Set(["0.0.0.0", "::"]);
 const PERSONA_CONFIG_CONTENT = JSON.stringify({
   layout: { noiseSeed: 1311768467463790320 },
   audio: { noiseSeed: 305419896 },
@@ -20,7 +21,6 @@ const PERSONA_CONFIG_CONTENT = JSON.stringify({
     },
   },
   webrtc: {
-    stripSDPIPs: true,
     stripStats: true,
   },
 });
@@ -35,6 +35,26 @@ function assertNear(actual, expected, message) {
 function changedBy(actual, base, limit, message) {
   const delta = Math.abs(actual - base);
   ok(delta > 0 && delta <= limit, `${message}: delta ${delta} within ${limit}`);
+}
+
+function getIceCandidateAddress(candidate) {
+  if (!candidate) {
+    return "";
+  }
+  const tokens = candidate.trim().split(/\s+/);
+  return tokens.length > 4 ? tokens[4] : "";
+}
+
+function isWebRTCPlaceholderAddress(address) {
+  return WEBRTC_PLACEHOLDER_ADDRESSES.has(address);
+}
+
+function isIPAddressLiteral(address) {
+  return (
+    isWebRTCPlaceholderAddress(address) ||
+    /^\d{1,3}(?:\.\d{1,3}){3}$/.test(address) ||
+    (address.includes(":") && /^[0-9a-fA-F:.]+$/.test(address))
+  );
 }
 
 async function withFerifoxContentTask(task) {
@@ -128,8 +148,6 @@ add_task(async function test_ferifox_layout_noise_consistency() {
         rect1: toRect(target.getBoundingClientRect()),
         rect2: toRect(target.getBoundingClientRect()),
         clientRect: toRect(target.getClientRects()[0]),
-        computedWidth1: parseFloat(content.getComputedStyle(target).width),
-        computedWidth2: parseFloat(content.getComputedStyle(target).width),
       };
     });
 
@@ -160,18 +178,6 @@ add_task(async function test_ferifox_layout_noise_consistency() {
       result.clientRect.height,
       result.rect1.height,
       "Client rect height matches"
-    );
-
-    changedBy(
-      result.computedWidth1,
-      137,
-      0.1,
-      "Computed style width is noise-adjusted"
-    );
-    is(
-      result.computedWidth1,
-      result.computedWidth2,
-      "Computed style width is stable across reads"
     );
   });
 });
@@ -219,7 +225,7 @@ add_task(async function test_ferifox_audio_noise_is_clamped() {
   });
 });
 
-add_task(async function test_ferifox_webrtc_strips_page_visible_ips() {
+add_task(async function test_ferifox_webrtc_stats_strip_preserves_signaling() {
   await withFerifoxContentTask(async browser => {
     const result = await SpecialPowers.spawn(browser, [], async () => {
       const pc = new content.wrappedJSObject.RTCPeerConnection();
@@ -254,37 +260,42 @@ add_task(async function test_ferifox_webrtc_strips_page_visible_ips() {
       return { firstCandidate, localDescription, candidateAddresses };
     });
 
-    const ipv4Matches = result.localDescription.match(
-      /\b\d{1,3}(?:\.\d{1,3}){3}\b/g
-    );
-    const statsIpv4 = result.candidateAddresses.filter(address =>
-      /^\d{1,3}(?:\.\d{1,3}){3}$/.test(address)
-    );
+    const firstCandidateAddress = getIceCandidateAddress(result.firstCandidate);
+    const localCandidateAddresses = result.localDescription
+      .split(/\r?\n/)
+      .filter(line => line.startsWith("a=candidate:"))
+      .map(getIceCandidateAddress)
+      .filter(Boolean);
+    const literalStatsAddresses =
+      result.candidateAddresses.filter(isIPAddressLiteral);
 
     ok(result.firstCandidate, "Received a local ICE candidate");
+    ok(firstCandidateAddress, "Parsed the local ICE candidate address");
     ok(
-      result.firstCandidate.includes("0.0.0.0"),
-      `ICE candidate is stripped: ${result.firstCandidate}`
+      !isWebRTCPlaceholderAddress(firstCandidateAddress),
+      `ICE candidate address is usable: ${result.firstCandidate}`
     );
     ok(
-      ipv4Matches && ipv4Matches.length > 0,
-      "Local description contains IPv4 text"
+      localCandidateAddresses.length > 0,
+      "Local description contains gathered ICE candidates"
     );
     ok(
-      ipv4Matches.every(match => match === "0.0.0.0"),
-      `Local description only exposes stripped IPv4 values: ${result.localDescription}`
+      localCandidateAddresses.some(
+        address => !isWebRTCPlaceholderAddress(address)
+      ),
+      "Local description keeps usable candidate addresses for signaling"
     );
     ok(
       result.candidateAddresses.length > 0,
       "Page-visible getStats() includes local candidate addresses"
     );
     ok(
-      statsIpv4.length > 0,
-      "Page-visible getStats() includes IPv4 candidate addresses to check"
+      literalStatsAddresses.length > 0,
+      "Page-visible getStats() includes IP literal candidate addresses to check"
     );
     ok(
-      statsIpv4.every(address => address === "0.0.0.0"),
-      `Page-visible getStats() IPv4 addresses are stripped: ${result.candidateAddresses.join(", ")}`
+      literalStatsAddresses.every(isWebRTCPlaceholderAddress),
+      `Page-visible getStats() IP literal addresses are stripped: ${result.candidateAddresses.join(", ")}`
     );
   });
 });

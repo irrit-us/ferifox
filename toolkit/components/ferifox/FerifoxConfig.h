@@ -24,7 +24,7 @@ class FerifoxConfig {
   static void SetConfigForTesting(const nsACString& aJson);
   static void ClearConfigForTesting();
 
-  bool IsLoaded() const { return mLoaded; }
+  bool IsLoaded() const;
 
   Maybe<bool> GetBool(const nsACString& aPath) const;
   Maybe<int32_t> GetInt32(const nsACString& aPath) const;
@@ -44,7 +44,8 @@ class FerifoxConfig {
   void SetPersistentEnv(nsCString& aStorage, const nsACString& aName,
                         const nsACString& aValue);
 
-  const Json::Value* Resolve(const nsACString& aPath) const;
+  const Json::Value* ResolveNoLock(const nsACString& aPath) const;
+  Maybe<bool> GetBoolNoLock(const nsACString& aPath) const;
 
   static FerifoxConfig* sSingleton;
   static nsCString sTestingConfigJson;

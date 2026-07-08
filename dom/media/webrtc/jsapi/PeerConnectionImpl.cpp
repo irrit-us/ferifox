@@ -4,8 +4,10 @@
 
 #include "PeerConnectionImpl.h"
 
+#include <cctype>
 #include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -148,50 +150,54 @@ static const char* pciLogTag = "PeerConnectionImpl";
 
 static mozilla::LazyLogModule logModuleInfo("signaling");
 
-static void StripIPv4FromSdp(std::string& s) {
+static Maybe<const char*> ReplacementForIPLiteral(const nsACString& aToken) {
+  if (net_IsValidIPv4Addr(aToken)) {
+    return Some(static_cast<const char*>("0.0.0.0"));
+  }
+  if (net_IsValidIPv6Addr(aToken)) {
+    return Some(static_cast<const char*>("::"));
+  }
+  return Nothing();
+}
+
+static void SanitizeIPLiteralTokens(std::string& s) {
   size_t i = 0;
   while (i < s.size()) {
-    if (isdigit(static_cast<unsigned char>(s[i])) &&
-        (i == 0 || !isalnum(static_cast<unsigned char>(s[i - 1])))) {
-      size_t start = i;
-      int dots = 0;
-      size_t j = i;
-      while (j < s.size()) {
-        unsigned char c = static_cast<unsigned char>(s[j]);
-        if (isdigit(c)) {
-          while (j < s.size() && isdigit(static_cast<unsigned char>(s[j]))) j++;
-        } else if (c == '.') {
-          dots++;
-          j++;
-        } else {
-          break;
-        }
-      }
-      if (dots == 3 && j > start &&
-          (j == s.size() || !isalnum(static_cast<unsigned char>(s[j])))) {
-        size_t span = j - start;
-        s.replace(start, span, "0.0.0.0", 7);
-        i = start + 7;
-        continue;
-      }
+    while (i < s.size() && isspace(static_cast<unsigned char>(s[i]))) {
+      i++;
     }
-    i++;
+    size_t start = i;
+    while (i < s.size() && !isspace(static_cast<unsigned char>(s[i]))) {
+      i++;
+    }
+    if (start == i) {
+      continue;
+    }
+
+    nsDependentCSubstring token(s.data() + start, i - start);
+    if (auto replacement = ReplacementForIPLiteral(token)) {
+      s.replace(start, i - start, *replacement);
+      i = start + strlen(*replacement);
+    }
   }
 }
 
-static bool ShouldStripFerifoxWebRtcIps() {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto strip = cfg->GetBool("webrtc.stripSDPIPs"_ns)) {
-      return *strip;
-    }
+static void SanitizeCandidateAddress(RTCIceCandidateStats& aCandidate) {
+  if (!aCandidate.mAddress.WasPassed()) {
+    return;
   }
-  return false;
+
+  NS_ConvertUTF16toUTF8 addr(aCandidate.mAddress.Value());
+  if (auto replacement = ReplacementForIPLiteral(addr)) {
+    aCandidate.mAddress.Value() = NS_ConvertUTF8toUTF16(*replacement);
+  }
 }
 
-static void MaybeStripFerifoxWebRtcIps(std::string& s) {
-  if (ShouldStripFerifoxWebRtcIps()) {
-    StripIPv4FromSdp(s);
-  }
+static void SanitizeIPLiteralText(nsString& aText) {
+  NS_ConvertUTF16toUTF8 text(aText);
+  std::string textStr(text.get());
+  SanitizeIPLiteralTokens(textStr);
+  aText = NS_ConvertUTF8toUTF16(textStr);
 }
 
 // Getting exceptions back down from PCObserver is generally not harmful.
@@ -1534,7 +1540,6 @@ PeerConnectionImpl::CreateOffer(const JsepOfferOptions& aOptions) {
               *buildJSErrorData(result, errorString), rv);
         } else {
           mJsepSession = std::move(uncommittedJsepSession);
-          MaybeStripFerifoxWebRtcIps(offer);
           mPCObserver->OnCreateOfferSuccess(ObString(offer.c_str()), rv);
         }
       }));
@@ -1571,7 +1576,6 @@ PeerConnectionImpl::CreateAnswer() {
               *buildJSErrorData(result, errorString), rv);
         } else {
           mJsepSession = std::move(uncommittedJsepSession);
-          MaybeStripFerifoxWebRtcIps(answer);
           mPCObserver->OnCreateAnswerSuccess(ObString(answer.c_str()), rv);
         }
       }));
@@ -3117,8 +3121,6 @@ void PeerConnectionImpl::DoSetDescriptionSuccessPostProcessing(
             mJsepSession->GetLocalDescription(kJsepDescriptionPending);
         mCurrentLocalDescription =
             mJsepSession->GetLocalDescription(kJsepDescriptionCurrent);
-        MaybeStripFerifoxWebRtcIps(mPendingLocalDescription);
-        MaybeStripFerifoxWebRtcIps(mCurrentLocalDescription);
         mPendingOfferer = mJsepSession->IsPendingOfferer();
         mCurrentOfferer = mJsepSession->IsCurrentOfferer();
 
@@ -3384,8 +3386,6 @@ void PeerConnectionImpl::CandidateReady(const std::string& candidate,
       mJsepSession->GetLocalDescription(kJsepDescriptionPending);
   mCurrentLocalDescription =
       mJsepSession->GetLocalDescription(kJsepDescriptionCurrent);
-  MaybeStripFerifoxWebRtcIps(mPendingLocalDescription);
-  MaybeStripFerifoxWebRtcIps(mCurrentLocalDescription);
   CSFLogInfo(LOGTAG, "Passing local candidate to content: %s",
              candidate.c_str());
   SendLocalIceCandidateToContent(level, mid, candidate, ufrag);
@@ -3395,11 +3395,9 @@ void PeerConnectionImpl::SendLocalIceCandidateToContent(
     uint16_t level, const std::string& mid, const std::string& candidate,
     const std::string& ufrag) {
   STAMP_TIMECARD(mTimeCard, "Send Ice Candidate to content");
-  std::string sanitizedCandidate(candidate);
-  MaybeStripFerifoxWebRtcIps(sanitizedCandidate);
   JSErrorResult rv;
   mPCObserver->OnIceCandidate(level, ObString(mid.c_str()),
-                              ObString(sanitizedCandidate.c_str()),
+                              ObString(candidate.c_str()),
                               ObString(ufrag.c_str()), rv);
 }
 
@@ -4091,33 +4089,18 @@ RefPtr<dom::RTCStatsReportPromise> PeerConnectionImpl::GetStats(
             if (stripStats) {
               auto stripCandidateAddresses = [](auto& candidates) {
                 for (auto& candidate : candidates) {
-                  if (!candidate.mAddress.WasPassed()) {
-                    continue;
-                  }
-                  NS_ConvertUTF16toUTF8 addr(candidate.mAddress.Value());
-                  std::string addrStr(addr.get());
-                  StripIPv4FromSdp(addrStr);
-                  candidate.mAddress.Value() = NS_ConvertUTF8toUTF16(addrStr);
+                  SanitizeCandidateAddress(candidate);
                 }
               };
               if (aInternalStats) {
                 for (auto& entry : report->mSdpHistory) {
-                  NS_ConvertUTF16toUTF8 sdp(entry.mSdp);
-                  std::string sdpStr(sdp.get());
-                  StripIPv4FromSdp(sdpStr);
-                  entry.mSdp = NS_ConvertUTF8toUTF16(sdpStr);
+                  SanitizeIPLiteralText(entry.mSdp);
                 }
                 for (auto& candidate : report->mRawLocalCandidates) {
-                  NS_ConvertUTF16toUTF8 cand(candidate);
-                  std::string candStr(cand.get());
-                  StripIPv4FromSdp(candStr);
-                  candidate = NS_ConvertUTF8toUTF16(candStr);
+                  SanitizeIPLiteralText(candidate);
                 }
                 for (auto& candidate : report->mRawRemoteCandidates) {
-                  NS_ConvertUTF16toUTF8 cand(candidate);
-                  std::string candStr(cand.get());
-                  StripIPv4FromSdp(candStr);
-                  candidate = NS_ConvertUTF8toUTF16(candStr);
+                  SanitizeIPLiteralText(candidate);
                 }
               }
               stripCandidateAddresses(report->mIceCandidateStats);

@@ -9,7 +9,6 @@
 #include <algorithm>
 
 #include "AnchorPositioningUtils.h"
-#include "mozilla/FerifoxConfig.h"
 #include "NonCustomCSSPropertyId.h"
 #include "PseudoStyleType.h"
 #include "mozilla/AppUnits.h"
@@ -17,7 +16,6 @@
 #include "mozilla/ComputedStyleInlines.h"
 #include "mozilla/EffectSet.h"
 #include "mozilla/FontPropertyTypes.h"
-#include "mozilla/HashFunctions.h"
 #include "mozilla/IntegerRange.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/PresShell.h"
@@ -84,49 +82,6 @@ already_AddRefed<nsComputedDOMStyle> NS_NewComputedDOMStyle(
 static nsDOMCSSValueList* GetROCSSValueList(bool aCommaDelimited) {
   return new nsDOMCSSValueList(aCommaDelimited);
 }
-
-namespace {
-
-Maybe<uint64_t> GetFerifoxLayoutNoiseSeed() {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    return cfg->GetUint64("layout.noiseSeed"_ns);
-  }
-  return Nothing();
-}
-
-HashNumber GetFerifoxLayoutNoiseHash(const Element& aElement, uint64_t aSeed) {
-  HashNumber hash = HashGeneric(static_cast<uint32_t>(aSeed),
-                                static_cast<uint32_t>(aSeed >> 32));
-  for (const nsINode* node = &aElement; node;) {
-    if (const auto* element = Element::FromNodeOrNull(node)) {
-      const auto* nodeInfo = element->NodeInfo();
-      const nsString& localName = nodeInfo->LocalName();
-      hash = AddToHash(
-          hash, nodeInfo->NamespaceID(),
-          mozilla::HashString(localName.BeginReading(), localName.Length()));
-    } else {
-      hash = AddToHash(hash, node->NodeType());
-    }
-
-    const nsINode* parent = node->GetParentNode();
-    if (!parent) {
-      break;
-    }
-    hash = AddToHash(hash, parent->ComputeIndexOf(node).valueOr(0));
-    node = parent;
-  }
-  return hash;
-}
-
-float GetFerifoxComputedStyleNoise(const Element& aElement, uint64_t aSeed) {
-  HashNumber hash = GetFerifoxLayoutNoiseHash(aElement, aSeed);
-  hash = hash * 1103515245 + 12345;
-  return (static_cast<float>(static_cast<int32_t>(hash & 0xFFFF)) / 65535.0f -
-          0.5f) *
-         0.1f;
-}
-
-}  // namespace
 
 // Whether aDocument needs to restyle for aElement
 static bool ElementNeedsRestyle(Element* aElement,
@@ -1395,14 +1350,6 @@ void nsComputedDOMStyle::SetValueToPixels(nsROCSSPrimitiveValue* aValue,
                                           float aPixels) {
   MOZ_ASSERT(mComputedStyle);
   float pixels = mComputedStyle->EffectiveZoom().Unzoom(aPixels);
-
-  if (mElement) {
-    if (auto seed = GetFerifoxLayoutNoiseSeed()) {
-      float noise = GetFerifoxComputedStyleNoise(*mElement, *seed);
-      pixels = pixels >= 0.0f ? std::max(0.0f, pixels + noise) : pixels + noise;
-    }
-  }
-
   aValue->SetPixels(pixels);
 }
 
