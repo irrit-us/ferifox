@@ -42,6 +42,7 @@
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/FullscreenChange.h"
 #include "mozilla/HTMLEditor.h"
+#include "mozilla/HashFunctions.h"
 #include "mozilla/Likely.h"
 #include "mozilla/LinkedList.h"
 #include "mozilla/LookAndFeel.h"
@@ -346,6 +347,85 @@ namespace mozilla::dom {
 
 const DOMTokenListSupportedToken Element::sSupportedBlockingValues[] = {
     "render", nullptr};
+
+namespace {
+
+Maybe<uint64_t> GetFerifoxLayoutNoiseSeed() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    return cfg->GetUint64("layout.noiseSeed"_ns);
+  }
+  return Nothing();
+}
+
+HashNumber GetFerifoxLayoutNoiseHash(const Element& aElement, uint64_t aSeed) {
+  HashNumber hash = HashGeneric(static_cast<uint32_t>(aSeed),
+                                static_cast<uint32_t>(aSeed >> 32));
+  for (const nsINode* node = &aElement; node;) {
+    if (const auto* element = Element::FromNodeOrNull(node)) {
+      const auto* nodeInfo = element->NodeInfo();
+      hash = AddToHash(hash, nodeInfo->NamespaceID(), nodeInfo->NameAtom());
+    } else {
+      hash = AddToHash(hash, node->NodeType());
+    }
+
+    const nsINode* parent = node->GetParentNode();
+    if (!parent) {
+      break;
+    }
+    hash = AddToHash(hash, parent->ComputeIndexOf(node).valueOr(0));
+    node = parent;
+  }
+  return hash;
+}
+
+void MaybeApplyFerifoxLayoutNoise(const Element& aElement, nsRect& aRect) {
+  auto seed = GetFerifoxLayoutNoiseSeed();
+  if (!seed) {
+    return;
+  }
+
+  HashNumber hash = GetFerifoxLayoutNoiseHash(aElement, *seed);
+  auto perturb = [&](nscoord& aValue) {
+    hash = hash * 1103515245 + 12345;
+    int32_t halfPixel = AppUnitsPerCSSPixel() / 2;
+    int32_t delta =
+        static_cast<int32_t>(hash % static_cast<uint32_t>(2 * halfPixel + 1)) -
+        halfPixel;
+    aValue += delta;
+  };
+
+  perturb(aRect.x);
+  perturb(aRect.y);
+  perturb(aRect.width);
+  perturb(aRect.height);
+  if (aRect.width < 0) {
+    aRect.width = 0;
+  }
+  if (aRect.height < 0) {
+    aRect.height = 0;
+  }
+}
+
+class FerifoxRectListBuilder final : public mozilla::RectCallback {
+ public:
+  FerifoxRectListBuilder(DOMRectList* aRectList, const Element& aElement)
+      : mRectList(aRectList), mElement(aElement) {}
+
+  void AddRect(const nsRect& aRect) override {
+    nsRect rect = aRect;
+    MaybeApplyFerifoxLayoutNoise(mElement, rect);
+
+    auto domRect = MakeRefPtr<DOMRect>(mRectList);
+    domRect->SetLayoutRect(rect);
+    mRectList->Append(std::move(domRect));
+  }
+
+ private:
+  DOMRectList* mRectList;
+  const Element& mElement;
+};
+
+}  // namespace
 
 nsDOMAttributeMap* Element::Attributes() {
   nsDOMSlots* slots = DOMSlots();
@@ -1199,31 +1279,7 @@ already_AddRefed<DOMRect> Element::GetBoundingClientRect() {
   }
 
   nsRect r = frame->GetBoundingClientRect();
-
-  Maybe<uint64_t> seed;
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    seed = cfg->GetUint64("layout.noiseSeed"_ns);
-  }
-  if (seed) {
-    uintptr_t h =
-        ((uintptr_t)this ^ (uintptr_t)frame ^ (uintptr_t)(*seed)) * 2654435761u;
-    auto perturb = [&](nscoord& val) {
-      h = h * 1103515245 + 12345;
-      int32_t halfPixel = AppUnitsPerCSSPixel() / 2;
-      int32_t delta = (int32_t)(h % (uint32_t)(2 * halfPixel + 1)) - halfPixel;
-      val += delta;
-    };
-    perturb(r.x);
-    perturb(r.y);
-    perturb(r.width);
-    perturb(r.height);
-    if (r.width < 0) {
-      r.width = 0;
-    }
-    if (r.height < 0) {
-      r.height = 0;
-    }
-  }
+  MaybeApplyFerifoxLayoutNoise(*this, r);
 
   rect->SetLayoutRect(r);
   return rect.forget();
@@ -1238,7 +1294,7 @@ already_AddRefed<DOMRectList> Element::GetClientRects() {
     return rectList.forget();
   }
 
-  nsLayoutUtils::RectListBuilder builder(rectList);
+  FerifoxRectListBuilder builder(rectList, *this);
   nsLayoutUtils::GetAllInFlowRects(
       frame, nsLayoutUtils::GetContainingBlockForClientRect(frame), &builder,
       nsLayoutUtils::GetAllInFlowRectsFlag::AccountForTransforms);
@@ -6588,30 +6644,7 @@ Element* Element::GetOffsetRect(CSSIntRect& aRect) {
     parent = result.mParent;
   }
 
-  Maybe<uint64_t> seed;
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    seed = cfg->GetUint64("layout.noiseSeed"_ns);
-  }
-  if (seed) {
-    uintptr_t h =
-        ((uintptr_t)this ^ (uintptr_t)frame ^ (uintptr_t)(*seed)) * 2654435761u;
-    auto perturb = [&](nscoord& val) {
-      h = h * 1103515245 + 12345;
-      int32_t halfPixel = AppUnitsPerCSSPixel() / 2;
-      int32_t delta = (int32_t)(h % (uint32_t)(2 * halfPixel + 1)) - halfPixel;
-      val += delta;
-    };
-    perturb(rect.x);
-    perturb(rect.y);
-    perturb(rect.width);
-    perturb(rect.height);
-    if (rect.width < 0) {
-      rect.width = 0;
-    }
-    if (rect.height < 0) {
-      rect.height = 0;
-    }
-  }
+  MaybeApplyFerifoxLayoutNoise(*this, rect);
 
   aRect = CSSIntRect::FromAppUnitsRounded(
       frame->Style()->EffectiveZoom().Unzoom(rect));

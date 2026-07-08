@@ -179,6 +179,21 @@ static void StripIPv4FromSdp(std::string& s) {
   }
 }
 
+static bool ShouldStripFerifoxWebRtcIps() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto strip = cfg->GetBool("webrtc.stripSDPIPs"_ns)) {
+      return *strip;
+    }
+  }
+  return false;
+}
+
+static void MaybeStripFerifoxWebRtcIps(std::string& s) {
+  if (ShouldStripFerifoxWebRtcIps()) {
+    StripIPv4FromSdp(s);
+  }
+}
+
 // Getting exceptions back down from PCObserver is generally not harmful.
 namespace {
 // This is a terrible hack.  The problem is that SuppressException is not
@@ -1519,12 +1534,7 @@ PeerConnectionImpl::CreateOffer(const JsepOfferOptions& aOptions) {
               *buildJSErrorData(result, errorString), rv);
         } else {
           mJsepSession = std::move(uncommittedJsepSession);
-          if (auto* cfg = FerifoxConfig::GetSingleton()) {
-            auto strip = cfg->GetBool("webrtc.stripSDPIPs"_ns);
-            if (strip && *strip) {
-              StripIPv4FromSdp(offer);
-            }
-          }
+          MaybeStripFerifoxWebRtcIps(offer);
           mPCObserver->OnCreateOfferSuccess(ObString(offer.c_str()), rv);
         }
       }));
@@ -1561,12 +1571,7 @@ PeerConnectionImpl::CreateAnswer() {
               *buildJSErrorData(result, errorString), rv);
         } else {
           mJsepSession = std::move(uncommittedJsepSession);
-          if (auto* cfg = FerifoxConfig::GetSingleton()) {
-            auto strip = cfg->GetBool("webrtc.stripSDPIPs"_ns);
-            if (strip && *strip) {
-              StripIPv4FromSdp(answer);
-            }
-          }
+          MaybeStripFerifoxWebRtcIps(answer);
           mPCObserver->OnCreateAnswerSuccess(ObString(answer.c_str()), rv);
         }
       }));
@@ -3112,6 +3117,8 @@ void PeerConnectionImpl::DoSetDescriptionSuccessPostProcessing(
             mJsepSession->GetLocalDescription(kJsepDescriptionPending);
         mCurrentLocalDescription =
             mJsepSession->GetLocalDescription(kJsepDescriptionCurrent);
+        MaybeStripFerifoxWebRtcIps(mPendingLocalDescription);
+        MaybeStripFerifoxWebRtcIps(mCurrentLocalDescription);
         mPendingOfferer = mJsepSession->IsPendingOfferer();
         mCurrentOfferer = mJsepSession->IsCurrentOfferer();
 
@@ -3377,6 +3384,8 @@ void PeerConnectionImpl::CandidateReady(const std::string& candidate,
       mJsepSession->GetLocalDescription(kJsepDescriptionPending);
   mCurrentLocalDescription =
       mJsepSession->GetLocalDescription(kJsepDescriptionCurrent);
+  MaybeStripFerifoxWebRtcIps(mPendingLocalDescription);
+  MaybeStripFerifoxWebRtcIps(mCurrentLocalDescription);
   CSFLogInfo(LOGTAG, "Passing local candidate to content: %s",
              candidate.c_str());
   SendLocalIceCandidateToContent(level, mid, candidate, ufrag);
@@ -3386,9 +3395,11 @@ void PeerConnectionImpl::SendLocalIceCandidateToContent(
     uint16_t level, const std::string& mid, const std::string& candidate,
     const std::string& ufrag) {
   STAMP_TIMECARD(mTimeCard, "Send Ice Candidate to content");
+  std::string sanitizedCandidate(candidate);
+  MaybeStripFerifoxWebRtcIps(sanitizedCandidate);
   JSErrorResult rv;
   mPCObserver->OnIceCandidate(level, ObString(mid.c_str()),
-                              ObString(candidate.c_str()),
+                              ObString(sanitizedCandidate.c_str()),
                               ObString(ufrag.c_str()), rv);
 }
 

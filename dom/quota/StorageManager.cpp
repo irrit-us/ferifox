@@ -89,16 +89,6 @@ void ApplyFerifoxStorageEstimate(StorageEstimate& aEstimate) {
   }
 }
 
-void ApplyFerifoxPersisted(bool& aPersisted) {
-  auto* cfg = FerifoxConfig::GetSingleton();
-  if (!cfg) {
-    return;
-  }
-  if (auto persisted = cfg->GetBool("storage.persisted"_ns)) {
-    aPersisted = *persisted;
-  }
-}
-
 // This class is used to get quota usage, request persist and check persisted
 // status callbacks.
 class RequestResolver final : public nsIQuotaCallback {
@@ -533,7 +523,6 @@ nsresult RequestResolver::GetPersisted(nsIVariant* aResult) {
     MOZ_ASSERT(dataType == nsIDataType::VTYPE_VOID);
 
     mPersisted = true;
-    ApplyFerifoxPersisted(mPersisted);
     return NS_OK;
   }
 
@@ -546,7 +535,6 @@ nsresult RequestResolver::GetPersisted(nsIVariant* aResult) {
   }
 
   mPersisted = persisted;
-  ApplyFerifoxPersisted(mPersisted);
   return NS_OK;
 }
 

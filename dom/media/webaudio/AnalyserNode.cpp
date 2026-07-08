@@ -409,8 +409,9 @@ void AnalyserNode::GetTimeDomainData(float* aData, size_t aLength) {
     uint32_t state = noiseSeed;
     for (size_t i = 0; i < aLength; ++i) {
       state = state * 1103515245 + 12345;
-      double noise = ((state & 0x7fffffff) / 2147483648.0) * 0.0001;
-      aData[i] += static_cast<float>(noise);
+      double noise = (((state & 0x7fffffff) / 2147483648.0) - 0.5) * 0.0001;
+      aData[i] =
+          std::max(-1.0f, std::min(1.0f, aData[i] + static_cast<float>(noise)));
     }
   }
 }
