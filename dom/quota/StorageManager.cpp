@@ -8,6 +8,7 @@
 #include <cstdlib>
 
 #include "ErrorList.h"
+#include "FerifoxConfig.h"
 #include "MainThreadUtils.h"
 #include "fs/FileSystemRequestHandler.h"
 #include "js/CallArgs.h"
@@ -59,6 +60,31 @@ using namespace mozilla::dom::quota;
 namespace mozilla::dom {
 
 namespace {
+
+template <typename OptionalUint64>
+void SetOptionalUint64(OptionalUint64& aField, uint64_t aValue) {
+  (aField.WasPassed() ? aField.Value() : aField.Construct()) = aValue;
+}
+
+void ApplyFerifoxStorageEstimate(StorageEstimate& aEstimate) {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  auto quota = cfg->GetUint64("storage.estimate.quota"_ns);
+  auto usage = cfg->GetUint64("storage.estimate.usage"_ns);
+  if (quota) {
+    SetOptionalUint64(aEstimate.mQuota, *quota);
+    if (aEstimate.mUsage.WasPassed() && aEstimate.mUsage.Value() > *quota) {
+      aEstimate.mUsage.Value() = *quota;
+    }
+  }
+  if (usage) {
+    uint64_t reportedUsage = *usage;
+    if (aEstimate.mQuota.WasPassed() &&
+        reportedUsage > aEstimate.mQuota.Value()) {
+      reportedUsage = aEstimate.mQuota.Value();
+    }
+    SetOptionalUint64(aEstimate.mUsage, reportedUsage);
+  }
+}
 
 // This class is used to get quota usage, request persist and check persisted
 // status callbacks.
@@ -476,6 +502,8 @@ nsresult RequestResolver::GetStorageEstimate(nsIVariant* aResult) {
 
   MOZ_ALWAYS_SUCCEEDS(
       estimateResult->GetLimit(&mStorageEstimate.mQuota.Construct()));
+
+  ApplyFerifoxStorageEstimate(mStorageEstimate);
 
   return NS_OK;
 }

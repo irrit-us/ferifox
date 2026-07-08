@@ -199,21 +199,47 @@ This means Ferifox does not need a broad side-effect-free evaluator for default 
 
 The current branch is not sufficient to guarantee Cloudflare robot-check passage, even on a personal computer. It removes several obvious Firefox automation differences, normalizes many page-facing fingerprint surfaces, and makes program-driven prefs inherit normal browser/profile state, which is a meaningful improvement over stock automation. But Cloudflare's public documentation describes challenge and bot products that consider client-side browser signals, JavaScript Detections, bot scores, static detections such as header-order mismatches, and proxy/network classifications.
 
-For the Cloudflare-relevant JavaScript interface layer, Ferifox now treats these signal families as a coherent group: navigator identity and automation state, language/locale/timezone, screen and window geometry, screen orientation, trusted pointer/mouse event screen coordinates, WebGL adapter strings, WebGPU's standard adapter-info fields, audio context metadata, font availability, geolocation, Network Information, cookies/PDF/plugins/mimeTypes, and DNT/GPC. The latest geometry patch closes a concrete mismatch where a persona could report a spoofed screen and outer window while page-visible `screenX`, `mozInnerScreenX/Y`, orientation, and trusted event `screenX/Y` still reflected the host window.
+The common detection methods to keep in scope are:
+
+- Passive request and transport traits: header presence and order, protocol behavior, session history, cookie state, IP reputation, and JA3/JA4-style TLS fingerprints.
+- Active browser probes: navigator identity, automation flags, screen/window geometry, timezone, locale, language, plugins, mime types, storage availability, permissions, media devices, WebRTC, and feature support.
+- Rendering and compute probes: Canvas 2D, WebGL, WebGPU, fonts, AudioContext, media codecs, text metrics, timing, CPU/memory side channels, and cross-worker consistency.
+- Behavioral probes: pointer, mouse, touch, focus, scroll, typing, navigation, retry timing, challenge solving, and visibility/occlusion state.
+- Inconsistency probes: contradictions between claimed browser/OS/GPU/locale/network, differences between main-window and worker APIs, and differences between page-visible APIs and automation protocol state.
+
+For the Cloudflare-relevant JavaScript interface layer, Ferifox now treats these signal families as a coherent group: navigator identity and automation state, language/locale/timezone, screen and window geometry, screen orientation, trusted pointer/mouse event screen coordinates, WebGL adapter strings, WebGPU's standard adapter-info fields, audio context metadata, font availability, geolocation, Network Information, storage estimate, cookies/PDF/plugins/mimeTypes, and DNT/GPC. The latest geometry patch closes a concrete mismatch where a persona could report a spoofed screen and outer window while page-visible `screenX`, `mozInnerScreenX/Y`, orientation, and trusted event `screenX/Y` still reflected the host window. The storage estimate patch adds persona-configurable `navigator.storage.estimate()` usage/quota values for both window and worker callers without changing actual quota enforcement.
 
 Running on a personal computer with a normal residential network improves the network and hardware story compared with a datacenter VM, but it does not close the remaining gaps:
 
 - TLS/HTTP2/HTTP3 transport fingerprinting is not configurable in this branch.
 - Cloudflare challenge execution can still observe Firefox-specific rendering, timing, WebGL/canvas/audio/font behavior, and interaction patterns.
 - Viewport sizing must be real. A launcher should size the actual window and automation viewport to the persona; spoofing only `innerWidth/innerHeight` would create layout and screenshot contradictions.
-- Trusted mouse/pointer event `screenX/Y` now align with configured `window.mozInnerScreenX/Y` for content callers, but touch event screen coordinates remain a separate surface and should not be enabled in personas that declare `maxTouchPoints: 0`.
+- Trusted mouse, pointer, and widget-originated touch event `screenX/Y` now align with configured `window.mozInnerScreenX/Y` for content callers. Personas that declare `maxTouchPoints: 0` should still avoid enabling touch input surfaces.
 - Remote Agent, Marionette, WebDriver BiDi, and Puppeteer/Playwright command algorithms remain distinct program-driven paths unless the crawler avoids them or limits them to native snapshot reads.
 - No native crawler snapshot API exists yet in this branch; if the crawler uses evaluator-based reads, getter/proxy/serialization side effects remain possible.
 - Behavioral quality is not covered. A real user on a personal computer can solve interactive challenges; an automated flow still needs human-like timing, focus, input, navigation, and retry behavior.
 
+#### Future Work: Personal-Information Interfaces
+
+Cloudflare does not publish the exact JavaScript probes used by every challenge or Bot Management configuration, so this map is based on its documented signal families: JavaScript Detections, browser signals, request headers and session features, static heuristics such as header-order mismatches, bot scores, and JA3/JA4 transport fingerprints. The Ferifox patches now cover the main navigator, geometry, WebGL identity, WebGPU standard adapter-info string, audio-context, font, geolocation, Network Information, plugin/mime-type, privacy-signal, cookie, and trusted-input-coordinate surfaces. Several personal-information or device-state interfaces still need explicit future work:
+
+- `navigator.mediaDevices`, `enumerateDevices()`, `devicechange`, and active capture metadata should normalize device counts, kinds, labels, group IDs, and capture state to the persona. Firefox already gates labels and IDs, but the device inventory itself can still disclose host hardware.
+- The Permissions API should report persona-consistent states for geolocation, notifications, camera, microphone, MIDI, persistent storage, clipboard, and related prompts, and protocol permission overrides must not contradict page-visible permission state.
+- Storage and quota APIs beyond `navigator.storage.estimate()` still need review. `persisted()`, `persist()`, origin storage behavior, cache availability, and filesystem access should follow profile/persona policy while preserving normal cookie behavior required for `cf_clearance` and ordinary browsing sessions.
+- `speechSynthesis.getVoices()` should filter voice names, languages, defaults, and local-service metadata to the OS and locale persona.
+- WebGPU still needs capability-level review. Standard `GPUAdapterInfo` strings are already empty in Firefox, but exposed features, limits, fallback state, subgroup sizes, timing, and worker/window parity should be checked against the declared persona.
+- Media capability and codec interfaces, including `navigator.mediaCapabilities` and related EME/key-system support checks, should be normalized so decoder availability does not reveal an unexpected platform or build.
+- Peripheral APIs such as Gamepad, WebMIDI, Web Serial, WebHID, WebUSB, Bluetooth, VR, and XR should either remain disabled or expose only persona-declared devices.
+- WebRTC needs deeper persona alignment beyond host-candidate suppression and default-address-only prefs. SDP contents, ICE candidate details, mDNS hostnames, TURN/STUN behavior, and `getStats()` values should be audited.
+- Canvas 2D rendering and readback, text metrics, media rendering, and fine-grained timing should be evaluated as a coherent rendering surface. Any defense should be deterministic per persona, not random per read.
+- Worker and service-worker exposure needs parity for every patched API that is available off the main window.
+- Marionette, WebDriver BiDi, Remote Agent, and crawler runtime paths must keep geolocation, permission, storage, cookie, viewport, user-agent, locale, and timezone state aligned with regular page-visible APIs.
+
+The future documentation matrix should record the Cloudflare interface under test, challenge type, browser mode, network class, persona, automation path, evaluator use, request-header shape, JA4 availability, probed JS APIs, and pass/fail outcome. A useful Cloudflare row should explicitly say whether JavaScript Detections ran before the decision, because Cloudflare documents that the first request usually lacks JavaScript Detection data while later requests can include a `cf_clearance` result.
+
 The practical conclusion is that this branch may be enough for low-sensitivity pages or manual sessions on a real personal machine, but it should not be treated as sufficient for Cloudflare Managed Challenges, Turnstile, Bot Fight Mode, or enterprise Bot Management without empirical validation against the specific target configuration. The acceptance criterion should be a local test matrix that records challenge type, browser mode, network, persona, automation path, whether evaluator was used, and pass/fail outcome.
 
-Public Cloudflare references checked in July 2026: [Turnstile overview](https://developers.cloudflare.com/turnstile/), [JavaScript Detections](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/javascript-detections/), [Bot scores](https://developers.cloudflare.com/bots/concepts/bot-score/), [Bot detection engines](https://developers.cloudflare.com/bots/concepts/bot-detection-engines/), [Detection IDs](https://developers.cloudflare.com/bots/additional-configurations/detection-ids/), [additional residential-proxy detections](https://developers.cloudflare.com/bots/additional-configurations/detection-ids/additional-detections/), and [JA3/JA4 fingerprinting](https://developers.cloudflare.com/bots/additional-configurations/ja3-ja4-fingerprint/).
+Public Cloudflare references checked in July 2026: [Turnstile overview](https://developers.cloudflare.com/turnstile/), [JavaScript Detections](https://developers.cloudflare.com/cloudflare-challenges/challenge-types/javascript-detections/), [Bot scores](https://developers.cloudflare.com/bots/concepts/bot-score/), [Bot detection engines](https://developers.cloudflare.com/bots/concepts/bot-detection-engines/), [Detection IDs](https://developers.cloudflare.com/bots/additional-configurations/detection-ids/), [additional residential-proxy detections](https://developers.cloudflare.com/bots/additional-configurations/detection-ids/additional-detections/), [supported browsers](https://developers.cloudflare.com/cloudflare-challenges/reference/supported-browsers/), and [JA3/JA4 fingerprinting](https://developers.cloudflare.com/bots/additional-configurations/ja3-ja4-fingerprint/).
 
 ### July 2026 Circular.bot Debug Findings
 
@@ -247,6 +273,8 @@ navigator.connection.type
 geolocation.latitude
 geolocation.longitude
 geolocation.accuracy
+storage.estimate.usage
+storage.estimate.quota
 network.stripTopWindowURI
 network.stripPriorityHeader
 window.screenX

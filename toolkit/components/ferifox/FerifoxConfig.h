@@ -10,6 +10,8 @@
 #include "nsString.h"
 #include "nsTArray.h"
 
+#include <stdint.h>
+
 namespace Json {
 class Value;
 }
@@ -25,6 +27,7 @@ class FerifoxConfig {
   Maybe<bool> GetBool(const nsACString& aPath) const;
   Maybe<int32_t> GetInt32(const nsACString& aPath) const;
   Maybe<uint32_t> GetUint32(const nsACString& aPath) const;
+  Maybe<uint64_t> GetUint64(const nsACString& aPath) const;
   Maybe<double> GetDouble(const nsACString& aPath) const;
   bool GetString(const nsACString& aPath, nsAString& aResult) const;
   bool GetStringList(const nsACString& aPath,

@@ -4,12 +4,30 @@
 
 #include "mozilla/dom/Touch.h"
 
+#include "FerifoxConfig.h"
 #include "mozilla/dom/EventTarget.h"
 #include "mozilla/dom/TouchEvent.h"
 #include "nsContentUtils.h"
+#include "nsCoord.h"
 #include "nsIContent.h"
 
 namespace mozilla::dom {
+
+static bool GetConfiguredInnerScreenPoint(CSSDoublePoint& aPoint) {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return false;
+  }
+
+  auto x = cfg->GetDouble("window.mozInnerScreenX"_ns);
+  auto y = cfg->GetDouble("window.mozInnerScreenY"_ns);
+  if (!x || !y) {
+    return false;
+  }
+
+  aPoint = CSSDoublePoint(*x, *y);
+  return true;
+}
 
 // static
 already_AddRefed<Touch> Touch::Constructor(const GlobalObject& aGlobal,
@@ -40,6 +58,7 @@ Touch::Touch(EventTarget* aTarget, int32_t aIdentifier, int32_t aPageX,
   mRadius.y = aRadiusY;
   mRotationAngle = aRotationAngle;
   mForce = aForce;
+  mCreatedFromWidgetEvent = false;
 
   mChanged = false;
   mMessage = 0;
@@ -58,6 +77,7 @@ Touch::Touch(int32_t aIdentifier, LayoutDeviceIntPoint aPoint,
   mRadius = aRadius;
   mRotationAngle = aRotationAngle;
   mForce = aForce;
+  mCreatedFromWidgetEvent = true;
 
   mChanged = false;
   mMessage = 0;
@@ -87,6 +107,7 @@ Touch::Touch(const Touch& aOther)
       mRadius(aOther.mRadius),
       mRotationAngle(aOther.mRotationAngle),
       mForce(aOther.mForce),
+      mCreatedFromWidgetEvent(aOther.mCreatedFromWidgetEvent),
       mPointsInitialized(aOther.mPointsInitialized) {
   nsJSContext::LikelyShortLivingObjectCreated();
 }
@@ -133,6 +154,13 @@ int32_t Touch::ScreenX(CallerType aCallerType) const {
     return ClientX();
   }
 
+  if (aCallerType != CallerType::System && mCreatedFromWidgetEvent) {
+    CSSDoublePoint innerScreenPoint;
+    if (GetConfiguredInnerScreenPoint(innerScreenPoint)) {
+      return NSToIntRound(innerScreenPoint.x + ClientX());
+    }
+  }
+
   return mScreenPoint.x;
 }
 
@@ -140,6 +168,13 @@ int32_t Touch::ScreenY(CallerType aCallerType) const {
   if (nsContentUtils::ShouldResistFingerprinting(aCallerType, GetParentObject(),
                                                  RFPTarget::TouchEvents)) {
     return ClientY();
+  }
+
+  if (aCallerType != CallerType::System && mCreatedFromWidgetEvent) {
+    CSSDoublePoint innerScreenPoint;
+    if (GetConfiguredInnerScreenPoint(innerScreenPoint)) {
+      return NSToIntRound(innerScreenPoint.y + ClientY());
+    }
   }
 
   return mScreenPoint.y;

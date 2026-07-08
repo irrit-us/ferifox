@@ -255,6 +255,14 @@ Maybe<uint32_t> FerifoxConfig::GetUint32(const nsACString& aPath) const {
   return Some(val->asUInt());
 }
 
+Maybe<uint64_t> FerifoxConfig::GetUint64(const nsACString& aPath) const {
+  const Json::Value* val = Resolve(aPath);
+  if (!val || !val->isUInt64()) {
+    return Nothing();
+  }
+  return Some(val->asUInt64());
+}
+
 Maybe<double> FerifoxConfig::GetDouble(const nsACString& aPath) const {
   const Json::Value* val = Resolve(aPath);
   if (!val || !val->isDouble()) {
