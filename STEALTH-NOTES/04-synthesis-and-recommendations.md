@@ -207,7 +207,7 @@ The common detection methods to keep in scope are:
 - Behavioral probes: pointer, mouse, touch, focus, scroll, typing, navigation, retry timing, challenge solving, and visibility/occlusion state.
 - Inconsistency probes: contradictions between claimed browser/OS/GPU/locale/network, differences between main-window and worker APIs, and differences between page-visible APIs and automation protocol state.
 
-For the Cloudflare-relevant JavaScript interface layer, Ferifox now treats these signal families as a coherent group: navigator identity and automation state, language/locale/timezone, screen and window geometry, screen orientation, trusted pointer/mouse event screen coordinates, WebGL adapter strings, WebGPU's standard adapter-info fields, audio context metadata, font availability, geolocation, Network Information, storage estimate, cookies/PDF/plugins/mimeTypes, and DNT/GPC. The latest geometry patch closes a concrete mismatch where a persona could report a spoofed screen and outer window while page-visible `screenX`, `mozInnerScreenX/Y`, orientation, and trusted event `screenX/Y` still reflected the host window. The storage estimate patch adds persona-configurable `navigator.storage.estimate()` usage/quota values for both window and worker callers without changing actual quota enforcement.
+For the Cloudflare-relevant JavaScript interface layer, Ferifox now treats these signal families as a coherent group: navigator identity and automation state, language/locale/timezone, screen and window geometry, screen orientation, trusted pointer/mouse event screen coordinates, WebGL adapter strings, WebGPU's standard adapter-info fields, audio context metadata, font availability, geolocation, Network Information, Permissions API query state, storage estimate and persisted state, cookies/PDF/plugins/mimeTypes, and DNT/GPC. The latest geometry patch closes a concrete mismatch where a persona could report a spoofed screen and outer window while page-visible `screenX`, `mozInnerScreenX/Y`, orientation, and trusted event `screenX/Y` still reflected the host window. The storage patches add persona-configurable `navigator.storage.estimate()` usage/quota values and `persisted()`/`persist()` result values for window and worker callers without changing actual quota enforcement. The permissions patch adds persona-configurable `navigator.permissions.query()` states for window and worker callers after normal descriptor validation.
 
 Running on a personal computer with a normal residential network improves the network and hardware story compared with a datacenter VM, but it does not close the remaining gaps:
 
@@ -224,8 +224,8 @@ Running on a personal computer with a normal residential network improves the ne
 Cloudflare does not publish the exact JavaScript probes used by every challenge or Bot Management configuration, so this map is based on its documented signal families: JavaScript Detections, browser signals, request headers and session features, static heuristics such as header-order mismatches, bot scores, and JA3/JA4 transport fingerprints. The Ferifox patches now cover the main navigator, geometry, WebGL identity, WebGPU standard adapter-info string, audio-context, font, geolocation, Network Information, plugin/mime-type, privacy-signal, cookie, and trusted-input-coordinate surfaces. Several personal-information or device-state interfaces still need explicit future work:
 
 - `navigator.mediaDevices`, `enumerateDevices()`, `devicechange`, and active capture metadata should normalize device counts, kinds, labels, group IDs, and capture state to the persona. Firefox already gates labels and IDs, but the device inventory itself can still disclose host hardware.
-- The Permissions API should report persona-consistent states for geolocation, notifications, camera, microphone, MIDI, persistent storage, clipboard, and related prompts, and protocol permission overrides must not contradict page-visible permission state.
-- Storage and quota APIs beyond `navigator.storage.estimate()` still need review. `persisted()`, `persist()`, origin storage behavior, cache availability, and filesystem access should follow profile/persona policy while preserving normal cookie behavior required for `cf_clearance` and ordinary browsing sessions.
+- Permission prompts, actual API access decisions, and protocol permission overrides must not contradict persona-configured `navigator.permissions.query()` state.
+- Storage and quota behavior beyond the WebIDL return values still needs review. Actual persistence policy, origin storage behavior, cache availability, and filesystem access should follow profile/persona policy while preserving normal cookie behavior required for `cf_clearance` and ordinary browsing sessions.
 - `speechSynthesis.getVoices()` should filter voice names, languages, defaults, and local-service metadata to the OS and locale persona.
 - WebGPU still needs capability-level review. Standard `GPUAdapterInfo` strings are already empty in Firefox, but exposed features, limits, fallback state, subgroup sizes, timing, and worker/window parity should be checked against the declared persona.
 - Media capability and codec interfaces, including `navigator.mediaCapabilities` and related EME/key-system support checks, should be normalized so decoder availability does not reveal an unexpected platform or build.
@@ -275,6 +275,18 @@ geolocation.longitude
 geolocation.accuracy
 storage.estimate.usage
 storage.estimate.quota
+storage.persisted
+permissions.geolocation
+permissions.notifications
+permissions.push
+permissions.persistent-storage
+permissions.midi
+permissions.storage-access
+permissions.screen-wake-lock
+permissions.camera
+permissions.microphone
+permissions.loopback-network
+permissions.local-network
 network.stripTopWindowURI
 network.stripPriorityHeader
 window.screenX
@@ -289,7 +301,7 @@ webgl.forceEnabled
 webgl.forceEGL
 ```
 
-The important constraint is still consistency: geolocation must match proxy egress, timezone, locale, `Accept-Language`, and the persona's regional assumptions. Plugin and MIME counts must match the actual objects exposed by the engine unless the implementation also creates synthetic entries.
+Permission values use the WebIDL strings `granted`, `denied`, or `prompt`. The important constraint is still consistency: geolocation must match proxy egress, timezone, locale, `Accept-Language`, and the persona's regional assumptions. Permission states must match the corresponding API behavior and any automation protocol overrides. Plugin and MIME counts must match the actual objects exposed by the engine unless the implementation also creates synthetic entries.
 
 ## What Remains Unsolved
 

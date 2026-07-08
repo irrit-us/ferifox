@@ -7,12 +7,43 @@
 #include "PermissionStatusSink.h"
 #include "PermissionUtils.h"
 #include "mozilla/AsyncEventDispatcher.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Permission.h"
 #include "mozilla/Services.h"
 #include "nsGlobalWindowInner.h"
 #include "nsIPermissionManager.h"
 
 namespace mozilla::dom {
+
+namespace {
+
+Maybe<PermissionState> StringToPermissionState(const nsAString& aValue) {
+  if (aValue.EqualsLiteral("granted")) {
+    return Some(PermissionState::Granted);
+  }
+  if (aValue.EqualsLiteral("denied")) {
+    return Some(PermissionState::Denied);
+  }
+  if (aValue.EqualsLiteral("prompt")) {
+    return Some(PermissionState::Prompt);
+  }
+  return Nothing();
+}
+
+Maybe<PermissionState> GetFerifoxPermissionState(PermissionName aName) {
+  auto* cfg = FerifoxConfig::GetSingleton();
+
+  nsAutoCString path("permissions."_ns);
+  path.Append(GetEnumString(aName));
+
+  nsAutoString value;
+  if (!cfg->GetString(path, value)) {
+    return Nothing();
+  }
+  return StringToPermissionState(value);
+}
+
+}  // namespace
 
 PermissionStatus::PermissionStatus(nsIGlobalObject* aGlobal,
                                    PermissionName aName)
@@ -36,6 +67,7 @@ RefPtr<PermissionStatus::SimplePromise> PermissionStatus::Init() {
               aResult.ResolveValue();
           self->mState = self->ComputeStateFromAction(states.mBrowser);
           self->mSystemState = states.mSystem;
+          self->ApplyFerifoxState();
           return SimplePromise::CreateAndResolve(NS_OK, __func__);
         }
 
@@ -53,6 +85,17 @@ PermissionStatus::~PermissionStatus() {
 JSObject* PermissionStatus::WrapObject(JSContext* aCx,
                                        JS::Handle<JSObject*> aGivenProto) {
   return PermissionStatus_Binding::Wrap(aCx, this, aGivenProto);
+}
+
+PermissionState PermissionStatus::State() const {
+  if (mFerifoxState) {
+    return *mFerifoxState;
+  }
+  if (mState == PermissionState::Granted &&
+      mSystemState != PermissionState::Granted) {
+    return mSystemState;
+  }
+  return mState;
 }
 
 nsLiteralCString PermissionStatus::GetPermissionType() const {
@@ -110,6 +153,10 @@ already_AddRefed<PermissionStatusSink> PermissionStatus::CreateSink() {
   RefPtr<PermissionStatusSink> sink =
       new PermissionStatusSink(this, mName, GetPermissionType());
   return sink.forget();
+}
+
+void PermissionStatus::ApplyFerifoxState() {
+  mFerifoxState = GetFerifoxPermissionState(mName);
 }
 
 PermissionState PermissionStatus::ComputeStateFromAction(uint32_t aAction) {

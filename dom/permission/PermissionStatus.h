@@ -6,6 +6,7 @@
 #define mozilla_dom_PermissionStatus_h_
 
 #include "mozilla/DOMEventTargetHelper.h"
+#include "mozilla/Maybe.h"
 #include "mozilla/MozPromise.h"
 #include "mozilla/dom/PermissionStatusBinding.h"
 #include "mozilla/dom/PermissionsBinding.h"
@@ -25,13 +26,7 @@ class PermissionStatus : public DOMEventTargetHelper {
   JSObject* WrapObject(JSContext* aCx,
                        JS::Handle<JSObject*> aGivenProto) override;
 
-  PermissionState State() const {
-    if (mState == PermissionState::Granted &&
-        mSystemState != PermissionState::Granted) {
-      return mSystemState;
-    }
-    return mState;
-  }
+  PermissionState State() const;
   void SetState(PermissionState aState) { mState = aState; }
 
   IMPL_EVENT_HANDLER(change)
@@ -64,11 +59,13 @@ class PermissionStatus : public DOMEventTargetHelper {
 
   void PermissionChanged(uint32_t aAction);
   void SystemPermissionChanged(PermissionState aNewSystemState);
+  void ApplyFerifoxState();
 
   PermissionState ComputeStateFromAction(uint32_t aAction);
 
   PermissionName mName;
   RefPtr<PermissionStatusSink> mSink;
+  Maybe<PermissionState> mFerifoxState;
 
  protected:
   PermissionState mState = PermissionState::Denied;
