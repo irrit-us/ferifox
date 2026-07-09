@@ -15,6 +15,7 @@ const EXPECTED_NAVIGATOR_APP_VERSION = "5.0 (X11; Linux x86_64) Ferifox/128.0";
 const EXPECTED_NAVIGATOR_PLATFORM = "Linux x86_64";
 const EXPECTED_NAVIGATOR_LANGUAGES = ["en-US", "en"];
 const EXPECTED_NAVIGATOR_HARDWARE_CONCURRENCY = 8;
+const EXPECTED_WEBGL_MAX_TEX_UNITS = 8;
 const WEBRTC_PLACEHOLDER_ADDRESSES = new Set(["0.0.0.0", "::"]);
 const PERSONA_CONFIG_CONTENT = JSON.stringify({
   layout: { noiseSeed: 1311768467463790320 },
@@ -34,6 +35,9 @@ const PERSONA_CONFIG_CONTENT = JSON.stringify({
   },
   webrtc: {
     stripStats: true,
+  },
+  webgl: {
+    maxTexUnits: EXPECTED_WEBGL_MAX_TEX_UNITS,
   },
 });
 
@@ -276,6 +280,7 @@ add_task(async function test_ferifox_layout_noise_consistency() {
         rect1: toRect(target.getBoundingClientRect()),
         rect2: toRect(target.getBoundingClientRect()),
         clientRect: toRect(target.getClientRects()[0]),
+        computedWidth: parseFloat(content.getComputedStyle(target).width),
       };
     });
 
@@ -306,6 +311,49 @@ add_task(async function test_ferifox_layout_noise_consistency() {
       result.clientRect.height,
       result.rect1.height,
       "Client rect height matches"
+    );
+    changedBy(
+      result.computedWidth,
+      137,
+      0.5,
+      "Computed width is noise-adjusted"
+    );
+  });
+});
+
+add_task(async function test_ferifox_webgl_texture_unit_caps_are_consistent() {
+  await withFerifoxContentTask(async browser => {
+    const caps = await SpecialPowers.spawn(browser, [], () => {
+      const canvas = content.document.createElement("canvas");
+      const gl = canvas.getContext("webgl");
+      if (!gl) {
+        return null;
+      }
+
+      return {
+        combined: gl.getParameter(gl.MAX_COMBINED_TEXTURE_IMAGE_UNITS),
+        vertex: gl.getParameter(gl.MAX_VERTEX_TEXTURE_IMAGE_UNITS),
+        fragment: gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS),
+      };
+    });
+
+    if (!caps) {
+      info("WebGL context unavailable; skipping WebGL cap assertions");
+      return;
+    }
+
+    is(
+      caps.combined,
+      EXPECTED_WEBGL_MAX_TEX_UNITS,
+      "Ferifox combined texture unit cap is applied"
+    );
+    ok(
+      caps.vertex <= caps.combined,
+      `Vertex texture unit cap is not above combined cap: ${caps.vertex} <= ${caps.combined}`
+    );
+    ok(
+      caps.fragment <= caps.combined,
+      `Fragment texture unit cap is not above combined cap: ${caps.fragment} <= ${caps.combined}`
     );
   });
 });

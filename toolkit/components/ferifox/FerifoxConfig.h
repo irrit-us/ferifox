@@ -23,6 +23,7 @@ class FerifoxConfig {
   static FerifoxConfig* GetSingleton();
   static void SetConfigForTesting(const nsACString& aJson);
   static void ClearConfigForTesting();
+  static Maybe<uint64_t> GetLayoutNoiseSeed();
 
   bool IsLoaded() const;
 
@@ -43,6 +44,7 @@ class FerifoxConfig {
   bool LoadFromJSONString(const nsACString& aContent, const char* aSource);
   void SetPersistentEnv(nsCString& aStorage, const nsACString& aName,
                         const nsACString& aValue);
+  void UpdateCachedValuesNoLock();
 
   const Json::Value* ResolveNoLock(const nsACString& aPath) const;
   Maybe<bool> GetBoolNoLock(const nsACString& aPath) const;

@@ -6,6 +6,7 @@
 
 #include "MainThreadUtils.h"
 #include "json/json.h"
+#include "mozilla/Atomics.h"
 #include "mozilla/Logging.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Span.h"
@@ -25,6 +26,9 @@ namespace mozilla {
 
 static LazyLogModule sFerifoxLog("Ferifox");
 static StaticMutex sFerifoxConfigMutex;
+static Atomic<bool> sCachedValuesInitialized(false);
+static Atomic<bool> sHasLayoutNoiseSeed(false);
+static Atomic<uint64_t> sLayoutNoiseSeed(0);
 
 FerifoxConfig* FerifoxConfig::sSingleton;
 nsCString FerifoxConfig::sTestingConfigJson;
@@ -58,6 +62,17 @@ FerifoxConfig* FerifoxConfig::GetSingleton() {
   return sSingleton;
 }
 
+/* static */
+Maybe<uint64_t> FerifoxConfig::GetLayoutNoiseSeed() {
+  if (!sCachedValuesInitialized) {
+    (void)GetSingleton();
+  }
+  if (!sHasLayoutNoiseSeed) {
+    return Nothing();
+  }
+  return Some(static_cast<uint64_t>(sLayoutNoiseSeed));
+}
+
 FerifoxConfig::FerifoxConfig()
     : mRoot(MakeUnique<Json::Value>()), mLoaded(false) {
   Load();
@@ -66,6 +81,8 @@ FerifoxConfig::FerifoxConfig()
 FerifoxConfig::~FerifoxConfig() = default;
 
 void FerifoxConfig::Load() {
+  UpdateCachedValuesNoLock();
+
   if (!sTestingConfigJson.IsEmpty()) {
     (void)LoadFromJSONString(sTestingConfigJson, "ferifox testing override");
     return;
@@ -139,6 +156,7 @@ bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,
   }
 
   mLoaded = true;
+  UpdateCachedValuesNoLock();
   MOZ_LOG(sFerifoxLog, LogLevel::Info,
           ("FERIFOX_CONFIG: loaded from '%s'", aSource));
 
@@ -224,6 +242,17 @@ bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,
   }
 
   return true;
+}
+
+void FerifoxConfig::UpdateCachedValuesNoLock() {
+  sHasLayoutNoiseSeed = false;
+  sCachedValuesInitialized = true;
+
+  const Json::Value* seed = ResolveNoLock("layout.noiseSeed"_ns);
+  if (seed && seed->isUInt64()) {
+    sLayoutNoiseSeed = seed->asUInt64();
+    sHasLayoutNoiseSeed = true;
+  }
 }
 
 /* static */

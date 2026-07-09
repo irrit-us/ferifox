@@ -17,7 +17,6 @@
 
 #include "DOMMatrix.h"
 #include "ExpandedPrincipal.h"
-#include "mozilla/FerifoxConfig.h"
 #include "PresShellInlines.h"
 #include "PseudoStyleType.h"
 #include "jsapi.h"
@@ -39,6 +38,7 @@
 #include "mozilla/EventDispatcher.h"
 #include "mozilla/EventListenerManager.h"
 #include "mozilla/EventStateManager.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/FullscreenChange.h"
 #include "mozilla/HTMLEditor.h"
@@ -351,34 +351,41 @@ const DOMTokenListSupportedToken Element::sSupportedBlockingValues[] = {
 namespace {
 
 Maybe<uint64_t> GetFerifoxLayoutNoiseSeed() {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    return cfg->GetUint64("layout.noiseSeed"_ns);
-  }
-  return Nothing();
+  return FerifoxConfig::GetLayoutNoiseSeed();
 }
 
 HashNumber GetFerifoxLayoutNoiseHash(const Element& aElement, uint64_t aSeed) {
   HashNumber hash = HashGeneric(static_cast<uint32_t>(aSeed),
                                 static_cast<uint32_t>(aSeed >> 32));
-  for (const nsINode* node = &aElement; node;) {
+  for (const nsINode* node = &aElement; node; node = node->GetParentNode()) {
     if (const auto* element = Element::FromNodeOrNull(node)) {
       const auto* nodeInfo = element->NodeInfo();
       const nsString& localName = nodeInfo->LocalName();
       hash = AddToHash(
           hash, nodeInfo->NamespaceID(),
           mozilla::HashString(localName.BeginReading(), localName.Length()));
+
+      nsAutoString id;
+      if (element->GetAttr(nsGkAtoms::id, id)) {
+        hash = AddToHash(hash,
+                         mozilla::HashString(id.BeginReading(), id.Length()));
+      }
     } else {
       hash = AddToHash(hash, node->NodeType());
     }
-
-    const nsINode* parent = node->GetParentNode();
-    if (!parent) {
-      break;
-    }
-    hash = AddToHash(hash, parent->ComputeIndexOf(node).valueOr(0));
-    node = parent;
   }
   return hash;
+}
+
+int32_t GetFerifoxLayoutNoiseDelta(HashNumber aHash) {
+  int32_t halfPixel = AppUnitsPerCSSPixel() / 2;
+  int32_t delta =
+      static_cast<int32_t>(aHash % static_cast<uint32_t>(2 * halfPixel + 1)) -
+      halfPixel;
+  if (!delta) {
+    delta = aHash & 1 ? 1 : -1;
+  }
+  return delta;
 }
 
 void MaybeApplyFerifoxLayoutNoise(const Element& aElement, nsRect& aRect) {
@@ -390,11 +397,7 @@ void MaybeApplyFerifoxLayoutNoise(const Element& aElement, nsRect& aRect) {
   HashNumber hash = GetFerifoxLayoutNoiseHash(aElement, *seed);
   auto perturb = [&](nscoord& aValue) {
     hash = hash * 1103515245 + 12345;
-    int32_t halfPixel = AppUnitsPerCSSPixel() / 2;
-    int32_t delta =
-        static_cast<int32_t>(hash % static_cast<uint32_t>(2 * halfPixel + 1)) -
-        halfPixel;
-    aValue += delta;
+    aValue += GetFerifoxLayoutNoiseDelta(hash);
   };
 
   perturb(aRect.x);
