@@ -7,31 +7,38 @@ with Files("**"):
 
 UNIFIED_SOURCES += [
     "FerifoxConfig.cpp",
-    "FerifoxTestUtils.cpp",
 ]
 
 LOCAL_INCLUDES += [
     "/toolkit/components/jsoncpp/include",
 ]
 
-EXPORTS += [
-    "FerifoxTestUtils.h",
-]
-
 EXPORTS.mozilla += [
     "FerifoxConfig.h",
-    "FerifoxTestUtils.h",
 ]
 
-XPIDL_SOURCES += [
-    "nsIFerifoxTestUtils.idl",
-]
+if CONFIG["ENABLE_TESTS"]:
+    UNIFIED_SOURCES += [
+        "FerifoxTestUtils.cpp",
+    ]
 
-XPCOM_MANIFESTS += [
-    "components.conf",
-]
+    EXPORTS += [
+        "FerifoxTestUtils.h",
+    ]
 
-XPIDL_MODULE = "ferifox"
+    EXPORTS.mozilla += [
+        "FerifoxTestUtils.h",
+    ]
+
+    XPIDL_SOURCES += [
+        "nsIFerifoxTestUtils.idl",
+    ]
+
+    XPCOM_MANIFESTS += [
+        "components.conf",
+    ]
+
+    XPIDL_MODULE = "ferifox"
 
 FINAL_LIBRARY = "xul"
 
