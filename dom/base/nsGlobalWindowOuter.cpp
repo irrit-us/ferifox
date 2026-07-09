@@ -12,7 +12,7 @@
 #include "nsGlobalWindowInner.h"
 
 // Local Includes
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "Navigator.h"
 #include "WindowDestroyedEvent.h"
 #include "WindowNamedPropertiesHandler.h"

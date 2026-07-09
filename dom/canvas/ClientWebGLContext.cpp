@@ -9,7 +9,6 @@
 #include <bitset>
 
 #include "ClientWebGLExtensions.h"
-#include "FerifoxConfig.h"
 #include "HostWebGLContext.h"
 #include "TexUnpackBlob.h"
 #include "WebGLChild.h"
@@ -22,6 +21,7 @@
 #include "js/ScalarType.h"          // js::Scalar::Type
 #include "mozilla/Base64.h"
 #include "mozilla/EnumeratedRange.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/RandomNum.h"
 #include "mozilla/ResultVariant.h"
 #include "mozilla/ScopeExit.h"
@@ -5965,6 +5965,28 @@ bool ClientWebGLContext::IsSupported(const WebGLExtensionID ext,
                                      const dom::CallerType callerType) const {
   if (IsExtensionForbiddenForCaller(ext, callerType)) {
     return false;
+  }
+
+  if (ext != WebGLExtensionID::WEBGL_lose_context) {
+    auto* cfg = FerifoxConfig::GetSingleton();
+    if (!cfg) {
+      const auto& limits = Limits();
+      return limits.supportedExtensions[ext];
+    }
+    nsTArray<nsString> allowedExts;
+    if (cfg->GetStringList("webgl.extensions"_ns, allowedExts)) {
+      const auto& extStr = GetExtensionName(ext);
+      bool found = false;
+      for (const auto& allowed : allowedExts) {
+        if (allowed.EqualsASCII(extStr)) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        return false;
+      }
+    }
   }
 
   const auto& limits = Limits();

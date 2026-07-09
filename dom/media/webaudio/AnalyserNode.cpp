@@ -7,6 +7,7 @@
 #include "AudioNodeEngine.h"
 #include "AudioNodeTrack.h"
 #include "Tracing.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Mutex.h"
 #include "mozilla/PodOperations.h"
 #include "mozilla/dom/AnalyserNodeBinding.h"
@@ -22,6 +23,27 @@ static_assert((CHUNK_COUNT & (CHUNK_COUNT - 1)) == 0,
               "CHUNK_COUNT must be power of 2 for remainder behavior");
 
 namespace dom {
+
+namespace {
+uint32_t GetAudioNoiseSeed() {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return 0;
+  }
+  auto seed = cfg->GetUint32("audio.noiseSeed"_ns);
+  return seed ? *seed : 0;
+}
+
+double NextAudioFrequencyNoiseMultiplier(uint32_t& aState) {
+  if (!aState) {
+    return 1.0;
+  }
+
+  aState = aState * 1103515245 + 12345;
+  double noise = ((aState & 0x7fffffff) / 2147483648.0) * 0.008;
+  return 1.0 + noise - 0.004;
+}
+}  // namespace
 
 class AnalyserNodeEngine final : public AudioNodeEngine {
   class TransferBuffer final : public Runnable {
@@ -216,10 +238,13 @@ void AnalyserNode::GetFloatFrequencyData(const Float32Array& aArray) {
 
   aArray.ProcessData([&](const Span<float>& aData, JS::AutoCheckCannotGC&&) {
     size_t length = std::min(size_t(aData.Length()), mOutputBuffer.Length());
+    uint32_t noiseSeed = GetAudioNoiseSeed();
+    uint32_t noiseState = noiseSeed;
 
     for (size_t i = 0; i < length; ++i) {
       aData[i] = WebAudioUtils::ConvertLinearToDecibels(
-          mOutputBuffer[i], -std::numeric_limits<float>::infinity());
+          mOutputBuffer[i] * NextAudioFrequencyNoiseMultiplier(noiseState),
+          -std::numeric_limits<float>::infinity());
     }
   });
 }
@@ -234,10 +259,13 @@ void AnalyserNode::GetByteFrequencyData(const Uint8Array& aArray) {
 
   aArray.ProcessData([&](const Span<uint8_t>& aData, JS::AutoCheckCannotGC&&) {
     size_t length = std::min(size_t(aData.Length()), mOutputBuffer.Length());
+    uint32_t noiseSeed = GetAudioNoiseSeed();
+    uint32_t noiseState = noiseSeed;
 
     for (size_t i = 0; i < length; ++i) {
       const double decibels = WebAudioUtils::ConvertLinearToDecibels(
-          mOutputBuffer[i], mMinDecibels);
+          mOutputBuffer[i] * NextAudioFrequencyNoiseMultiplier(noiseState),
+          mMinDecibels);
       // scale down the value to the range of [0, UCHAR_MAX]
       const double scaled = std::max(
           0.0,
@@ -380,6 +408,17 @@ void AnalyserNode::GetTimeDomainData(float* aData, size_t aLength) {
 
     readChunk++;
     writeIndex += copyLength;
+  }
+
+  uint32_t noiseSeed = GetAudioNoiseSeed();
+  if (noiseSeed) {
+    uint32_t state = noiseSeed;
+    for (size_t i = 0; i < aLength; ++i) {
+      state = state * 1103515245 + 12345;
+      double noise = (((state & 0x7fffffff) / 2147483648.0) - 0.5) * 0.0001;
+      aData[i] =
+          std::max(-1.0f, std::min(1.0f, aData[i] + static_cast<float>(noise)));
+    }
   }
 }
 

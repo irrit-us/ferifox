@@ -4,15 +4,19 @@
 
 #include "FerifoxConfig.h"
 
+#include "MainThreadUtils.h"
 #include "json/json.h"
+#include "mozilla/Atomics.h"
 #include "mozilla/Logging.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Span.h"
 #include "mozilla/StaticMutex.h"
+#include "mozilla/SyncRunnable.h"
 #include "mozilla/intl/TimeZone.h"
 #include "nsIFile.h"
 #include "nsIInputStream.h"
 #include "nsNetUtil.h"
+#include "nsThreadUtils.h"
 #include "nsXULAppAPI.h"
 #include "prenv.h"
 
@@ -22,16 +26,51 @@ namespace mozilla {
 
 static LazyLogModule sFerifoxLog("Ferifox");
 static StaticMutex sFerifoxConfigMutex;
+static Atomic<bool> sCachedValuesInitialized(false);
+static Atomic<bool> sHasLayoutNoiseSeed(false);
+static Atomic<uint64_t> sLayoutNoiseSeed(0);
 
 FerifoxConfig* FerifoxConfig::sSingleton;
+nsCString FerifoxConfig::sTestingConfigJson;
 
 /* static */
 FerifoxConfig* FerifoxConfig::GetSingleton() {
+  {
+    StaticMutexAutoLock lock(sFerifoxConfigMutex);
+    if (sSingleton) {
+      return sSingleton;
+    }
+  }
+
+  if (!NS_IsMainThread()) {
+    nsresult rv = SyncRunnable::DispatchToThread(
+        GetMainThreadSerialEventTarget(),
+        NS_NewRunnableFunction("FerifoxConfig::GetSingleton",
+                               [] { (void)FerifoxConfig::GetSingleton(); }));
+    if (NS_FAILED(rv)) {
+      return nullptr;
+    }
+
+    StaticMutexAutoLock lock(sFerifoxConfigMutex);
+    return sSingleton;
+  }
+
   StaticMutexAutoLock lock(sFerifoxConfigMutex);
   if (!sSingleton) {
     sSingleton = new FerifoxConfig();
   }
   return sSingleton;
+}
+
+/* static */
+Maybe<uint64_t> FerifoxConfig::GetLayoutNoiseSeed() {
+  if (!sCachedValuesInitialized) {
+    (void)GetSingleton();
+  }
+  if (!sHasLayoutNoiseSeed) {
+    return Nothing();
+  }
+  return Some(static_cast<uint64_t>(sLayoutNoiseSeed));
 }
 
 FerifoxConfig::FerifoxConfig()
@@ -42,6 +81,13 @@ FerifoxConfig::FerifoxConfig()
 FerifoxConfig::~FerifoxConfig() = default;
 
 void FerifoxConfig::Load() {
+  UpdateCachedValuesNoLock();
+
+  if (!sTestingConfigJson.IsEmpty()) {
+    (void)LoadFromJSONString(sTestingConfigJson, "ferifox testing override");
+    return;
+  }
+
   const char* path = PR_GetEnv("FERIFOX_CONFIG");
   if (!path || !*path) {
     MOZ_LOG(sFerifoxLog, LogLevel::Debug, ("FERIFOX_CONFIG not set, skipping"));
@@ -89,25 +135,32 @@ void FerifoxConfig::Load() {
             ("FERIFOX_CONFIG: failed to read file"));
     return;
   }
+  if (!LoadFromJSONString(content, path)) {
+    return;
+  }
+}
 
+bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,
+                                       const char* aSource) {
   Json::Reader reader;
-  if (!reader.parse(content.BeginReading(), content.EndReading(), *mRoot,
+  if (!reader.parse(aContent.BeginReading(), aContent.EndReading(), *mRoot,
                     false)) {
     MOZ_LOG(sFerifoxLog, LogLevel::Warning,
             ("FERIFOX_CONFIG: JSON parse error"));
-    return;
+    return false;
   }
   if (!mRoot->isObject()) {
     MOZ_LOG(sFerifoxLog, LogLevel::Warning,
             ("FERIFOX_CONFIG: root must be an object"));
-    return;
+    return false;
   }
 
   mLoaded = true;
+  UpdateCachedValuesNoLock();
   MOZ_LOG(sFerifoxLog, LogLevel::Info,
-          ("FERIFOX_CONFIG: loaded from '%s'", path));
+          ("FERIFOX_CONFIG: loaded from '%s'", aSource));
 
-  const Json::Value* tz = Resolve("intl.timezone"_ns);
+  const Json::Value* tz = ResolveNoLock("intl.timezone"_ns);
   if (tz && tz->isString()) {
     nsAutoCString tzid(tz->asCString());
     if (!tzid.IsEmpty()) {
@@ -125,7 +178,7 @@ void FerifoxConfig::Load() {
     }
   }
 
-  const Json::Value* locale = Resolve("intl.locale"_ns);
+  const Json::Value* locale = ResolveNoLock("intl.locale"_ns);
   if (locale && locale->isString()) {
     nsAutoCString localeStr(locale->asCString());
     if (!localeStr.IsEmpty()) {
@@ -136,7 +189,7 @@ void FerifoxConfig::Load() {
   }
 
   if (XRE_IsParentProcess()) {
-    const Json::Value* webrtc = Resolve("webrtc"_ns);
+    const Json::Value* webrtc = ResolveNoLock("webrtc"_ns);
     if (webrtc && webrtc->isObject()) {
       if (const Json::Value& noHost = (*webrtc)["noHostCandidates"];
           noHost.isBool()) {
@@ -152,7 +205,7 @@ void FerifoxConfig::Load() {
               ("FERIFOX_CONFIG: WebRTC privacy prefs applied"));
     }
 
-    const Json::Value* webgl = Resolve("webgl"_ns);
+    const Json::Value* webgl = ResolveNoLock("webgl"_ns);
     if (webgl && webgl->isObject()) {
       if (const Json::Value& forceEnabled = (*webgl)["forceEnabled"];
           forceEnabled.isBool()) {
@@ -164,7 +217,8 @@ void FerifoxConfig::Load() {
       }
     }
 
-    if (auto stealth = GetBool("automation.stealth"_ns); stealth && *stealth) {
+    if (auto stealth = GetBoolNoLock("automation.stealth"_ns);
+        stealth && *stealth) {
       Preferences::SetBool("browser.dom.window.dump.enabled", false);
       Preferences::SetBool("devtools.debugger.remote-enabled", false);
       Preferences::SetInt("devtools.debugger.remote-port", 6000);
@@ -186,6 +240,46 @@ void FerifoxConfig::Load() {
       (void)Preferences::ClearUser("hangmonitor.timeout");
     }
   }
+
+  return true;
+}
+
+void FerifoxConfig::UpdateCachedValuesNoLock() {
+  sHasLayoutNoiseSeed = false;
+  sCachedValuesInitialized = true;
+
+  const Json::Value* seed = ResolveNoLock("layout.noiseSeed"_ns);
+  if (seed && seed->isUInt64()) {
+    sLayoutNoiseSeed = seed->asUInt64();
+    sHasLayoutNoiseSeed = true;
+  }
+}
+
+/* static */
+void FerifoxConfig::SetConfigForTesting(const nsACString& aJson) {
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  sTestingConfigJson = aJson;
+  if (!sSingleton) {
+    sSingleton = new FerifoxConfig();
+    return;
+  }
+
+  sSingleton->mRoot = MakeUnique<Json::Value>();
+  sSingleton->mLoaded = false;
+  sSingleton->Load();
+}
+
+/* static */
+void FerifoxConfig::ClearConfigForTesting() {
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  sTestingConfigJson.Truncate();
+  if (!sSingleton) {
+    return;
+  }
+
+  sSingleton->mRoot = MakeUnique<Json::Value>();
+  sSingleton->mLoaded = false;
+  sSingleton->Load();
 }
 
 void FerifoxConfig::SetPersistentEnv(nsCString& aStorage,
@@ -197,7 +291,12 @@ void FerifoxConfig::SetPersistentEnv(nsCString& aStorage,
   (void)PR_SetEnv(aStorage.get());
 }
 
-const Json::Value* FerifoxConfig::Resolve(const nsACString& aPath) const {
+bool FerifoxConfig::IsLoaded() const {
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  return mLoaded;
+}
+
+const Json::Value* FerifoxConfig::ResolveNoLock(const nsACString& aPath) const {
   if (!mLoaded) {
     return nullptr;
   }
@@ -231,16 +330,22 @@ const Json::Value* FerifoxConfig::Resolve(const nsACString& aPath) const {
   return current;
 }
 
-Maybe<bool> FerifoxConfig::GetBool(const nsACString& aPath) const {
-  const Json::Value* val = Resolve(aPath);
+Maybe<bool> FerifoxConfig::GetBoolNoLock(const nsACString& aPath) const {
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isBool()) {
     return Nothing();
   }
   return Some(val->asBool());
 }
 
+Maybe<bool> FerifoxConfig::GetBool(const nsACString& aPath) const {
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  return GetBoolNoLock(aPath);
+}
+
 Maybe<int32_t> FerifoxConfig::GetInt32(const nsACString& aPath) const {
-  const Json::Value* val = Resolve(aPath);
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isInt()) {
     return Nothing();
   }
@@ -248,15 +353,26 @@ Maybe<int32_t> FerifoxConfig::GetInt32(const nsACString& aPath) const {
 }
 
 Maybe<uint32_t> FerifoxConfig::GetUint32(const nsACString& aPath) const {
-  const Json::Value* val = Resolve(aPath);
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isUInt()) {
     return Nothing();
   }
   return Some(val->asUInt());
 }
 
+Maybe<uint64_t> FerifoxConfig::GetUint64(const nsACString& aPath) const {
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  const Json::Value* val = ResolveNoLock(aPath);
+  if (!val || !val->isUInt64()) {
+    return Nothing();
+  }
+  return Some(val->asUInt64());
+}
+
 Maybe<double> FerifoxConfig::GetDouble(const nsACString& aPath) const {
-  const Json::Value* val = Resolve(aPath);
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isDouble()) {
     return Nothing();
   }
@@ -265,7 +381,8 @@ Maybe<double> FerifoxConfig::GetDouble(const nsACString& aPath) const {
 
 bool FerifoxConfig::GetString(const nsACString& aPath,
                               nsAString& aResult) const {
-  const Json::Value* val = Resolve(aPath);
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isString()) {
     return false;
   }
@@ -276,7 +393,8 @@ bool FerifoxConfig::GetString(const nsACString& aPath,
 
 bool FerifoxConfig::GetStringList(const nsACString& aPath,
                                   nsTArray<nsString>& aResult) const {
-  const Json::Value* val = Resolve(aPath);
+  StaticMutexAutoLock lock(sFerifoxConfigMutex);
+  const Json::Value* val = ResolveNoLock(aPath);
   if (!val || !val->isArray()) {
     return false;
   }

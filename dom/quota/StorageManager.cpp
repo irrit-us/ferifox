@@ -14,6 +14,7 @@
 #include "js/TypeDecls.h"
 #include "mozilla/Attributes.h"
 #include "mozilla/ErrorResult.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/Mutex.h"
 #include "mozilla/RefPtr.h"
@@ -59,6 +60,45 @@ using namespace mozilla::dom::quota;
 namespace mozilla::dom {
 
 namespace {
+
+template <typename OptionalUint64>
+void SetOptionalUint64(OptionalUint64& aField, uint64_t aValue) {
+  (aField.WasPassed() ? aField.Value() : aField.Construct()) = aValue;
+}
+
+void ApplyFerifoxStorageEstimate(StorageEstimate& aEstimate) {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return;
+  }
+  auto quota = cfg->GetUint64("storage.estimate.quota"_ns);
+  auto usage = cfg->GetUint64("storage.estimate.usage"_ns);
+  if (quota) {
+    SetOptionalUint64(aEstimate.mQuota, *quota);
+    if (aEstimate.mUsage.WasPassed() && aEstimate.mUsage.Value() > *quota) {
+      aEstimate.mUsage.Value() = *quota;
+    }
+  }
+  if (usage) {
+    uint64_t reportedUsage = *usage;
+    if (aEstimate.mQuota.WasPassed() &&
+        reportedUsage > aEstimate.mQuota.Value()) {
+      reportedUsage = aEstimate.mQuota.Value();
+    }
+    SetOptionalUint64(aEstimate.mUsage, reportedUsage);
+  }
+}
+
+void ApplyFerifoxPersisted(bool& aPersisted) {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return;
+  }
+
+  if (auto persisted = cfg->GetBool("storage.persisted"_ns)) {
+    aPersisted = *persisted;
+  }
+}
 
 // This class is used to get quota usage, request persist and check persisted
 // status callbacks.
@@ -477,6 +517,8 @@ nsresult RequestResolver::GetStorageEstimate(nsIVariant* aResult) {
   MOZ_ALWAYS_SUCCEEDS(
       estimateResult->GetLimit(&mStorageEstimate.mQuota.Construct()));
 
+  ApplyFerifoxStorageEstimate(mStorageEstimate);
+
   return NS_OK;
 }
 
@@ -492,6 +534,7 @@ nsresult RequestResolver::GetPersisted(nsIVariant* aResult) {
     MOZ_ASSERT(dataType == nsIDataType::VTYPE_VOID);
 
     mPersisted = true;
+    ApplyFerifoxPersisted(mPersisted);
     return NS_OK;
   }
 
@@ -504,6 +547,7 @@ nsresult RequestResolver::GetPersisted(nsIVariant* aResult) {
   }
 
   mPersisted = persisted;
+  ApplyFerifoxPersisted(mPersisted);
   return NS_OK;
 }
 

@@ -671,6 +671,17 @@ export class SpecialPowersChild extends JSWindowActorChild {
     return bindDOMWindowUtils(Cu.unwaiveXrays(aWindow));
   }
 
+  setFerifoxConfigForTesting(aJson) {
+    const utils = Cc["@mozilla.org/ferifox/test-utils;1"].getService(
+      Ci.nsIFerifoxTestUtils
+    );
+    if (aJson) {
+      utils.setConfigForTesting(aJson);
+    } else {
+      utils.clearConfigForTesting();
+    }
+  }
+
   async toggleMuteState(aMuted, aWindow) {
     let actor = aWindow
       ? aWindow.windowGlobalChild.getActor("SpecialPowers")

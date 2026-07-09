@@ -7,15 +7,19 @@
 #include "nsComputedDOMStyle.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include "AnchorPositioningUtils.h"
 #include "NonCustomCSSPropertyId.h"
 #include "PseudoStyleType.h"
 #include "mozilla/AppUnits.h"
+#include "mozilla/Casting.h"
 #include "mozilla/ComputedStyle.h"
 #include "mozilla/ComputedStyleInlines.h"
 #include "mozilla/EffectSet.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/FontPropertyTypes.h"
+#include "mozilla/HashFunctions.h"
 #include "mozilla/IntegerRange.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/PresShell.h"
@@ -57,6 +61,52 @@
 
 using namespace mozilla;
 using namespace mozilla::dom;
+
+static HashNumber GetFerifoxStyleNoiseHash(const Element& aElement,
+                                           uint64_t aSeed, float aPixels) {
+  HashNumber hash = HashGeneric(static_cast<uint32_t>(aSeed),
+                                static_cast<uint32_t>(aSeed >> 32));
+  for (const nsINode* node = &aElement; node; node = node->GetParentNode()) {
+    if (const auto* element = Element::FromNodeOrNull(node)) {
+      const auto* nodeInfo = element->NodeInfo();
+      const nsString& localName = nodeInfo->LocalName();
+      hash = AddToHash(
+          hash, nodeInfo->NamespaceID(),
+          mozilla::HashString(localName.BeginReading(), localName.Length()));
+
+      nsAutoString id;
+      if (element->GetAttr(nsGkAtoms::id, id)) {
+        hash = AddToHash(hash,
+                         mozilla::HashString(id.BeginReading(), id.Length()));
+      }
+    } else {
+      hash = AddToHash(hash, node->NodeType());
+    }
+  }
+  return AddToHash(hash, BitwiseCast<uint32_t>(aPixels));
+}
+
+static float MaybeApplyFerifoxStylePixelNoise(const Element* aElement,
+                                              float aPixels) {
+  auto seed = FerifoxConfig::GetLayoutNoiseSeed();
+  if (!seed || !aElement || !std::isfinite(aPixels)) {
+    return aPixels;
+  }
+
+  HashNumber hash = GetFerifoxStyleNoiseHash(*aElement, *seed, aPixels);
+  hash = hash * 1103515245 + 12345;
+
+  int32_t halfPixel = AppUnitsPerCSSPixel() / 2;
+  int32_t delta =
+      static_cast<int32_t>(hash % static_cast<uint32_t>(2 * halfPixel + 1)) -
+      halfPixel;
+  if (!delta) {
+    delta = hash & 1 ? 1 : -1;
+  }
+
+  float noisy = aPixels + static_cast<float>(delta) / AppUnitsPerCSSPixel();
+  return aPixels >= 0.0f && noisy < 0.0f ? -noisy : noisy;
+}
 
 /*
  * This is the implementation of the readonly CSSStyleDeclaration that is
@@ -1349,7 +1399,9 @@ already_AddRefed<nsROCSSPrimitiveValue> nsComputedDOMStyle::PixelsToCSSValue(
 void nsComputedDOMStyle::SetValueToPixels(nsROCSSPrimitiveValue* aValue,
                                           float aPixels) {
   MOZ_ASSERT(mComputedStyle);
-  aValue->SetPixels(mComputedStyle->EffectiveZoom().Unzoom(aPixels));
+  float pixels = mComputedStyle->EffectiveZoom().Unzoom(aPixels);
+  pixels = MaybeApplyFerifoxStylePixelNoise(mElement, pixels);
+  aValue->SetPixels(pixels);
 }
 
 already_AddRefed<CSSValue> nsComputedDOMStyle::DoGetMozOsxFontSmoothing() {

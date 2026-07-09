@@ -10,6 +10,8 @@
 #include "nsString.h"
 #include "nsTArray.h"
 
+#include <cstdint>
+
 namespace Json {
 class Value;
 }
@@ -19,12 +21,16 @@ namespace mozilla {
 class FerifoxConfig {
  public:
   static FerifoxConfig* GetSingleton();
+  static void SetConfigForTesting(const nsACString& aJson);
+  static void ClearConfigForTesting();
+  static Maybe<uint64_t> GetLayoutNoiseSeed();
 
-  bool IsLoaded() const { return mLoaded; }
+  bool IsLoaded() const;
 
   Maybe<bool> GetBool(const nsACString& aPath) const;
   Maybe<int32_t> GetInt32(const nsACString& aPath) const;
   Maybe<uint32_t> GetUint32(const nsACString& aPath) const;
+  Maybe<uint64_t> GetUint64(const nsACString& aPath) const;
   Maybe<double> GetDouble(const nsACString& aPath) const;
   bool GetString(const nsACString& aPath, nsAString& aResult) const;
   bool GetStringList(const nsACString& aPath,
@@ -35,12 +41,16 @@ class FerifoxConfig {
   ~FerifoxConfig();
 
   void Load();
+  bool LoadFromJSONString(const nsACString& aContent, const char* aSource);
   void SetPersistentEnv(nsCString& aStorage, const nsACString& aName,
                         const nsACString& aValue);
+  void UpdateCachedValuesNoLock();
 
-  const Json::Value* Resolve(const nsACString& aPath) const;
+  const Json::Value* ResolveNoLock(const nsACString& aPath) const;
+  Maybe<bool> GetBoolNoLock(const nsACString& aPath) const;
 
   static FerifoxConfig* sSingleton;
+  static nsCString sTestingConfigJson;
 
   UniquePtr<Json::Value> mRoot;
   nsCString mTimeZoneEnv;

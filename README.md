@@ -91,18 +91,3 @@ DEVELOPER_OPTIONS=1 CARGO_BUILD_JOBS=1 \
 The runnable Windows archive is written to `obj-x86_64-pc-windows-gnu/dist/ferifox-152.0.4.en-US.win64.zip`. The launcher is `obj-x86_64-pc-windows-gnu/dist/ferifox/ferifox.exe` and requires the DLLs and resources from that zip.
 
 [Firefox](https://firefox.com/) is a fast, reliable and private web browser from the non-profit [Mozilla organization](https://mozilla.org/).
-
-### Contributing
-
-To learn how to contribute to Firefox read the [Firefox Contributors' Quick Reference document](https://firefox-source-docs.mozilla.org/contributing/contribution_quickref.html).
-
-We use [bugzilla.mozilla.org](https://bugzilla.mozilla.org/) as our issue tracker, please file bugs there.
-
-### Resources
-
-* [Firefox Source Docs](https://firefox-source-docs.mozilla.org/) is our primary documentation repository
-* Nightly development builds can be downloaded from [Firefox Nightly page](https://www.mozilla.org/firefox/channel/desktop/#nightly)
-
-If you have a question about developing Firefox, and can't find the solution
-on [Firefox Source Docs](https://firefox-source-docs.mozilla.org/), you can try asking your question on Matrix at
-chat.mozilla.org in the [Introduction channel](https://chat.mozilla.org/#/room/#introduction:mozilla.org).

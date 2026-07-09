@@ -33,6 +33,7 @@
 #include "mozilla/CheckedInt.h"
 #include "mozilla/CycleCollectedJSRuntime.h"
 #include "mozilla/DebugOnly.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/FilterInstance.h"
 #include "mozilla/GeckoBindings.h"
 #include "mozilla/Logging.h"
@@ -139,6 +140,40 @@ using namespace mozilla::layers;
 static mozilla::LazyLogModule gFingerprinterDetection("FingerprinterDetection");
 
 namespace mozilla::dom {
+
+static uint32_t GetCanvasNoiseSeed() {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return 0;
+  }
+  auto seed = cfg->GetUint32("canvas.noiseSeed"_ns);
+  return seed ? *seed : 0;
+}
+
+static void FerifoxRandomizePixels(uint8_t* aData, uint32_t aWidth,
+                                   uint32_t aHeight, uint32_t aStride,
+                                   uint32_t aSeed, uint32_t aOriginX = 0,
+                                   uint32_t aOriginY = 0) {
+  if (!aSeed) return;
+  for (uint32_t y = 0; y < aHeight; ++y) {
+    for (uint32_t x = 0; x < aWidth; ++x) {
+      uint32_t offset = y * aStride + x * 4;
+      uint32_t state = aSeed ^ ((aOriginX + x) * 0x85ebca6bu) ^
+                       ((aOriginY + y) * 0xc2b2ae35u);
+      state = state * 1103515245 + 12345;
+      uint32_t channel = (state >> 3) & 3;
+      if (channel == 3) continue;
+      uint8_t& pixel = aData[offset + channel];
+      if (pixel == 0) continue;
+      uint32_t dir = (state >> 8) & 1;
+      if (dir && pixel < 255) {
+        ++pixel;
+      } else if (!dir && pixel > 1) {
+        --pixel;
+      }
+    }
+  }
+}
 
 // Cap sigma to avoid overly large temp surfaces.
 const Float SIGMA_MAX = 100;
@@ -2293,6 +2328,12 @@ UniquePtr<uint8_t[]> CanvasRenderingContext2D::GetImageBuffer(
           out_imageSize->width, out_imageSize->height,
           out_imageSize->width * out_imageSize->height * 4,
           SurfaceFormat::A8R8G8B8_UINT32);
+    }
+    uint32_t noiseSeed = GetCanvasNoiseSeed();
+    if (noiseSeed) {
+      FerifoxRandomizePixels(ret.get(), out_imageSize->width,
+                             out_imageSize->height, out_imageSize->width * 4,
+                             noiseSeed);
     }
   }
 
@@ -6683,6 +6724,7 @@ nsresult CanvasRenderingContext2D::GetImageDataArray(
   //
   // Note that we don't need to clone if we will use the place holder because
   // the place holder doesn't use actual image data.
+  uint32_t noiseSeed = GetCanvasNoiseSeed();
   if (extractionBehavior == CanvasUtils::ImageExtraction::Randomize) {
     if (readback) {
       readback = CreateDataSourceSurfaceByCloning(readback);
@@ -6739,6 +6781,12 @@ nsresult CanvasRenderingContext2D::GetImageDataArray(
       UnpremultiplyData(src, srcStride, SurfaceFormat::A8R8G8B8_UINT32, dst,
                         aWidth * 4, SurfaceFormat::R8G8B8A8,
                         dstWriteRect.Size());
+    }
+
+    if (noiseSeed) {
+      FerifoxRandomizePixels(dst, dstWriteRect.Width(), dstWriteRect.Height(),
+                             aWidth * 4, noiseSeed, srcReadRect.x,
+                             srcReadRect.y);
     }
   } while (false);
 

@@ -5,11 +5,11 @@
 // Needs to be first.
 #include "Navigator.h"
 
-#include "FerifoxConfig.h"
 #include "Geolocation.h"
 #include "base/basictypes.h"
 #include "mozilla/Components.h"
 #include "mozilla/ContentBlockingNotifier.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/MemoryReporting.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/StaticPrefs_dom.h"
@@ -336,6 +336,15 @@ void Navigator::GetAppCodeName(nsAString& aAppCodeName, ErrorResult& aRv) {
 
 void Navigator::GetAppVersion(nsAString& aAppVersion, CallerType aCallerType,
                               ErrorResult& aRv) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.appVersion"_ns, val);
+    if (!val.IsEmpty()) {
+      aAppVersion = std::move(val);
+      return;
+    }
+  }
+
   nsCOMPtr<Document> doc = mWindow->GetExtantDoc();
 
   nsresult rv = GetAppVersion(

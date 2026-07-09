@@ -17,6 +17,29 @@ EXPORTS.mozilla += [
     "FerifoxConfig.h",
 ]
 
+if CONFIG["ENABLE_TESTS"]:
+    UNIFIED_SOURCES += [
+        "FerifoxTestUtils.cpp",
+    ]
+
+    EXPORTS += [
+        "FerifoxTestUtils.h",
+    ]
+
+    EXPORTS.mozilla += [
+        "FerifoxTestUtils.h",
+    ]
+
+    XPIDL_SOURCES += [
+        "nsIFerifoxTestUtils.idl",
+    ]
+
+    XPCOM_MANIFESTS += [
+        "components.conf",
+    ]
+
+    XPIDL_MODULE = "ferifox"
+
 FINAL_LIBRARY = "xul"
 
 USE_LIBS += [

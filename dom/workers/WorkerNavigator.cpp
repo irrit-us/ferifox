@@ -5,7 +5,7 @@
 #include "mozilla/dom/WorkerNavigator.h"
 
 #include "ErrorList.h"
-#include "FerifoxConfig.h"
+#include "mozilla/FerifoxConfig.h"
 #include "MainThreadUtils.h"
 #include "RuntimeService.h"
 #include "WorkerRunnable.h"
@@ -167,6 +167,24 @@ void WorkerNavigator::GetProduct(nsString& aProduct) const {
   aProduct.AssignLiteral("Gecko");
 }
 
+void WorkerNavigator::GetLanguage(nsString& aLanguage) const {
+  nsTArray<nsString> languages;
+  GetLanguages(languages);
+  MOZ_ASSERT(languages.Length() >= 1);
+  aLanguage.Assign(languages[0]);
+}
+
+void WorkerNavigator::GetLanguages(nsTArray<nsString>& aLanguages) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    cfg->GetStringList("navigator.languages"_ns, aLanguages);
+    if (!aLanguages.IsEmpty()) {
+      return;
+    }
+  }
+
+  aLanguages = mProperties.mLanguages.Clone();
+}
+
 void WorkerNavigator::SetLanguages(const nsTArray<nsString>& aLanguages) {
   WorkerNavigator_Binding::ClearCachedLanguagesValue(this);
   mProperties.mLanguages = aLanguages.Clone();
@@ -175,6 +193,15 @@ void WorkerNavigator::SetLanguages(const nsTArray<nsString>& aLanguages) {
 void WorkerNavigator::GetAppVersion(nsString& aAppVersion,
                                     CallerType aCallerType,
                                     ErrorResult& aRv) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.appVersion"_ns, val);
+    if (!val.IsEmpty()) {
+      aAppVersion = std::move(val);
+      return;
+    }
+  }
+
   WorkerPrivate* workerPrivate = GetCurrentThreadWorkerPrivate();
   MOZ_ASSERT(workerPrivate);
 
@@ -197,6 +224,15 @@ void WorkerNavigator::GetAppVersion(nsString& aAppVersion,
 
 void WorkerNavigator::GetPlatform(nsString& aPlatform, CallerType aCallerType,
                                   ErrorResult& aRv) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.platform"_ns, val);
+    if (!val.IsEmpty()) {
+      aPlatform = std::move(val);
+      return;
+    }
+  }
+
   WorkerPrivate* workerPrivate = GetCurrentThreadWorkerPrivate();
   MOZ_ASSERT(workerPrivate);
 
