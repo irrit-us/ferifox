@@ -1,0 +1,438 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Version tag to release
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x86_64:
+    name: Linux x86_64
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      MOZ_AUTOMATION: "1"
+      MOZ_FETCHES_DIR: ${{ github.workspace }}/fetches
+      MOZ_UPDATE_CHANNEL: release
+      SCCACHE_DISABLE: "1"
+      FERIFOX_GLS_API_KEY: ${{ secrets.FERIFOX_GLS_API_KEY }}
+      FERIFOX_SAFEBROWSING_API_KEY: ${{ secrets.FERIFOX_SAFEBROWSING_API_KEY }}
+      FERIFOX_MOZILLA_API_KEY: ${{ secrets.FERIFOX_MOZILLA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Validate tag
+        shell: bash
+        run: |
+          case "$VERSION" in
+            v*.*.*) ;;
+            *) echo "Invalid release tag: $VERSION" >&2; exit 1 ;;
+          esac
+
+      - name: Install host packages
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aria2 curl git python3 python3-pip python3-venv python3-setuptools tar unzip xz-utils zip zstd
+
+      - name: Prepare release inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          sudo mkdir -p /builds
+          write_key() {
+            printf "%s\n" "${1:-ferifox-release-placeholder}" | sudo tee "$2" >/dev/null
+          }
+          write_key "$FERIFOX_GLS_API_KEY" /builds/gls-gapi.data
+          write_key "$FERIFOX_SAFEBROWSING_API_KEY" /builds/sb-gapi.data
+          write_key "$FERIFOX_MOZILLA_API_KEY" /builds/mozilla-desktop-geoloc-api.key
+
+      - name: Fetch Linux clang
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          timeout 60m bash ./.github/scripts/fetch-public-toolchain.sh toolchain-linux64-clang "$MOZ_FETCHES_DIR"
+
+      - name: Fetch Linux Rust toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          timeout 30m bash ./.github/scripts/fetch-public-toolchain.sh toolchain-linux64-rust "$MOZ_FETCHES_DIR"
+
+      - name: Fetch Linux bindgen and symbols
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          timeout 20m bash ./.github/scripts/fetch-public-toolchain.sh toolchain-linux64-cbindgen "$MOZ_FETCHES_DIR"
+          timeout 20m bash ./.github/scripts/fetch-public-toolchain.sh toolchain-linux64-dump_syms "$MOZ_FETCHES_DIR"
+
+      - name: Fetch Linux build utilities
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          timeout 20m bash ./.github/scripts/fetch-public-toolchain.sh toolchain-linux64-nasm "$MOZ_FETCHES_DIR"
+          timeout 20m bash ./.github/scripts/fetch-public-toolchain.sh toolchain-linux64-node "$MOZ_FETCHES_DIR"
+          timeout 20m bash ./.github/scripts/fetch-public-toolchain.sh toolchain-linux64-pkgconf "$MOZ_FETCHES_DIR"
+
+      - name: Fetch Linux sysroot
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          timeout 20m bash ./.github/scripts/fetch-public-toolchain.sh toolchain-sysroot-x86_64-linux-gnu "$MOZ_FETCHES_DIR"
+
+      - name: Fetch Linux WASI sysroot
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          timeout 20m bash ./.github/scripts/fetch-public-toolchain.sh toolchain-sysroot-wasm32-wasi "$MOZ_FETCHES_DIR"
+
+      - name: Fetch Linux ONNX Runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          timeout 30m bash ./.github/scripts/fetch-public-toolchain.sh toolchain-onnxruntime-x86_64-linux-gnu "$MOZ_FETCHES_DIR"
+
+      - name: Write mozconfig
+        shell: bash
+        run: |
+          mozconfig="$PWD/.github/mozconfig-linux64-release"
+
+          cat > "$mozconfig" <<'EOF'
+          . "$topsrcdir/browser/config/mozconfigs/linux64/common-opt"
+          mk_add_options "export PATH=$MOZ_FETCHES_DIR/clang/bin:$MOZ_FETCHES_DIR/rustc/bin:$MOZ_FETCHES_DIR/nasm:$MOZ_FETCHES_DIR/node/bin:$MOZ_FETCHES_DIR/cbindgen:$MOZ_FETCHES_DIR/dump_syms:$MOZ_FETCHES_DIR/pkgconf/bin:$PATH"
+          . "$topsrcdir/build/mozconfig.common.override"
+          EOF
+          sed -i 's/^          //' "$mozconfig"
+          echo "MOZCONFIG=$mozconfig" >> "$GITHUB_ENV"
+
+      - name: Build
+        shell: bash
+        run: ./mach build
+
+      - name: Package
+        shell: bash
+        run: ./mach package
+
+      - name: Stage assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          objdir="$(find . -maxdepth 1 -type d -name 'obj-*-linux-gnu' | sort | head -n 1)"
+          test -n "$objdir"
+
+          asset_dir="$PWD/release-assets"
+          mkdir -p "$asset_dir"
+
+          linux_bin="$objdir/dist/bin/ferifox"
+          linux_pkg="$(find "$objdir/dist" -maxdepth 1 -name 'ferifox-*.linux-x86_64.tar.xz' | sort | tail -n 1)"
+
+          test -f "$linux_bin"
+          test -f "$linux_pkg"
+
+          install -m 755 "$linux_bin" "$asset_dir/ferifox-$VERSION-linux-x86_64"
+          cp "$linux_pkg" "$asset_dir/ferifox-$VERSION-linux-x86_64.tar.xz"
+
+          cd "$asset_dir"
+          sha256sum "ferifox-$VERSION-linux-x86_64" > "ferifox-$VERSION-linux-x86_64.sha256"
+          sha256sum "ferifox-$VERSION-linux-x86_64.tar.xz" > "ferifox-$VERSION-linux-x86_64.tar.xz.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64-release-assets
+          path: release-assets/*
+          if-no-files-found: error
+
+  windows-x86_64:
+    name: Windows x86_64
+    runs-on: windows-2022
+    env:
+      VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      MOZ_AUTOMATION: "1"
+      MOZILLABUILD: C:\mozilla-build
+      MOZ_UPDATE_CHANNEL: release
+      SCCACHE_DISABLE: "1"
+      FERIFOX_GLS_API_KEY: ${{ secrets.FERIFOX_GLS_API_KEY }}
+      FERIFOX_SAFEBROWSING_API_KEY: ${{ secrets.FERIFOX_SAFEBROWSING_API_KEY }}
+      FERIFOX_MOZILLA_API_KEY: ${{ secrets.FERIFOX_MOZILLA_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Validate tag
+        shell: bash
+        run: |
+          case "$VERSION" in
+            v*.*.*) ;;
+            *) echo "Invalid release tag: $VERSION" >&2; exit 1 ;;
+          esac
+
+      - name: Install host packages
+        shell: bash
+        run: |
+          choco install -y 7zip nasm nsis mozillabuild unzip
+          ./mach --no-interactive bootstrap --application-choice browser
+
+          for tool in git tar unzip xargs; do
+            tool_path="$(command -v "$tool")"
+            test -n "$tool_path"
+            tool_path="$(cygpath -w "$tool_path")"
+            printf "%s=%s\n" "${tool^^}" "$tool_path" >> "$GITHUB_ENV"
+          done
+
+      - name: Prepare release inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          api_dir="$PWD/release-api-keys"
+          mkdir -p "$api_dir"
+          write_key() {
+            printf "%s\n" "${1:-ferifox-release-placeholder}" > "$2"
+          }
+          write_key "$FERIFOX_GLS_API_KEY" "$api_dir/gls-gapi.data"
+          write_key "$FERIFOX_SAFEBROWSING_API_KEY" "$api_dir/sb-gapi.data"
+          write_key "$FERIFOX_MOZILLA_API_KEY" "$api_dir/mozilla-desktop-geoloc-api.key"
+          echo "APIKEYDIR=$api_dir" >> "$GITHUB_ENV"
+
+      - name: Fetch Win64 release toolchains
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          topsrcdir="$PWD"
+          fetches_dir="$PWD/fetches"
+          echo "MOZ_FETCHES_DIR=$fetches_dir" >> "$GITHUB_ENV"
+
+          mkdir -p "$fetches_dir"
+          pushd "$fetches_dir"
+          (
+            unset MOZ_AUTOMATION
+            "$topsrcdir/mach" artifact toolchain --retry 3 --from-build \
+              win64-clang \
+              win64-rust \
+              win64-rust-size \
+              win64-cbindgen \
+              win64-dump_syms \
+              win64-nasm \
+              win64-node \
+              win64-mozmake \
+              win64-winchecksec \
+              win64-7zz \
+              win64-upx \
+              dxc-x86_64-pc-windows-msvc \
+              winappsdk-x86_64-pc-windows-msvc \
+              sysroot-wasm32-wasi \
+              fetch-windows-rs \
+              onnxruntime-x86_64-windows-msvc
+          )
+          popd
+
+      - name: Write mozconfig
+        shell: bash
+        run: |
+          mozconfig="$PWD/.github/mozconfig-win64-msvc-release"
+          make_path_native_parts=(
+            "$(cygpath -m "$PWD/fetches/clang/bin")"
+            "$(cygpath -m "$PWD/fetches/rustc/bin")"
+            "$(cygpath -m "$PWD/fetches/nasm")"
+            "$(cygpath -m "$PWD/fetches/node/bin")"
+            "$(cygpath -m "$PWD/fetches/cbindgen")"
+            "$(cygpath -m "$PWD/fetches/dump_syms")"
+            "$(cygpath -m "$PWD/fetches/mozmake")"
+            "$(cygpath -m "$PWD/fetches/winchecksec")"
+            "$(cygpath -m "$PWD/fetches/7zz")"
+            "$(cygpath -m "$PWD/fetches/upx/bin")"
+            'C:/mozilla-build/msys2/usr/bin'
+            'C:/mozilla-build/bin'
+            'C:/PROGRA~1/Git/usr/bin'
+            'C:/PROGRA~1/Git/mingw64/bin'
+            'C:/PROGRA~1/Git/bin'
+            'C:/Windows/system32'
+            'C:/Windows'
+          )
+          make_path_native=''
+          for part in "${make_path_native_parts[@]}"; do
+            if [ -n "$make_path_native" ]; then
+              make_path_native+='\;'
+            fi
+            make_path_native+="$part"
+          done
+          dollar='$'
+          echo "MOZCONFIG=$mozconfig" >> "$GITHUB_ENV"
+          cat > "$mozconfig" <<EOF
+          . "${dollar}topsrcdir/build/mozconfig.win-common"
+          . "${dollar}topsrcdir/browser/config/mozconfigs/win64/common-win64"
+          . "${dollar}topsrcdir/browser/config/mozconfigs/win64/common-opt"
+          mk_add_options "export PATH=${dollar}MOZ_FETCHES_DIR/clang/bin:${dollar}MOZ_FETCHES_DIR/rustc/bin:${dollar}MOZ_FETCHES_DIR/nasm:${dollar}MOZ_FETCHES_DIR/node/bin:${dollar}MOZ_FETCHES_DIR/cbindgen:${dollar}MOZ_FETCHES_DIR/dump_syms:${dollar}MOZ_FETCHES_DIR/mozmake:${dollar}MOZ_FETCHES_DIR/winchecksec:${dollar}MOZ_FETCHES_DIR/7zz:${dollar}MOZ_FETCHES_DIR/upx/bin:${dollar}PATH"
+          mk_add_options "MOZ_MAKE_FLAGS=PATH=$make_path_native"
+          . "${dollar}topsrcdir/build/mozconfig.common.override"
+          EOF
+          sed -i 's/^          //' "$mozconfig"
+
+      - name: Build
+        shell: pwsh
+        run: |
+          $topsrcdir = (Get-Location).Path.Replace('\', '/')
+          & "$env:MOZILLABUILD/start-shell.bat" -no-start -defterm -c "cd `"$topsrcdir`" && ./mach build -j4"
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $topsrcdir = (Get-Location).Path.Replace('\', '/')
+          & "$env:MOZILLABUILD/start-shell.bat" -no-start -defterm -c "cd `"$topsrcdir`" && ./mach package"
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          if (-not (Test-Path 'obj-x86_64-pc-windows-msvc/dist/ferifox/ferifox.exe')) {
+            throw 'Missing packaged Windows binary'
+          }
+
+          $zip = Get-ChildItem 'obj-x86_64-pc-windows-msvc/dist' -Filter 'ferifox-*.win64.zip' -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $zip) {
+            throw 'Missing packaged Windows zip'
+          }
+
+      - name: Stage assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          asset_dir="$PWD/release-assets"
+          mkdir -p "$asset_dir"
+
+          windows_exe="$(
+            find obj-x86_64-pc-windows-msvc/dist -maxdepth 1 -type f \
+              \( -name 'ferifox-*.win64.installer.exe' -o -name 'target.installer.exe' -o -name '*Setup*.exe' \) \
+              | sort | tail -n 1
+          )"
+          if [ -z "$windows_exe" ]; then
+            windows_exe="obj-x86_64-pc-windows-msvc/dist/ferifox/ferifox.exe"
+          fi
+          windows_zip="$(find obj-x86_64-pc-windows-msvc/dist -maxdepth 1 -name 'ferifox-*.win64.zip' | sort | tail -n 1)"
+
+          test -f "$windows_exe"
+          test -f "$windows_zip"
+
+          cp "$windows_exe" "$asset_dir/ferifox-$VERSION-windows-x86_64.exe"
+          cp "$windows_zip" "$asset_dir/ferifox-$VERSION-windows-x86_64.zip"
+
+          cd "$asset_dir"
+          sha256sum "ferifox-$VERSION-windows-x86_64.exe" > "ferifox-$VERSION-windows-x86_64.exe.sha256"
+          sha256sum "ferifox-$VERSION-windows-x86_64.zip" > "ferifox-$VERSION-windows-x86_64.zip.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64-release-assets
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish:
+    name: Publish release
+    needs:
+      - linux-x86_64
+      - windows-x86_64
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "*-release-assets"
+          path: release-assets
+          merge-multiple: true
+
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import datetime
+          import os
+          import pathlib
+          import re
+
+          version = os.environ["VERSION"]
+          changelog = pathlib.Path("CHANGELOG.md")
+          lines = changelog.read_text().splitlines() if changelog.exists() else []
+          header = re.compile(rf"^## {re.escape(version)} - .+$")
+
+          start = next((i for i, line in enumerate(lines) if header.match(line)), None)
+          if start is None:
+              today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+              body = (
+                  "# Changelog\n\n"
+                  f"## {version} - {today}\n\n"
+                  "Automated Ferifox release.\n\n"
+                  "### Verification\n\n"
+                  "- Linux x86_64 workflow build and package completed.\n"
+                  "- Windows x86_64 workflow build and package completed.\n"
+              )
+          else:
+              end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+              body = "# Changelog\n\n" + "\n".join(lines[start:end]).rstrip() + "\n"
+
+          pathlib.Path("release-notes.md").write_text(body)
+          PY
+
+      - name: Publish GitHub release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          expected=(
+            "ferifox-$VERSION-linux-x86_64"
+            "ferifox-$VERSION-linux-x86_64.sha256"
+            "ferifox-$VERSION-linux-x86_64.tar.xz"
+            "ferifox-$VERSION-linux-x86_64.tar.xz.sha256"
+            "ferifox-$VERSION-windows-x86_64.exe"
+            "ferifox-$VERSION-windows-x86_64.exe.sha256"
+            "ferifox-$VERSION-windows-x86_64.zip"
+            "ferifox-$VERSION-windows-x86_64.zip.sha256"
+          )
+
+          for asset in "${expected[@]}"; do
+            test -f "release-assets/$asset"
+          done
+
+          diff -u \
+            <(printf "%s\n" "${expected[@]}" | sort) \
+            <(find release-assets -maxdepth 1 -type f -printf "%f\n" | sort)
+
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            gh release edit "$VERSION" --title "Ferifox $VERSION" --notes-file release-notes.md --prerelease=false --draft=false --latest
+            gh release upload "$VERSION" release-assets/* --clobber
+          else
+            gh release create "$VERSION" release-assets/* --title "Ferifox $VERSION" --notes-file release-notes.md --verify-tag --latest
+          fi

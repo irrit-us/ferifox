@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.2.0 - 2026-07-09
+
+Second Ferifox stealth hardening release based on Firefox 152.0.4.
+
+### Added
+
+- Added computed-style coverage for Ferifox layout pixel noise.
+- Added automated GitHub release packaging for full-feature Linux x86_64 and Win64 MSVC assets using the existing `v0.1.0` asset naming scheme.
+
+### Changed
+
+- Cached Ferifox layout noise seed lookup in `FerifoxConfig`.
+- Adjusted layout noise hashing to avoid sibling index scans while preserving stable per-element variation.
+- Kept WebGL persona texture unit limits internally consistent across combined and per-stage caps.
+
+### Fixed
+
+- Fixed computed style reporting so Ferifox layout noise applies consistently to CSS pixel dimensions.
+- Fixed WebGL texture unit persona caps that could expose impossible combined and per-stage values.
+
+### Verification
+
+- `./mach format`
+- `./mach build binaries`
+- `git diff --check`
+
+### Notes
+
+- Release assets remain consistent with `v0.1.0`: Linux binary, Linux tarball, Windows executable or installer, Windows zip, and one `.sha256` file for each.
+
 ## v0.1.0 - 2026-07-07
 
 Initial Ferifox stealth release based on Firefox 152.0.4.
