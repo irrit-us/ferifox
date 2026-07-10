@@ -51,14 +51,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          upload_dir="$PWD/upload-dir"
 
           sudo mkdir -p /builds
+          mkdir -p "$upload_dir"
           write_key() {
             printf "%s\n" "${1:-ferifox-release-placeholder}" | sudo tee "$2" >/dev/null
           }
           write_key "$FERIFOX_GLS_API_KEY" /builds/gls-gapi.data
           write_key "$FERIFOX_SAFEBROWSING_API_KEY" /builds/sb-gapi.data
           write_key "$FERIFOX_MOZILLA_API_KEY" /builds/mozilla-desktop-geoloc-api.key
+          echo "UPLOAD_DIR=$upload_dir" >> "$GITHUB_ENV"
 
       - name: Fetch Linux clang
         shell: bash
@@ -127,7 +130,20 @@ jobs:
 
       - name: Build
         shell: bash
-        run: ./mach build
+        run: |
+          set -euo pipefail
+
+          heartbeat() {
+            while sleep 60; do
+              echo "Linux build heartbeat $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            done
+          }
+
+          heartbeat &
+          heartbeat_pid=$!
+          trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
+
+          ./mach build
 
       - name: Package
         shell: bash
@@ -208,7 +224,9 @@ jobs:
           set -euo pipefail
 
           api_dir="$PWD/release-api-keys"
+          upload_dir="$(cygpath -m "$PWD/upload-dir")"
           mkdir -p "$api_dir"
+          mkdir -p "$upload_dir"
           write_key() {
             printf "%s\n" "${1:-ferifox-release-placeholder}" > "$2"
           }
@@ -216,6 +234,7 @@ jobs:
           write_key "$FERIFOX_SAFEBROWSING_API_KEY" "$api_dir/sb-gapi.data"
           write_key "$FERIFOX_MOZILLA_API_KEY" "$api_dir/mozilla-desktop-geoloc-api.key"
           echo "APIKEYDIR=$api_dir" >> "$GITHUB_ENV"
+          echo "UPLOAD_DIR=$upload_dir" >> "$GITHUB_ENV"
 
       - name: Fetch Win64 release toolchains
         shell: bash
