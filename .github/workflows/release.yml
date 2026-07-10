@@ -152,7 +152,7 @@ jobs:
         shell: pwsh
         run: |
           $topsrcdir = (Get-Location).Path.Replace('\', '/')
-          & "$env:MOZILLABUILD/start-shell.bat" -no-start -defterm -c "cd `"$topsrcdir`" && ./mach build -j4"
+          & "$env:MOZILLABUILD/start-shell.bat" -no-start -defterm -c "cd `"$topsrcdir`" && ./mach build -j2"
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
