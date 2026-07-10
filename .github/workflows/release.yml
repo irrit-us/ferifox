@@ -122,6 +122,7 @@ jobs:
 
           cat > "$mozconfig" <<'EOF'
           . "$topsrcdir/browser/config/mozconfigs/linux64/common-opt"
+          ac_add_options --disable-tests
           mk_add_options "export PATH=$MOZ_FETCHES_DIR/clang/bin:$MOZ_FETCHES_DIR/rustc/bin:$MOZ_FETCHES_DIR/nasm:$MOZ_FETCHES_DIR/node/bin:$MOZ_FETCHES_DIR/cbindgen:$MOZ_FETCHES_DIR/dump_syms:$MOZ_FETCHES_DIR/pkgconf/bin:$PATH"
           . "$topsrcdir/build/mozconfig.common.override"
           EOF
@@ -305,6 +306,7 @@ jobs:
           . "${dollar}topsrcdir/build/mozconfig.win-common"
           . "${dollar}topsrcdir/browser/config/mozconfigs/win64/common-win64"
           . "${dollar}topsrcdir/browser/config/mozconfigs/win64/common-opt"
+          ac_add_options --disable-tests
           mk_add_options "export PATH=${dollar}MOZ_FETCHES_DIR/clang/bin:${dollar}MOZ_FETCHES_DIR/rustc/bin:${dollar}MOZ_FETCHES_DIR/nasm:${dollar}MOZ_FETCHES_DIR/node/bin:${dollar}MOZ_FETCHES_DIR/cbindgen:${dollar}MOZ_FETCHES_DIR/dump_syms:${dollar}MOZ_FETCHES_DIR/mozmake:${dollar}MOZ_FETCHES_DIR/winchecksec:${dollar}MOZ_FETCHES_DIR/7zz:${dollar}MOZ_FETCHES_DIR/upx/bin:${dollar}PATH"
           mk_add_options "MOZ_MAKE_FLAGS=PATH=$make_path_native"
           . "${dollar}topsrcdir/build/mozconfig.common.override"
