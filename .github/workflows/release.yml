@@ -143,7 +143,7 @@ jobs:
           heartbeat_pid=$!
           trap 'kill "$heartbeat_pid" 2>/dev/null || true' EXIT
 
-          ./mach build -j2
+          ./mach build -j1 -q
 
       - name: Package
         shell: bash
