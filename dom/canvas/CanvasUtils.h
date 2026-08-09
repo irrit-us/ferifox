@@ -11,6 +11,7 @@
 #include "jsapi.h"
 #include "mozilla/CheckedInt.h"
 #include "mozilla/dom/ToJSValue.h"
+#include "mozilla/gfx/Types.h"
 
 class nsIPrincipal;
 
@@ -23,6 +24,12 @@ class OffscreenCanvas;
 }  // namespace dom
 
 namespace CanvasUtils {
+
+bool IsFerifoxCanvasNoiseEnabled();
+
+void ApplyFerifoxCanvasNoise(uint8_t* aData, uint32_t aWidth, uint32_t aHeight,
+                             uint32_t aStride, gfx::SurfaceFormat aFormat,
+                             uint32_t aOriginX = 0, uint32_t aOriginY = 0);
 
 bool GetCanvasContextType(const nsAString& str,
                           dom::CanvasContextType* const out_type);

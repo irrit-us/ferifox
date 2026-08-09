@@ -29,6 +29,7 @@
 #include "mozilla/dom/BufferSourceBinding.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/GeneratePlaceholderCanvasData.h"
+#include "mozilla/dom/ImageEncoder.h"
 #include "mozilla/dom/ToJSValue.h"
 #include "mozilla/dom/TypedArray.h"
 #include "mozilla/dom/WebGLContextEvent.h"
@@ -44,6 +45,7 @@
 #include "mozilla/layers/TextureClientSharedSurface.h"
 #include "mozilla/layers/WebRenderCanvasRenderer.h"
 #include "mozilla/layers/WebRenderUserData.h"
+#include "nsComponentManagerUtils.h"
 #include "nsContentUtils.h"
 #include "nsDisplayList.h"
 
@@ -1294,13 +1296,25 @@ UniquePtr<uint8_t[]> ClientWebGLContext::GetImageBuffer(
   *out_imageSize = dataSurface->GetSize();
 
   nsRFPService::PotentiallyDumpImage(PrincipalOrNull(), dataSurface);
+  UniquePtr<uint8_t[]> imageBuffer;
   if (aExtractionBehavior == CanvasUtils::ImageExtraction::Randomize) {
-    return gfxUtils::GetImageBufferWithRandomNoise(
+    imageBuffer = gfxUtils::GetImageBufferWithRandomNoise(
         dataSurface, premultAlpha, GetCookieJarSettings(), PrincipalOrNull(),
         out_format);
+  } else {
+    imageBuffer =
+        gfxUtils::GetImageBuffer(dataSurface, premultAlpha, out_format);
   }
 
-  return gfxUtils::GetImageBuffer(dataSurface, premultAlpha, out_format);
+  if (imageBuffer) {
+    CanvasUtils::ApplyFerifoxCanvasNoise(
+        imageBuffer.get(), out_imageSize->width, out_imageSize->height,
+        out_imageSize->width * 4,
+        *out_format == imgIEncoder::INPUT_FORMAT_RGBA
+            ? gfx::SurfaceFormat::R8G8B8A8
+            : gfx::SurfaceFormat::A8R8G8B8_UINT32);
+  }
+  return imageBuffer;
 }
 
 NS_IMETHODIMP
@@ -1308,28 +1322,56 @@ ClientWebGLContext::GetInputStream(
     const char* mimeType, const nsAString& encoderOptions,
     mozilla::CanvasUtils::ImageExtraction extractionBehavior,
     const nsACString& randomizationKey, nsIInputStream** out_stream) {
-  RefPtr<webgl::NotLostData> notLost(mNotLost);
-  if (!notLost) {
+  if (!CanvasUtils::IsFerifoxCanvasNoiseEnabled()) {
+    RefPtr<webgl::NotLostData> notLost(mNotLost);
+    if (!notLost) {
+      return NS_ERROR_FAILURE;
+    }
+
+    gfxAlphaType any;
+    RefPtr<gfx::SourceSurface> snapshot = GetSurfaceSnapshot(&any);
+    if (!snapshot) {
+      return NS_ERROR_FAILURE;
+    }
+
+    RefPtr<gfx::DataSourceSurface> dataSurface = snapshot->GetDataSurface();
+    const auto& premultAlpha = notLost->info.options.premultipliedAlpha;
+
+    nsRFPService::PotentiallyDumpImage(PrincipalOrNull(), dataSurface);
+    if (extractionBehavior == CanvasUtils::ImageExtraction::Randomize) {
+      return gfxUtils::GetInputStreamWithRandomNoise(
+          dataSurface, premultAlpha, mimeType, encoderOptions,
+          GetCookieJarSettings(), PrincipalOrNull(), out_stream);
+    }
+
+    return gfxUtils::GetInputStream(dataSurface, premultAlpha, mimeType,
+                                    encoderOptions, randomizationKey,
+                                    out_stream);
+  }
+
+  nsCString encoderContract("@mozilla.org/image/encoder;2?type=");
+  encoderContract += mimeType;
+  nsCOMPtr<imgIEncoder> encoder = do_CreateInstance(encoderContract.get());
+  if (!encoder) {
     return NS_ERROR_FAILURE;
   }
 
-  // Use GetSurfaceSnapshot() to make sure that appropriate y-flip gets applied
-  gfxAlphaType any;
-  RefPtr<gfx::SourceSurface> snapshot = GetSurfaceSnapshot(&any);
-  if (!snapshot) return NS_ERROR_FAILURE;
-
-  RefPtr<gfx::DataSourceSurface> dataSurface = snapshot->GetDataSurface();
-  const auto& premultAlpha = notLost->info.options.premultipliedAlpha;
-
-  nsRFPService::PotentiallyDumpImage(PrincipalOrNull(), dataSurface);
-  if (extractionBehavior == CanvasUtils::ImageExtraction::Randomize) {
-    return gfxUtils::GetInputStreamWithRandomNoise(
-        dataSurface, premultAlpha, mimeType, encoderOptions,
-        GetCookieJarSettings(), PrincipalOrNull(), out_stream);
+  int32_t format = 0;
+  gfx::IntSize imageSize;
+  UniquePtr<uint8_t[]> imageBuffer =
+      GetImageBuffer(extractionBehavior, &format, &imageSize);
+  if (!imageBuffer) {
+    return NS_ERROR_FAILURE;
   }
 
-  return gfxUtils::GetInputStream(dataSurface, premultAlpha, mimeType,
-                                  encoderOptions, randomizationKey, out_stream);
+  if (extractionBehavior == CanvasUtils::ImageExtraction::Randomize) {
+    return dom::ImageEncoder::GetInputStream(
+        imageSize.width, imageSize.height, imageBuffer.get(), format, encoder,
+        encoderOptions, VoidCString(), out_stream);
+  }
+  return dom::ImageEncoder::GetInputStream(
+      imageSize.width, imageSize.height, imageBuffer.get(), format, encoder,
+      encoderOptions, randomizationKey, out_stream);
 }
 
 // ------------------------- Client WebGL Objects -------------------------

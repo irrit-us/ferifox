@@ -5,6 +5,7 @@
 #include "ContentProcess.h"
 
 #include "js/Initialization.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Preferences.h"
 
 #if defined(XP_MACOSX) && defined(MOZ_SANDBOX)
@@ -180,6 +181,8 @@ void ContentProcess::InfallibleInit(int aArgc, char* aArgv[]) {
   if (NS_FAILED(rv)) {
     MOZ_CRASH("NS_InitXPCOM failed");
   }
+
+  (void)FerifoxConfig::GetSingleton();
 
   // "app-startup" is the name of both the category and the event
   NS_CreateServicesFromCategory("app-startup", nullptr, "app-startup", nullptr);

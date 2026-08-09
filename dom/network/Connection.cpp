@@ -7,10 +7,7 @@
 #include "ConnectionMainThread.h"
 #include "ConnectionWorker.h"
 #include "Constants.h"
-#include "mozilla/FerifoxConfig.h"
-#include "mozilla/Maybe.h"
 #include "mozilla/dom/WorkerPrivate.h"
-#include "nsString.h"
 
 /**
  * We have to use macros here because our leak analysis tool things we are
@@ -19,42 +16,6 @@
 #define CHANGE_EVENT_NAME u"typechange"_ns
 
 namespace mozilla::dom::network {
-
-static Maybe<ConnectionType> ConfiguredConnectionType() {
-  auto* cfg = FerifoxConfig::GetSingleton();
-  if (!cfg) {
-    return Nothing();
-  }
-
-  nsAutoString type;
-  if (!cfg->GetString("navigator.connection.type"_ns, type)) {
-    return Nothing();
-  }
-
-  if (type.EqualsLiteral("cellular")) {
-    return Some(ConnectionType::Cellular);
-  }
-  if (type.EqualsLiteral("bluetooth")) {
-    return Some(ConnectionType::Bluetooth);
-  }
-  if (type.EqualsLiteral("ethernet")) {
-    return Some(ConnectionType::Ethernet);
-  }
-  if (type.EqualsLiteral("wifi")) {
-    return Some(ConnectionType::Wifi);
-  }
-  if (type.EqualsLiteral("other")) {
-    return Some(ConnectionType::Other);
-  }
-  if (type.EqualsLiteral("none")) {
-    return Some(ConnectionType::None);
-  }
-  if (type.EqualsLiteral("unknown")) {
-    return Some(ConnectionType::Unknown);
-  }
-
-  return Nothing();
-}
 
 // Don't use |Connection| alone, since that confuses nsTraceRefcnt since
 // we're not the only class with that name.
@@ -91,10 +52,6 @@ JSObject* Connection::WrapObject(JSContext* aCx,
 }
 
 ConnectionType Connection::Type() const {
-  if (auto type = ConfiguredConnectionType()) {
-    return *type;
-  }
-
   return mShouldResistFingerprinting
              ? static_cast<ConnectionType>(ConnectionType::Unknown)
              : mType;

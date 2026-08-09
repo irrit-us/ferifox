@@ -1373,19 +1373,15 @@ nsresult xpc::CreateSandboxObject(JSContext* cx, MutableHandleValue vp,
       bool hasFerifoxLocale = false;
       bool hasFerifoxTimeZone = false;
       if (auto* cfg = FerifoxConfig::GetSingleton()) {
-        nsTArray<nsString> languages;
-        cfg->GetStringList("navigator.languages"_ns, languages);
-        if (!languages.IsEmpty()) {
-          realmOptions.behaviors().setLocaleOverride(
-              NS_ConvertUTF16toUTF8(languages[0]).get());
+        nsAutoCString locale;
+        if (cfg->GetCanonicalLocale(locale)) {
+          realmOptions.behaviors().setLocaleOverride(locale.get());
           hasFerifoxLocale = true;
         }
 
-        nsAutoString timeZone;
-        if (cfg->GetString("intl.timezone"_ns, timeZone) &&
-            !timeZone.IsEmpty()) {
-          realmOptions.behaviors().setTimeZoneOverride(
-              NS_ConvertUTF16toUTF8(timeZone).get());
+        nsAutoCString timeZone;
+        if (cfg->GetTimeZone(timeZone)) {
+          realmOptions.behaviors().setTimeZoneOverride(timeZone.get());
           hasFerifoxTimeZone = true;
         }
       }

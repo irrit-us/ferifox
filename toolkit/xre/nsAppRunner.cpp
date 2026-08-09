@@ -12,6 +12,7 @@
 #include "mozilla/BaseProfiler.h"
 #include "mozilla/Components.h"
 #include "mozilla/FilePreferences.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/FOG.h"
 #include "mozilla/ChaosMode.h"
 #include "mozilla/HelperMacros.h"
@@ -5738,6 +5739,7 @@ nsresult XREMain::XRE_mainRun() {
     // AutoConfig files require JS execution. Note that this means AutoConfig
     // files can't override JS engine start-up prefs.
     mDirProvider.FinishInitializingUserPrefs();
+    mozilla::FerifoxConfig::InitializeParentProcess();
 
     // Now that the profiler, directory services, and prefs have been
     // initialized we can find the download directory, where the profiler can

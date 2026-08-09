@@ -4,6 +4,8 @@
 
 #include "mozilla/dom/PermissionStatus.h"
 
+#include <cmath>
+
 #include "PermissionStatusSink.h"
 #include "PermissionUtils.h"
 #include "mozilla/AsyncEventDispatcher.h"
@@ -17,45 +19,41 @@ namespace mozilla::dom {
 
 namespace {
 
-Maybe<PermissionState> StringToPermissionState(const nsAString& aValue) {
-  if (aValue.EqualsLiteral("granted")) {
-    return Some(PermissionState::Granted);
+bool HasConfiguredGeolocation(PermissionName aName) {
+  if (aName != PermissionName::Geolocation) {
+    return false;
   }
-  if (aValue.EqualsLiteral("denied")) {
-    return Some(PermissionState::Denied);
-  }
-  if (aValue.EqualsLiteral("prompt")) {
-    return Some(PermissionState::Prompt);
-  }
-  return Nothing();
-}
-
-Maybe<PermissionState> GetFerifoxPermissionState(PermissionName aName) {
   auto* cfg = FerifoxConfig::GetSingleton();
   if (!cfg) {
-    return Nothing();
+    return false;
   }
-
-  nsAutoCString path("permissions."_ns);
-  path.Append(GetEnumString(aName));
-
-  nsAutoString value;
-  if (!cfg->GetString(path, value)) {
-    return Nothing();
+  auto latitude = cfg->GetDouble("geolocation.latitude"_ns);
+  auto longitude = cfg->GetDouble("geolocation.longitude"_ns);
+  if (!latitude || !longitude || !std::isfinite(*latitude) ||
+      !std::isfinite(*longitude) || *latitude < -90.0 || *latitude > 90.0 ||
+      *longitude < -180.0 || *longitude > 180.0) {
+    return false;
   }
-  return StringToPermissionState(value);
-}
-
-uint8_t PermissionStateRank(PermissionState aState) {
-  switch (aState) {
-    case PermissionState::Denied:
-      return 0;
-    case PermissionState::Prompt:
-      return 1;
-    case PermissionState::Granted:
-      return 2;
+  if (auto accuracy = cfg->GetDouble("geolocation.accuracy"_ns)) {
+    if (!std::isfinite(*accuracy) || *accuracy < 0.0) {
+      return false;
+    }
   }
-  MOZ_CRASH("Unknown PermissionState");
+  bool hasAltitude = false;
+  if (auto altitude = cfg->GetDouble("geolocation.altitude"_ns)) {
+    if (!std::isfinite(*altitude)) {
+      return false;
+    }
+    hasAltitude = true;
+  }
+  if (auto altitudeAccuracy =
+          cfg->GetDouble("geolocation.altitudeAccuracy"_ns)) {
+    if (!hasAltitude || !std::isfinite(*altitudeAccuracy) ||
+        *altitudeAccuracy < 0.0) {
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // namespace
@@ -82,7 +80,6 @@ RefPtr<PermissionStatus::SimplePromise> PermissionStatus::Init() {
               aResult.ResolveValue();
           self->mState = self->ComputeStateFromAction(states.mBrowser);
           self->mSystemState = states.mSystem;
-          self->ApplyFerifoxState();
           return SimplePromise::CreateAndResolve(NS_OK, __func__);
         }
 
@@ -105,14 +102,11 @@ JSObject* PermissionStatus::WrapObject(JSContext* aCx,
 PermissionState PermissionStatus::State() const {
   PermissionState state = mState;
   if (mState == PermissionState::Granted &&
-      mSystemState != PermissionState::Granted) {
+      mSystemState != PermissionState::Granted &&
+      !HasConfiguredGeolocation(mName)) {
     state = mSystemState;
   }
-  if (!mFerifoxState ||
-      PermissionStateRank(*mFerifoxState) > PermissionStateRank(state)) {
-    return state;
-  }
-  return *mFerifoxState;
+  return state;
 }
 
 nsLiteralCString PermissionStatus::GetPermissionType() const {
@@ -170,10 +164,6 @@ already_AddRefed<PermissionStatusSink> PermissionStatus::CreateSink() {
   RefPtr<PermissionStatusSink> sink =
       new PermissionStatusSink(this, mName, GetPermissionType());
   return sink.forget();
-}
-
-void PermissionStatus::ApplyFerifoxState() {
-  mFerifoxState = GetFerifoxPermissionState(mName);
 }
 
 PermissionState PermissionStatus::ComputeStateFromAction(uint32_t aAction) {

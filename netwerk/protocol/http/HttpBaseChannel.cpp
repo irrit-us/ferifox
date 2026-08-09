@@ -2490,12 +2490,6 @@ HttpBaseChannel::GetProtocolVersion(nsACString& aProtocolVersion) {
 
 NS_IMETHODIMP
 HttpBaseChannel::SetTopWindowURIIfUnknown(nsIURI* aTopWindowURI) {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("network.stripTopWindowURI"_ns); val && *val) {
-      return NS_OK;
-    }
-  }
-
   if (!aTopWindowURI) {
     return NS_ERROR_INVALID_ARG;
   }
@@ -2524,17 +2518,6 @@ HttpBaseChannel::SetTopWindowURIIfUnknown(nsIURI* aTopWindowURI) {
   return NS_OK;
 }
 
-void HttpBaseChannel::SetTopWindowURI(nsIURI* aTopWindowURI) {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("network.stripTopWindowURI"_ns); val && *val) {
-      mTopWindowURI = nullptr;
-      return;
-    }
-  }
-
-  mTopWindowURI = aTopWindowURI;
-}
-
 NS_IMETHODIMP
 HttpBaseChannel::GetTopWindowURI(nsIURI** aTopWindowURI) {
   nsCOMPtr<nsIURI> uriBeingLoaded =
@@ -2544,14 +2527,6 @@ HttpBaseChannel::GetTopWindowURI(nsIURI** aTopWindowURI) {
 
 nsresult HttpBaseChannel::GetTopWindowURI(nsIURI* aURIBeingLoaded,
                                           nsIURI** aTopWindowURI) {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("network.stripTopWindowURI"_ns); val && *val) {
-      mTopWindowURI = nullptr;
-      *aTopWindowURI = nullptr;
-      return NS_OK;
-    }
-  }
-
   nsresult rv = NS_OK;
   nsCOMPtr<mozIThirdPartyUtil> util;
   // Only compute the top window URI once. In e10s, this must be computed in the

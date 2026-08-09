@@ -4,10 +4,8 @@
 
 #include "PeerConnectionImpl.h"
 
-#include <cctype>
 #include <cerrno>
 #include <cstdlib>
-#include <cstring>
 #include <set>
 #include <sstream>
 #include <vector>
@@ -109,7 +107,6 @@
 #include "nsIScriptGlobalObject.h"
 #include "nsNetUtil.h"
 #include "nsPrintfCString.h"
-#include "nsURLHelper.h"
 #include "nsXULAppAPI.h"
 #include "transport/nr_socket_proxy_config.h"
 
@@ -128,7 +125,6 @@
 #else
 #  include "mozilla/dom/PeerConnectionObserverBinding.h"
 #endif
-#include "mozilla/FerifoxConfig.h"
 #include "mozilla/dom/PeerConnectionObserverEnumsBinding.h"
 
 #define ICE_PARSING \
@@ -149,56 +145,6 @@ static const char* pciLogTag = "PeerConnectionImpl";
 #define LOGTAG pciLogTag
 
 static mozilla::LazyLogModule logModuleInfo("signaling");
-
-static Maybe<const char*> ReplacementForIPLiteral(const nsACString& aToken) {
-  if (net_IsValidIPv4Addr(aToken)) {
-    return Some(static_cast<const char*>("0.0.0.0"));
-  }
-  if (net_IsValidIPv6Addr(aToken)) {
-    return Some(static_cast<const char*>("::"));
-  }
-  return Nothing();
-}
-
-static void SanitizeIPLiteralTokens(std::string& s) {
-  size_t i = 0;
-  while (i < s.size()) {
-    while (i < s.size() && isspace(static_cast<unsigned char>(s[i]))) {
-      i++;
-    }
-    size_t start = i;
-    while (i < s.size() && !isspace(static_cast<unsigned char>(s[i]))) {
-      i++;
-    }
-    if (start == i) {
-      continue;
-    }
-
-    nsDependentCSubstring token(s.data() + start, i - start);
-    if (auto replacement = ReplacementForIPLiteral(token)) {
-      s.replace(start, i - start, *replacement);
-      i = start + strlen(*replacement);
-    }
-  }
-}
-
-static void SanitizeCandidateAddress(RTCIceCandidateStats& aCandidate) {
-  if (!aCandidate.mAddress.WasPassed()) {
-    return;
-  }
-
-  NS_ConvertUTF16toUTF8 addr(aCandidate.mAddress.Value());
-  if (auto replacement = ReplacementForIPLiteral(addr)) {
-    aCandidate.mAddress.Value() = NS_ConvertUTF8toUTF16(*replacement);
-  }
-}
-
-static void SanitizeIPLiteralText(nsString& aText) {
-  NS_ConvertUTF16toUTF8 text(aText);
-  std::string textStr(text.get());
-  SanitizeIPLiteralTokens(textStr);
-  aText = NS_ConvertUTF8toUTF16(textStr);
-}
 
 // Getting exceptions back down from PCObserver is generally not harmful.
 namespace {
@@ -4073,39 +4019,12 @@ RefPtr<dom::RTCStatsReportPromise> PeerConnectionImpl::GetStats(
     }
   }
 
-  bool stripStats = false;
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    auto s = cfg->GetBool("webrtc.stripStats"_ns);
-    if (s && *s) stripStats = true;
-  }
-
   return dom::RTCStatsPromise::All(GetMainThreadSerialEventTarget(), promises)
       ->Then(
           GetMainThreadSerialEventTarget(), __func__,
-          [report = std::move(report), idGen = mIdGenerator, stripStats,
-           aInternalStats](
+          [report = std::move(report), idGen = mIdGenerator](
               nsTArray<UniquePtr<dom::RTCStatsCollection>> aStats) mutable {
             idGen->RewriteIds(std::move(aStats), report.get());
-            if (stripStats) {
-              auto stripCandidateAddresses = [](auto& candidates) {
-                for (auto& candidate : candidates) {
-                  SanitizeCandidateAddress(candidate);
-                }
-              };
-              if (aInternalStats) {
-                for (auto& entry : report->mSdpHistory) {
-                  SanitizeIPLiteralText(entry.mSdp);
-                }
-                for (auto& candidate : report->mRawLocalCandidates) {
-                  SanitizeIPLiteralText(candidate);
-                }
-                for (auto& candidate : report->mRawRemoteCandidates) {
-                  SanitizeIPLiteralText(candidate);
-                }
-              }
-              stripCandidateAddresses(report->mIceCandidateStats);
-              stripCandidateAddresses(report->mTrickledIceCandidateStats);
-            }
             return dom::RTCStatsReportPromise::CreateAndResolve(
                 std::move(report), __func__);
           },

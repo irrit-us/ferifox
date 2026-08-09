@@ -149,11 +149,6 @@ EventTarget* Touch::GetOriginalTarget() const {
 }
 
 int32_t Touch::ScreenX(CallerType aCallerType) const {
-  if (nsContentUtils::ShouldResistFingerprinting(aCallerType, GetParentObject(),
-                                                 RFPTarget::TouchEvents)) {
-    return ClientX();
-  }
-
   if (aCallerType != CallerType::System && mCreatedFromWidgetEvent) {
     CSSDoublePoint innerScreenPoint;
     if (GetConfiguredInnerScreenPoint(innerScreenPoint)) {
@@ -161,20 +156,25 @@ int32_t Touch::ScreenX(CallerType aCallerType) const {
     }
   }
 
+  if (nsContentUtils::ShouldResistFingerprinting(aCallerType, GetParentObject(),
+                                                 RFPTarget::TouchEvents)) {
+    return ClientX();
+  }
+
   return mScreenPoint.x;
 }
 
 int32_t Touch::ScreenY(CallerType aCallerType) const {
-  if (nsContentUtils::ShouldResistFingerprinting(aCallerType, GetParentObject(),
-                                                 RFPTarget::TouchEvents)) {
-    return ClientY();
-  }
-
   if (aCallerType != CallerType::System && mCreatedFromWidgetEvent) {
     CSSDoublePoint innerScreenPoint;
     if (GetConfiguredInnerScreenPoint(innerScreenPoint)) {
       return NSToIntRound(innerScreenPoint.y + ClientY());
     }
+  }
+
+  if (nsContentUtils::ShouldResistFingerprinting(aCallerType, GetParentObject(),
+                                                 RFPTarget::TouchEvents)) {
+    return ClientY();
   }
 
   return mScreenPoint.y;

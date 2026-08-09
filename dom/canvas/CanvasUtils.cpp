@@ -6,10 +6,13 @@
 
 #include <stdlib.h>
 
+#include <cstring>
+
 #include "WebGL2Context.h"
 #include "jsapi.h"
 #include "mozIThirdPartyUtil.h"
 #include "mozilla/BasePrincipal.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Services.h"
 #include "mozilla/StaticPrefs_gfx.h"
 #include "mozilla/StaticPrefs_privacy.h"
@@ -66,6 +69,65 @@ static bool IsUnrestrictedPrincipal(nsIPrincipal* aPrincipal) {
 }
 
 namespace mozilla::CanvasUtils {
+
+static Maybe<uint32_t> GetFerifoxCanvasNoiseSeed() {
+  auto* config = FerifoxConfig::GetSingleton();
+  if (!config) {
+    return Nothing();
+  }
+  return config->GetUint32("canvas.noiseSeed"_ns);
+}
+
+bool IsFerifoxCanvasNoiseEnabled() {
+  auto seed = GetFerifoxCanvasNoiseSeed();
+  return seed && *seed;
+}
+
+void ApplyFerifoxCanvasNoise(uint8_t* aData, uint32_t aWidth, uint32_t aHeight,
+                             uint32_t aStride, gfx::SurfaceFormat aFormat,
+                             uint32_t aOriginX, uint32_t aOriginY) {
+  auto seed = GetFerifoxCanvasNoiseSeed();
+  if (!seed || !*seed) {
+    return;
+  }
+
+  gfx::SurfaceFormatBit red;
+  gfx::SurfaceFormatBit green;
+  gfx::SurfaceFormatBit blue;
+  gfx::SurfaceFormatBit alpha;
+  if (aFormat == gfx::SurfaceFormat::R8G8B8A8) {
+    red = gfx::SurfaceFormatBit::R8G8B8A8_R;
+    green = gfx::SurfaceFormatBit::R8G8B8A8_G;
+    blue = gfx::SurfaceFormatBit::R8G8B8A8_B;
+    alpha = gfx::SurfaceFormatBit::R8G8B8A8_A;
+  } else if (aFormat == gfx::SurfaceFormat::A8R8G8B8_UINT32) {
+    red = gfx::SurfaceFormatBit::A8R8G8B8_UINT32_R;
+    green = gfx::SurfaceFormatBit::A8R8G8B8_UINT32_G;
+    blue = gfx::SurfaceFormatBit::A8R8G8B8_UINT32_B;
+    alpha = gfx::SurfaceFormatBit::A8R8G8B8_UINT32_A;
+  } else {
+    return;
+  }
+
+  const gfx::SurfaceFormatBit channels[] = {red, green, blue};
+  for (uint32_t y = 0; y < aHeight; ++y) {
+    for (uint32_t x = 0; x < aWidth; ++x) {
+      uint32_t pixel;
+      std::memcpy(&pixel, aData + y * aStride + x * 4, sizeof(pixel));
+      if (((pixel >> alpha) & 0xffu) != 255) {
+        continue;
+      }
+
+      uint32_t state = *seed ^ ((aOriginX + x) * 0x85ebca6bu) ^
+                       ((aOriginY + y) * 0xc2b2ae35u);
+      state = state * 1103515245 + 12345;
+      const uint32_t shift = static_cast<uint32_t>(channels[(state >> 3) % 3]);
+      const uint32_t mask = 1u << shift;
+      pixel = (pixel & ~mask) | (((state >> 8) & 1u) << shift);
+      std::memcpy(aData + y * aStride + x * 4, &pixel, sizeof(pixel));
+    }
+  }
+}
 
 class OffscreenCanvasPermissionRunnable final
     : public dom::WorkerMainThreadRunnable {

@@ -634,12 +634,6 @@ nsPluginArray* Navigator::GetPlugins(ErrorResult& aRv) {
 }
 
 bool Navigator::PdfViewerEnabled() {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("navigator.pdfViewerEnabled"_ns)) {
-      return *val;
-    }
-  }
-
   return !StaticPrefs::pdfjs_disabled() ||
          nsContentUtils::ShouldResistFingerprinting(GetDocShell(),
                                                     RFPTarget::PdfjsSpoof);
@@ -669,12 +663,6 @@ StorageManager* Navigator::Storage() {
 }
 
 bool Navigator::CookieEnabled() {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("navigator.cookieEnabled"_ns)) {
-      return *val;
-    }
-  }
-
   // Check whether an exception overrides the global cookie behavior
   // Note that the code for getting the URI here matches that in
   // nsHTMLDocument::SetCookie.
@@ -721,12 +709,6 @@ bool Navigator::CookieEnabled() {
 }
 
 bool Navigator::OnLine() {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("navigator.onLine"_ns)) {
-      return *val;
-    }
-  }
-
   if (nsContentUtils::ShouldResistFingerprinting(
           GetDocShell(), RFPTarget::NetworkConnection)) {
     return true;
@@ -811,15 +793,6 @@ void Navigator::GetBuildID(nsAString& aBuildID, CallerType aCallerType,
 }
 
 void Navigator::GetDoNotTrack(nsAString& aResult) {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    nsString val;
-    cfg->GetString("navigator.doNotTrack"_ns, val);
-    if (!val.IsEmpty()) {
-      aResult = std::move(val);
-      return;
-    }
-  }
-
   if (StaticPrefs::privacy_donottrackheader_enabled()) {
     aResult.AssignLiteral("1");
   } else {
@@ -828,12 +801,6 @@ void Navigator::GetDoNotTrack(nsAString& aResult) {
 }
 
 bool Navigator::GlobalPrivacyControl() {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("navigator.globalPrivacyControl"_ns)) {
-      return *val;
-    }
-  }
-
   bool gpcStatus = StaticPrefs::privacy_globalprivacycontrol_enabled();
   if (!gpcStatus) {
     nsCOMPtr<nsILoadContext> loadContext = do_GetInterface(mWindow);

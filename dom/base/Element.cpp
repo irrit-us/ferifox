@@ -38,11 +38,9 @@
 #include "mozilla/EventDispatcher.h"
 #include "mozilla/EventListenerManager.h"
 #include "mozilla/EventStateManager.h"
-#include "mozilla/FerifoxConfig.h"
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/FullscreenChange.h"
 #include "mozilla/HTMLEditor.h"
-#include "mozilla/HashFunctions.h"
 #include "mozilla/Likely.h"
 #include "mozilla/LinkedList.h"
 #include "mozilla/LookAndFeel.h"
@@ -347,91 +345,6 @@ namespace mozilla::dom {
 
 const DOMTokenListSupportedToken Element::sSupportedBlockingValues[] = {
     "render", nullptr};
-
-namespace {
-
-Maybe<uint64_t> GetFerifoxLayoutNoiseSeed() {
-  return FerifoxConfig::GetLayoutNoiseSeed();
-}
-
-HashNumber GetFerifoxLayoutNoiseHash(const Element& aElement, uint64_t aSeed) {
-  HashNumber hash = HashGeneric(static_cast<uint32_t>(aSeed),
-                                static_cast<uint32_t>(aSeed >> 32));
-  for (const nsINode* node = &aElement; node; node = node->GetParentNode()) {
-    if (const auto* element = Element::FromNodeOrNull(node)) {
-      const auto* nodeInfo = element->NodeInfo();
-      const nsString& localName = nodeInfo->LocalName();
-      hash = AddToHash(
-          hash, nodeInfo->NamespaceID(),
-          mozilla::HashString(localName.BeginReading(), localName.Length()));
-
-      nsAutoString id;
-      if (element->GetAttr(nsGkAtoms::id, id)) {
-        hash = AddToHash(hash,
-                         mozilla::HashString(id.BeginReading(), id.Length()));
-      }
-    } else {
-      hash = AddToHash(hash, node->NodeType());
-    }
-  }
-  return hash;
-}
-
-int32_t GetFerifoxLayoutNoiseDelta(HashNumber aHash) {
-  int32_t halfPixel = AppUnitsPerCSSPixel() / 2;
-  int32_t delta =
-      static_cast<int32_t>(aHash % static_cast<uint32_t>(2 * halfPixel + 1)) -
-      halfPixel;
-  if (!delta) {
-    delta = aHash & 1 ? 1 : -1;
-  }
-  return delta;
-}
-
-void MaybeApplyFerifoxLayoutNoise(const Element& aElement, nsRect& aRect) {
-  auto seed = GetFerifoxLayoutNoiseSeed();
-  if (!seed) {
-    return;
-  }
-
-  HashNumber hash = GetFerifoxLayoutNoiseHash(aElement, *seed);
-  auto perturb = [&](nscoord& aValue) {
-    hash = hash * 1103515245 + 12345;
-    aValue += GetFerifoxLayoutNoiseDelta(hash);
-  };
-
-  perturb(aRect.x);
-  perturb(aRect.y);
-  perturb(aRect.width);
-  perturb(aRect.height);
-  if (aRect.width < 0) {
-    aRect.width = 0;
-  }
-  if (aRect.height < 0) {
-    aRect.height = 0;
-  }
-}
-
-class FerifoxRectListBuilder final : public mozilla::RectCallback {
- public:
-  FerifoxRectListBuilder(DOMRectList* aRectList, const Element& aElement)
-      : mRectList(aRectList), mElement(aElement) {}
-
-  void AddRect(const nsRect& aRect) override {
-    nsRect rect = aRect;
-    MaybeApplyFerifoxLayoutNoise(mElement, rect);
-
-    auto domRect = MakeRefPtr<DOMRect>(mRectList);
-    domRect->SetLayoutRect(rect);
-    mRectList->Append(std::move(domRect));
-  }
-
- private:
-  DOMRectList* mRectList;
-  const Element& mElement;
-};
-
-}  // namespace
 
 nsDOMAttributeMap* Element::Attributes() {
   nsDOMSlots* slots = DOMSlots();
@@ -1284,10 +1197,7 @@ already_AddRefed<DOMRect> Element::GetBoundingClientRect() {
     return rect.forget();
   }
 
-  nsRect r = frame->GetBoundingClientRect();
-  MaybeApplyFerifoxLayoutNoise(*this, r);
-
-  rect->SetLayoutRect(r);
+  rect->SetLayoutRect(frame->GetBoundingClientRect());
   return rect.forget();
 }
 
@@ -1300,7 +1210,7 @@ already_AddRefed<DOMRectList> Element::GetClientRects() {
     return rectList.forget();
   }
 
-  FerifoxRectListBuilder builder(rectList, *this);
+  nsLayoutUtils::RectListBuilder builder(rectList);
   nsLayoutUtils::GetAllInFlowRects(
       frame, nsLayoutUtils::GetContainingBlockForClientRect(frame), &builder,
       nsLayoutUtils::GetAllInFlowRectsFlag::AccountForTransforms);
@@ -6649,8 +6559,6 @@ Element* Element::GetOffsetRect(CSSIntRect& aRect) {
     rect += result.mRect.TopLeft();
     parent = result.mParent;
   }
-
-  MaybeApplyFerifoxLayoutNoise(*this, rect);
 
   aRect = CSSIntRect::FromAppUnitsRounded(
       frame->Style()->EffectiveZoom().Unzoom(rect));

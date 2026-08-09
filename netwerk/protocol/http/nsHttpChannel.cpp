@@ -7,7 +7,6 @@
 
 #include <inttypes.h>
 
-#include "FerifoxConfig.h"
 #include "mozilla/ScopeExit.h"
 #include "mozilla/Sprintf.h"
 #include "mozilla/ToString.h"
@@ -848,18 +847,6 @@ void nsHttpChannel::HandleContinueCancellingByURLClassifier(
 }
 
 void nsHttpChannel::SetPriorityHeader() {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("network.stripPriorityHeader"_ns);
-        val && *val) {
-      nsHttpAtom priority = nsHttp::ResolveAtom("Priority"_ns);
-      if (priority) {
-        DebugOnly<nsresult> rv = mRequestHead.ClearHeader(priority);
-        MOZ_ASSERT(NS_SUCCEEDED(rv));
-      }
-      return;
-    }
-  }
-
   nsAutoCString userSetPriority;
   (void)GetRequestHeader("Priority"_ns, userSetPriority);
   if (!userSetPriority.IsEmpty()) {
@@ -11750,22 +11737,6 @@ void nsHttpChannel::SetOriginHeader() {
 }
 
 void nsHttpChannel::SetDoNotTrack() {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    nsAutoString val;
-    if (cfg->GetString("navigator.doNotTrack"_ns, val)) {
-      if (val.EqualsLiteral("1")) {
-        DebugOnly<nsresult> rv =
-            mRequestHead.SetHeader(nsHttp::DoNotTrack, "1"_ns, false);
-        MOZ_ASSERT(NS_SUCCEEDED(rv));
-      } else if (val.EqualsLiteral("0")) {
-        DebugOnly<nsresult> rv =
-            mRequestHead.SetHeader(nsHttp::DoNotTrack, "0"_ns, false);
-        MOZ_ASSERT(NS_SUCCEEDED(rv));
-      }
-      return;
-    }
-  }
-
   /**
    * 'DoNotTrack' header should be added if 'privacy.donottrackheader.enabled'
    * is true.
@@ -11779,17 +11750,6 @@ void nsHttpChannel::SetDoNotTrack() {
 
 void nsHttpChannel::SetGlobalPrivacyControl() {
   MOZ_ASSERT(NS_IsMainThread(), "Must be called on the main thread");
-
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("navigator.globalPrivacyControl"_ns)) {
-      if (*val) {
-        DebugOnly<nsresult> rv =
-            mRequestHead.SetHeader(nsHttp::GlobalPrivacyControl, "1"_ns, false);
-        MOZ_ASSERT(NS_SUCCEEDED(rv));
-      }
-      return;
-    }
-  }
 
   if (StaticPrefs::privacy_globalprivacycontrol_functionality_enabled() &&
       (StaticPrefs::privacy_globalprivacycontrol_enabled() ||

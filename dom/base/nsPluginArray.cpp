@@ -4,9 +4,6 @@
 
 #include "nsPluginArray.h"
 
-#include <algorithm>
-
-#include "mozilla/FerifoxConfig.h"
 #include "mozilla/StaticPrefs_pdfjs.h"
 #include "mozilla/dom/PluginArrayBinding.h"
 #include "mozilla/dom/PluginBinding.h"
@@ -96,23 +93,10 @@ uint32_t nsPluginArray::EffectiveLength() {
   if (ForceNoPlugins()) {
     return 0;
   }
-
-  uint32_t length = std::size(mPlugins);
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetUint32("navigator.pluginsLength"_ns)) {
-      length = std::min(length, *val);
-    }
-  }
-  return length;
+  return mPlugins.size();
 }
 
 bool nsPluginArray::ForceNoPlugins() {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("navigator.pdfViewerEnabled"_ns)) {
-      return !*val;
-    }
-  }
-
   return StaticPrefs::pdfjs_disabled() &&
          !nsContentUtils::ShouldResistFingerprinting(
              mWindow ? mWindow->GetDocShell() : nullptr, RFPTarget::PdfjsSpoof);

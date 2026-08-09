@@ -4,12 +4,14 @@
 
 #include "Geolocation.h"
 
-#include "mozilla/FerifoxConfig.h"
+#include <cmath>
+
 #include "GeolocationIPCUtils.h"
 #include "GeolocationSystem.h"
 #include "mozilla/ClearOnShutdown.h"
 #include "mozilla/CycleCollectedJSContext.h"  // for nsAutoMicroTask
 #include "mozilla/EventStateManager.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Services.h"
@@ -80,27 +82,33 @@ static already_AddRefed<nsIDOMGeoPosition> GetConfiguredGeoPosition() {
 
   auto latitude = cfg->GetDouble("geolocation.latitude"_ns);
   auto longitude = cfg->GetDouble("geolocation.longitude"_ns);
-  if (!latitude || !longitude || *latitude < -90.0 || *latitude > 90.0 ||
+  if (!latitude || !longitude || !std::isfinite(*latitude) ||
+      !std::isfinite(*longitude) || *latitude < -90.0 || *latitude > 90.0 ||
       *longitude < -180.0 || *longitude > 180.0) {
     return nullptr;
   }
 
   double accuracy = 100.0;
   if (auto val = cfg->GetDouble("geolocation.accuracy"_ns)) {
-    if (*val < 0.0) {
+    if (!std::isfinite(*val) || *val < 0.0) {
       return nullptr;
     }
     accuracy = *val;
   }
 
   double altitude = UnspecifiedNaN<double>();
+  bool hasAltitude = false;
   if (auto val = cfg->GetDouble("geolocation.altitude"_ns)) {
+    if (!std::isfinite(*val)) {
+      return nullptr;
+    }
     altitude = *val;
+    hasAltitude = true;
   }
 
   double altitudeAccuracy = UnspecifiedNaN<double>();
   if (auto val = cfg->GetDouble("geolocation.altitudeAccuracy"_ns)) {
-    if (*val < 0.0) {
+    if (!hasAltitude || !std::isfinite(*val) || *val < 0.0) {
       return nullptr;
     }
     altitudeAccuracy = *val;
@@ -438,6 +446,16 @@ nsGeolocationRequest::Allow(JS::Handle<JS::Value> aChoices) {
   MOZ_ASSERT(aChoices.isUndefined());
 
   if (mLocator->ClearPendingRequest(this)) {
+    return NS_OK;
+  }
+
+  nsCOMPtr<nsIDOMGeoPosition> configuredPosition = GetConfiguredGeoPosition();
+  if (configuredPosition) {
+    mLocator->NotifyAllowedRequest(this);
+    Update(configuredPosition);
+    if (!mIsWatchPositionRequest) {
+      mLocator->RemoveRequest(this);
+    }
     return NS_OK;
   }
 

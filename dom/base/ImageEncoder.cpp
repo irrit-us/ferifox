@@ -388,7 +388,8 @@ nsresult ImageEncoder::ExtractDataInternal(
       return NS_ERROR_INVALID_ARG;
     }
 
-    if (aExtractionBehavior == CanvasUtils::ImageExtraction::Randomize) {
+    if (aExtractionBehavior == CanvasUtils::ImageExtraction::Randomize ||
+        CanvasUtils::IsFerifoxCanvasNoiseEnabled()) {
       UniquePtr<uint8_t[]> imageBuffer = gfx::SurfaceToPackedBGRA(data);
       if (!imageBuffer) {
         return NS_ERROR_OUT_OF_MEMORY;

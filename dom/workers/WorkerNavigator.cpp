@@ -5,11 +5,11 @@
 #include "mozilla/dom/WorkerNavigator.h"
 
 #include "ErrorList.h"
-#include "mozilla/FerifoxConfig.h"
 #include "MainThreadUtils.h"
 #include "RuntimeService.h"
 #include "WorkerRunnable.h"
 #include "WorkerScope.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/dom/LockManager.h"
 #include "mozilla/dom/MediaCapabilities.h"
 #include "mozilla/dom/Navigator.h"
@@ -107,12 +107,6 @@ JSObject* WorkerNavigator::WrapObject(JSContext* aCx,
 }
 
 bool WorkerNavigator::GlobalPrivacyControl() const {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("navigator.globalPrivacyControl"_ns)) {
-      return *val;
-    }
-  }
-
   bool gpcStatus = StaticPrefs::privacy_globalprivacycontrol_enabled();
   if (!gpcStatus) {
     JSObject* jso = GetWrapper();
@@ -324,15 +318,7 @@ uint64_t WorkerNavigator::HardwareConcurrency() const {
           RFPTarget::NavigatorHWConcurrencyTiered));
 }
 
-bool WorkerNavigator::OnLine() const {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("navigator.onLine"_ns)) {
-      return *val;
-    }
-  }
-
-  return mOnline;
-}
+bool WorkerNavigator::OnLine() const { return mOnline; }
 
 StorageManager* WorkerNavigator::Storage() {
   if (!mStorageManager) {

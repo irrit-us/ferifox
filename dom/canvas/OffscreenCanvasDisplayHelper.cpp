@@ -4,7 +4,6 @@
 
 #include "OffscreenCanvasDisplayHelper.h"
 
-#include "mozilla/FerifoxConfig.h"
 #include "mozilla/SVGObserverUtils.h"
 #include "mozilla/StaticPrefs_gfx.h"
 #include "mozilla/dom/Document.h"
@@ -606,30 +605,9 @@ void OffscreenCanvasDisplayHelper::MaybeRandomizePixels(
         aSize.width * aSize.height * 4, gfx::SurfaceFormat::A8R8G8B8_UINT32);
   }
 
-  auto* cfg = FerifoxConfig::GetSingleton();
-  if (cfg) {
-    auto seed = cfg->GetUint32("canvas.noiseSeed"_ns);
-    if (seed && *seed) {
-      uint32_t stride = aSize.width * 4;
-      for (int32_t y = 0; y < aSize.height; ++y) {
-        for (int32_t x = 0; x < aSize.width; ++x) {
-          uint32_t offset = y * stride + x * 4;
-          uint32_t state =
-              *seed ^ (uint32_t(x) * 0x85ebca6bu) ^ (uint32_t(y) * 0xc2b2ae35u);
-          state = state * 1103515245 + 12345;
-          uint32_t channel = (state >> 3) & 3;
-          if (channel == 3) continue;
-          uint8_t& pixel = aData[offset + channel];
-          if (pixel == 0) continue;
-          uint32_t dir = (state >> 8) & 1;
-          if (dir && pixel < 255)
-            ++pixel;
-          else if (!dir && pixel > 1)
-            --pixel;
-        }
-      }
-    }
-  }
+  CanvasUtils::ApplyFerifoxCanvasNoise(aData, aSize.width, aSize.height,
+                                       aSize.width * 4,
+                                       gfx::SurfaceFormat::A8R8G8B8_UINT32);
 }
 
 UniquePtr<uint8_t[]> OffscreenCanvasDisplayHelper::GetImageBuffer(

@@ -10,6 +10,7 @@ Comprehensive research on browser fingerprinting, anti-detection techniques, and
 | 02 | [Academic Research Survey](02-academic-research.md) | Key papers, defense approaches (FP-Inspector, FPRandom, FP-Block, PriVaricator, UNIGL), limitations, and the arms race dynamic |
 | 03 | [Implementations Deep-Dive](03-implementations-deep-dive.md) | Technical architecture, patch categories, and cross-comparison of Patchright, Rebrowser Patches, Camoufox, and CloakBrowser |
 | 04 | [Synthesis & Recommendations](04-synthesis-and-recommendations.md) | Five-layer defense model, consistency imperative, strategy taxonomy, recommended stacks by use case |
+| 05 | [Persona Authoring Guide](../browser/config/ferifox/personas/README.md) | Ferifox startup contract, supported fields, coherence rules, native-state boundaries, and validation checklist |
 
 ## Quick Summary
 
@@ -31,9 +32,9 @@ Browser anonymity requires addressing detection at **five layers**:
 - **Program-driven operation is broader than script evaluation** — evaluator APIs are only one subset; input, screenshot, storage, network, permissions, emulation, window, and session commands have separate protocol algorithms that can diverge from regular UI behavior
 - **Crawler inspection should be narrow and native** — DOM structure, attributes, text nodes, links, and form/resource metadata can be captured without a general side-effect-free page-runtime inspector; dynamic JS values remain unsafe unless explicitly evaluated
 - **Cloudflare robot checks cannot be declared solved by local API patching alone** — a personal computer and residential network help, but Cloudflare also scores client-side challenge execution, request fingerprints, bot scores, heuristics, and IP/proxy reputation
-- **Remaining personal-information interfaces should be tracked explicitly** — MediaDevices, permission prompts and overrides beyond `query()`, storage behavior beyond WebIDL return values, Speech voices, WebGPU capabilities, media codecs, WebRTC SDP/stats, peripheral APIs, and protocol/runtime state need persona-coherent future work tied to Cloudflare's documented JavaScript, browser-signal, request, heuristic, and TLS layers
+- **Remaining personal-information interfaces should be tracked explicitly**: MediaDevices inventory, permission and API behavior, storage and quota policy, speech voice metadata, WebGPU capabilities, media codecs, WebRTC SDP/stats, peripheral APIs, and protocol/runtime state need coherent treatment tied to Cloudflare's documented JavaScript, browser-signal, request, heuristic, and TLS layers
 - **Geometry consistency extends into input events** — screen size, outer window size, window origin, inner-screen origin, orientation, and trusted mouse/pointer/touch `screenX/Y` need to align with the same persona
-- **Passive request context also matters** — HTTP Priority and top-window URI state can reveal automation/browser context even when JS-visible APIs are patched
+- **Passive request context also matters**: HTTP Priority and top-window URI state are normal Firefox mechanisms; removing them creates a program-driven divergence instead of removing an outgoing identity header
 - **TLS fingerprint spoofing** remains the hardest unsolved problem — no fully general open-source solution exists
 - **IP reputation trumps everything** — the best fingerprint spoofing fails with datacenter IPs; residential proxies are essential
 - **The arms race is permanent** — detection adapts; what passes CreepJS today may fail tomorrow

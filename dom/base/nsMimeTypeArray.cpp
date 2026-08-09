@@ -4,9 +4,6 @@
 
 #include "nsMimeTypeArray.h"
 
-#include <algorithm>
-
-#include "mozilla/FerifoxConfig.h"
 #include "mozilla/StaticPrefs_pdfjs.h"
 #include "mozilla/dom/MimeTypeArrayBinding.h"
 #include "mozilla/dom/MimeTypeBinding.h"
@@ -79,23 +76,10 @@ uint32_t nsMimeTypeArray::EffectiveLength() {
   if (ForceNoPlugins()) {
     return 0;
   }
-
-  uint32_t length = std::size(mMimeTypes);
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetUint32("navigator.mimeTypesLength"_ns)) {
-      length = std::min(length, *val);
-    }
-  }
-  return length;
+  return mMimeTypes.size();
 }
 
 bool nsMimeTypeArray::ForceNoPlugins() {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetBool("navigator.pdfViewerEnabled"_ns)) {
-      return !*val;
-    }
-  }
-
   return StaticPrefs::pdfjs_disabled() &&
          !nsContentUtils::ShouldResistFingerprinting(
              mWindow ? mWindow->GetDocShell() : nullptr, RFPTarget::PdfjsSpoof);

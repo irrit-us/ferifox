@@ -12,11 +12,11 @@
 #include "nsGlobalWindowInner.h"
 
 // Local Includes
-#include "mozilla/FerifoxConfig.h"
 #include "Navigator.h"
 #include "WindowDestroyedEvent.h"
 #include "WindowNamedPropertiesHandler.h"
 #include "mozilla/AntiTrackingUtils.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/IntegerPrintfMacros.h"
 #include "mozilla/Result.h"
 #include "mozilla/StorageAccessAPIHelper.h"
@@ -3540,25 +3540,11 @@ CSSIntSize nsGlobalWindowOuter::GetOuterSize(CallerType aCallerType,
 
 int32_t nsGlobalWindowOuter::GetOuterWidthOuter(CallerType aCallerType,
                                                 ErrorResult& aError) {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetInt32("window.outerWidth"_ns)) {
-      if (*val > 0) {
-        return *val;
-      }
-    }
-  }
   return GetOuterSize(aCallerType, aError).width;
 }
 
 int32_t nsGlobalWindowOuter::GetOuterHeightOuter(CallerType aCallerType,
                                                  ErrorResult& aError) {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetInt32("window.outerHeight"_ns)) {
-      if (*val > 0) {
-        return *val;
-      }
-    }
-  }
   return GetOuterSize(aCallerType, aError).height;
 }
 

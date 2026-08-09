@@ -214,8 +214,6 @@ void nsXPConnect::InitStatics() {
   gScriptSecurityManager = nsScriptSecurityManager::GetScriptSecurityManager();
   gScriptSecurityManager->GetSystemPrincipal(&gSystemPrincipal);
   MOZ_RELEASE_ASSERT(gSystemPrincipal);
-
-  FerifoxConfig::GetSingleton();
 }
 
 // static
@@ -550,10 +548,9 @@ void InitGlobalObjectOptions(JS::RealmOptions& aOptions,
   auto* cfg = FerifoxConfig::GetSingleton();
   bool hasFerifoxTimeZone = false;
   if (cfg) {
-    nsAutoString timeZone;
-    if (cfg->GetString("intl.timezone"_ns, timeZone) && !timeZone.IsEmpty()) {
-      aOptions.behaviors().setTimeZoneOverride(
-          NS_ConvertUTF16toUTF8(timeZone).get());
+    nsAutoCString timeZone;
+    if (cfg->GetTimeZone(timeZone)) {
+      aOptions.behaviors().setTimeZoneOverride(timeZone.get());
       hasFerifoxTimeZone = true;
     }
   }
@@ -569,11 +566,9 @@ void InitGlobalObjectOptions(JS::RealmOptions& aOptions,
 
   bool hasFerifoxLocale = false;
   if (cfg) {
-    nsTArray<nsString> languages;
-    cfg->GetStringList("navigator.languages"_ns, languages);
-    if (!languages.IsEmpty()) {
-      aOptions.behaviors().setLocaleOverride(
-          NS_ConvertUTF16toUTF8(languages[0]).get());
+    nsAutoCString locale;
+    if (cfg->GetCanonicalLocale(locale)) {
+      aOptions.behaviors().setLocaleOverride(locale.get());
       hasFerifoxLocale = true;
     }
   }

@@ -10,21 +10,11 @@
     "vendorSub": "",
     "product": "Gecko",
     "productSub": "20100101",
-    "buildID": "20250701000000",
+    "buildID": "20181001000000",
     "appVersion": "5.0 (X11)",
     "languages": ["en-US", "en"],
     "appCodeName": "Mozilla",
-    "appName": "Netscape",
-    "cookieEnabled": true,
-    "pdfViewerEnabled": true,
-    "pluginsLength": 5,
-    "mimeTypesLength": 2,
-    "doNotTrack": "unspecified",
-    "globalPrivacyControl": false,
-    "onLine": true,
-    "connection": {
-      "type": "ethernet"
-    }
+    "appName": "Netscape"
   },
   "screen": {
     "width": 1366,
@@ -40,8 +30,6 @@
     }
   },
   "window": {
-    "outerWidth": 1366,
-    "outerHeight": 768,
     "screenX": 0,
     "screenY": 0,
     "mozInnerScreenX": 0.0,
@@ -49,7 +37,9 @@
   },
   "webgl": {
     "forceEnabled": true,
-    "forceEGL": true
+    "forceEGL": true,
+    "unmaskedVendor": "Mozilla",
+    "unmaskedRenderer": "Mozilla"
   },
   "audio": {
     "sampleRate": 44100,
@@ -83,10 +73,6 @@
   },
   "headers": {
     "acceptLanguage": "en-US,en;q=0.5"
-  },
-  "network": {
-    "stripTopWindowURI": true,
-    "stripPriorityHeader": true
   },
   "webrtc": {
     "noHostCandidates": true,

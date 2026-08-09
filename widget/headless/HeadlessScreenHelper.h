@@ -17,6 +17,8 @@ class HeadlessScreenHelper final : public ScreenManager::Helper {
 
  private:
   static LayoutDeviceIntRect GetScreenRect();
+  static LayoutDeviceIntRect GetAvailableScreenRect();
+  static double GetScale();
 };
 
 }  // namespace widget

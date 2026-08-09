@@ -7,7 +7,6 @@
 #include "AudioDestinationNode.h"
 #include "AudioNodeEngine.h"
 #include "AudioNodeTrack.h"
-#include "mozilla/FerifoxConfig.h"
 #include "Tracing.h"
 #include "WebAudioUtils.h"
 #include "blink/DynamicsCompressor.h"
@@ -223,13 +222,6 @@ JSObject* DynamicsCompressorNode::WrapObject(
   return DynamicsCompressorNode_Binding::Wrap(aCx, this, aGivenProto);
 }
 
-float DynamicsCompressorNode::Reduction() const {
-  if (auto* cfg = FerifoxConfig::GetSingleton()) {
-    if (auto val = cfg->GetDouble("audio.reduction"_ns)) {
-      return static_cast<float>(*val);
-    }
-  }
-  return mReduction;
-}
+float DynamicsCompressorNode::Reduction() const { return mReduction; }
 
 }  // namespace mozilla::dom

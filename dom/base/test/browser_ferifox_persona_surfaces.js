@@ -8,70 +8,48 @@ const PAGE_URL =
     "chrome://mochitests/content",
     "https://example.com"
   ) + "dummy.html";
-const EXPECTED_STORAGE_QUOTA = 222222;
-const EXPECTED_STORAGE_USAGE = 111111;
-const EXPECTED_STORAGE_PERSISTED = true;
 const EXPECTED_NAVIGATOR_APP_VERSION = "5.0 (X11; Linux x86_64) Ferifox/128.0";
+const EXPECTED_NAVIGATOR_BUILD_ID = "20181001000000";
 const EXPECTED_NAVIGATOR_PLATFORM = "Linux x86_64";
 const EXPECTED_NAVIGATOR_LANGUAGES = ["en-US", "en"];
 const EXPECTED_NAVIGATOR_HARDWARE_CONCURRENCY = 8;
+const EXPECTED_INTL_LOCALE = "en-US";
+const EXPECTED_TIME_ZONE = "America/Chicago";
 const EXPECTED_WEBGL_MAX_TEX_UNITS = 8;
-const WEBRTC_PLACEHOLDER_ADDRESSES = new Set(["0.0.0.0", "::"]);
+const EXPECTED_SCREEN_WIDTH = 1440;
+const EXPECTED_SCREEN_HEIGHT = 900;
+const EXPECTED_GEOLOCATION = {
+  latitude: 37.7749,
+  longitude: -122.4194,
+  accuracy: 40,
+};
 const PERSONA_CONFIG_CONTENT = JSON.stringify({
-  layout: { noiseSeed: 1311768467463790320 },
   audio: { noiseSeed: 305419896 },
+  canvas: { noiseSeed: 305419896 },
+  geolocation: EXPECTED_GEOLOCATION,
+  intl: {
+    locale: "en_US.UTF-8",
+    timezone: EXPECTED_TIME_ZONE,
+  },
   navigator: {
     appVersion: EXPECTED_NAVIGATOR_APP_VERSION,
+    buildID: EXPECTED_NAVIGATOR_BUILD_ID,
     platform: EXPECTED_NAVIGATOR_PLATFORM,
     languages: EXPECTED_NAVIGATOR_LANGUAGES,
     hardwareConcurrency: EXPECTED_NAVIGATOR_HARDWARE_CONCURRENCY,
   },
-  storage: {
-    estimate: {
-      usage: EXPECTED_STORAGE_USAGE,
-      quota: EXPECTED_STORAGE_QUOTA,
-    },
-    persisted: EXPECTED_STORAGE_PERSISTED,
-  },
-  webrtc: {
-    stripStats: true,
+  screen: {
+    width: EXPECTED_SCREEN_WIDTH,
+    height: EXPECTED_SCREEN_HEIGHT,
+    availWidth: EXPECTED_SCREEN_WIDTH,
+    availHeight: EXPECTED_SCREEN_HEIGHT - 40,
+    colorDepth: 24,
+    pixelDepth: 24,
   },
   webgl: {
     maxTexUnits: EXPECTED_WEBGL_MAX_TEX_UNITS,
   },
 });
-
-function assertNear(actual, expected, message) {
-  ok(
-    Math.abs(actual - expected) < 0.001,
-    `${message}: ${actual} ~= ${expected}`
-  );
-}
-
-function changedBy(actual, base, limit, message) {
-  const delta = Math.abs(actual - base);
-  ok(delta > 0 && delta <= limit, `${message}: delta ${delta} within ${limit}`);
-}
-
-function getIceCandidateAddress(candidate) {
-  if (!candidate) {
-    return "";
-  }
-  const tokens = candidate.trim().split(/\s+/);
-  return tokens.length > 4 ? tokens[4] : "";
-}
-
-function isWebRTCPlaceholderAddress(address) {
-  return WEBRTC_PLACEHOLDER_ADDRESSES.has(address);
-}
-
-function isIPAddressLiteral(address) {
-  return (
-    isWebRTCPlaceholderAddress(address) ||
-    /^\d{1,3}(?:\.\d{1,3}){3}$/.test(address) ||
-    (address.includes(":") && /^[0-9a-fA-F:.]+$/.test(address))
-  );
-}
 
 async function withFerifoxContentTask(task) {
   Services.ppmm.releaseCachedProcesses();
@@ -90,37 +68,6 @@ async function withFerifoxContentTask(task) {
       }
     );
 
-    const estimate = await SpecialPowers.spawn(
-      tab.linkedBrowser,
-      [],
-      async () => {
-        return content.navigator.storage.estimate();
-      }
-    );
-    is(
-      estimate.quota,
-      EXPECTED_STORAGE_QUOTA,
-      "Ferifox quota override is active"
-    );
-    is(
-      estimate.usage,
-      EXPECTED_STORAGE_USAGE,
-      "Ferifox usage override is active"
-    );
-
-    const persisted = await SpecialPowers.spawn(
-      tab.linkedBrowser,
-      [],
-      async () => {
-        return content.navigator.storage.persisted();
-      }
-    );
-    is(
-      persisted,
-      EXPECTED_STORAGE_PERSISTED,
-      "Ferifox persisted override is active"
-    );
-
     await task(tab.linkedBrowser);
   } finally {
     await SpecialPowers.spawn(tab.linkedBrowser, [], () => {
@@ -134,8 +81,8 @@ add_setup(async function setup() {
   await SpecialPowers.pushPrefEnv({
     set: [
       ["dom.ipc.processPrelaunch.enabled", false],
-      ["media.peerconnection.ice.obfuscate_host_addresses", false],
-      ["media.peerconnection.ice.loopback", true],
+      ["geo.provider.network.url", "http://127.0.0.1:9/"],
+      ["geo.timeout", 50],
     ],
   });
   registerCleanupFunction(async () => {
@@ -144,24 +91,19 @@ add_setup(async function setup() {
   });
 });
 
-add_task(async function test_ferifox_worker_navigator_and_storage_overrides() {
+add_task(async function test_ferifox_worker_navigator_overrides() {
   await withFerifoxContentTask(async browser => {
     const snapshot = await SpecialPowers.spawn(browser, [], async () => {
       const source = `
         self.onmessage = async () => {
           try {
-            const estimate = await navigator.storage.estimate();
-            const persisted = await navigator.storage.persisted();
+            const intl = new Intl.DateTimeFormat().resolvedOptions();
             self.postMessage({
               appVersion: navigator.appVersion,
               platform: navigator.platform,
               languages: Array.from(navigator.languages),
               hardwareConcurrency: navigator.hardwareConcurrency,
-              storage: {
-                quota: estimate.quota,
-                usage: estimate.usage,
-                persisted,
-              },
+              intl: { locale: intl.locale, timeZone: intl.timeZone },
             });
           } catch (error) {
             self.postMessage({ error: String(error && error.message || error) });
@@ -192,6 +134,7 @@ add_task(async function test_ferifox_worker_navigator_and_storage_overrides() {
         return {
           window: {
             appVersion: content.navigator.appVersion,
+            buildID: content.navigator.buildID,
             platform: content.navigator.platform,
             languages: Array.from(content.navigator.languages),
             hardwareConcurrency: content.navigator.hardwareConcurrency,
@@ -205,6 +148,12 @@ add_task(async function test_ferifox_worker_navigator_and_storage_overrides() {
         content.URL.revokeObjectURL(url);
       }
     });
+
+    is(
+      snapshot.window.buildID,
+      EXPECTED_NAVIGATOR_BUILD_ID,
+      "Ferifox window buildID matches Firefox's public value"
+    );
 
     for (const scope of ["window", "worker"]) {
       is(
@@ -230,93 +179,228 @@ add_task(async function test_ferifox_worker_navigator_and_storage_overrides() {
     }
 
     is(
-      snapshot.worker.storage.quota,
-      EXPECTED_STORAGE_QUOTA,
-      "Ferifox worker quota override is active"
+      snapshot.worker.intl.locale,
+      EXPECTED_INTL_LOCALE,
+      "Ferifox worker uses the canonical Persona locale"
     );
     is(
-      snapshot.worker.storage.usage,
-      EXPECTED_STORAGE_USAGE,
-      "Ferifox worker usage override is active"
-    );
-    is(
-      snapshot.worker.storage.persisted,
-      EXPECTED_STORAGE_PERSISTED,
-      "Ferifox worker persisted override is active"
+      snapshot.worker.intl.timeZone,
+      EXPECTED_TIME_ZONE,
+      "Ferifox worker uses the validated Persona timezone"
     );
   });
 });
 
-add_task(async function test_ferifox_layout_noise_consistency() {
+add_task(async function test_ferifox_canvas_noise_is_consistent() {
   await withFerifoxContentTask(async browser => {
-    const result = await SpecialPowers.spawn(browser, [], () => {
-      content.document.documentElement.style.margin = "0";
-      content.document.body.style.margin = "0";
-      content.document.body.replaceChildren();
+    const result = await SpecialPowers.spawn(browser, [], async () => {
+      const win = content.wrappedJSObject;
+      const canvas = content.document.createElement("canvas");
+      canvas.width = 2;
+      canvas.height = 2;
+      const context = canvas.getContext("2d");
+      context.fillStyle = "rgb(40, 80, 120)";
+      context.fillRect(0, 0, 2, 1);
 
-      const target = content.document.createElement("div");
-      target.textContent = "target";
-      Object.assign(target.style, {
-        position: "absolute",
-        left: "10px",
-        top: "20px",
-        width: "137px",
-        height: "53px",
-        margin: "0",
-        padding: "0",
-        border: "0",
+      const firstImageData = context.getImageData(0, 0, 2, 2);
+      const first = Array.from(firstImageData.data);
+      const second = Array.from(context.getImageData(0, 0, 2, 2).data);
+
+      const png = canvas.toDataURL("image/png");
+      const pngBytes = Array.from(
+        new win.Uint8Array(await (await win.fetch(png)).arrayBuffer())
+      );
+      const blob = await new win.Promise(resolve =>
+        canvas.toBlob(resolve, "image/png")
+      );
+
+      const bitmapCanvas = content.document.createElement("canvas");
+      bitmapCanvas.width = 2;
+      bitmapCanvas.height = 2;
+      const bitmapContext = bitmapCanvas.getContext("bitmaprenderer");
+      bitmapContext.transferFromImageBitmap(
+        await win.createImageBitmap(canvas)
+      );
+
+      const offscreen = new win.OffscreenCanvas(2, 2);
+      const offscreenContext = offscreen.getContext("2d");
+      offscreenContext.fillStyle = "rgb(40, 80, 120)";
+      offscreenContext.fillRect(0, 0, 2, 1);
+      const offscreenBlob = await offscreen.convertToBlob({
+        type: "image/png",
       });
 
-      content.document.body.appendChild(target);
+      const webglReference = content.document.createElement("canvas");
+      webglReference.width = 2;
+      webglReference.height = 2;
+      const webglReferenceContext = webglReference.getContext("2d");
+      webglReferenceContext.fillStyle = "rgb(40, 80, 120)";
+      webglReferenceContext.fillRect(0, 0, 2, 2);
 
-      const toRect = rect => ({
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
+      const webglCanvas = content.document.createElement("canvas");
+      webglCanvas.width = 2;
+      webglCanvas.height = 2;
+      const webgl = webglCanvas.getContext("webgl", {
+        preserveDrawingBuffer: true,
       });
+      let webglPng = null;
+      if (webgl) {
+        webgl.clearColor(40 / 255, 80 / 255, 120 / 255, 1);
+        webgl.clear(webgl.COLOR_BUFFER_BIT);
+        webgl.finish();
+        webglPng = webglCanvas.toDataURL("image/png");
+      }
+
+      context.putImageData(firstImageData, 0, 0);
+      const afterPut = Array.from(context.getImageData(0, 0, 2, 2).data);
 
       return {
-        rect1: toRect(target.getBoundingClientRect()),
-        rect2: toRect(target.getBoundingClientRect()),
-        clientRect: toRect(target.getClientRects()[0]),
-        computedWidth: parseFloat(content.getComputedStyle(target).width),
+        first,
+        second,
+        afterPut,
+        png,
+        pngBytes,
+        blobBytes: Array.from(new win.Uint8Array(await blob.arrayBuffer())),
+        bitmapPng: bitmapCanvas.toDataURL("image/png"),
+        offscreenBytes: Array.from(
+          new win.Uint8Array(await offscreenBlob.arrayBuffer())
+        ),
+        webglPng,
+        webglReferencePng: webglReference.toDataURL("image/png"),
       };
     });
 
-    Assert.deepEqual(result.rect1, result.rect2, "Bounding rect is stable");
-    changedBy(result.rect1.x, 10, 0.5, "Bounding rect x is noise-adjusted");
-    changedBy(result.rect1.y, 20, 0.5, "Bounding rect y is noise-adjusted");
-    changedBy(
-      result.rect1.width,
-      137,
-      0.5,
-      "Bounding rect width is noise-adjusted"
+    Assert.notStrictEqual(
+      result.first[2],
+      120,
+      "Canvas noise changes the configured opaque pixel channel"
     );
-    changedBy(
-      result.rect1.height,
-      53,
-      0.5,
-      "Bounding rect height is noise-adjusted"
+    Assert.deepEqual(result.first, result.second, "Canvas reads are stable");
+    Assert.deepEqual(
+      result.first,
+      result.afterPut,
+      "Canvas noise is idempotent after putImageData"
     );
+    Assert.deepEqual(
+      result.pngBytes,
+      result.blobBytes,
+      "Canvas toDataURL and toBlob encode the same protected pixels"
+    );
+    is(
+      result.bitmapPng,
+      result.png,
+      "Bitmap renderer encodes the same protected pixels"
+    );
+    Assert.deepEqual(
+      result.offscreenBytes,
+      result.pngBytes,
+      "OffscreenCanvas encodes the same protected pixels"
+    );
+    Assert.deepEqual(
+      result.first.slice(8),
+      [0, 0, 0, 0, 0, 0, 0, 0],
+      "Canvas noise preserves transparent pixels"
+    );
+    if (result.webglPng) {
+      is(
+        result.webglPng,
+        result.webglReferencePng,
+        "WebGL encodes the same protected pixels as 2D canvas"
+      );
+    } else {
+      info("WebGL context unavailable; skipping WebGL extraction assertion");
+    }
+  });
+});
 
-    assertNear(result.clientRect.x, result.rect1.x, "Client rect x matches");
-    assertNear(result.clientRect.y, result.rect1.y, "Client rect y matches");
-    assertNear(
-      result.clientRect.width,
-      result.rect1.width,
-      "Client rect width matches"
+add_task(async function test_ferifox_screen_media_queries_are_consistent() {
+  await withFerifoxContentTask(async browser => {
+    const result = await SpecialPowers.spawn(browser, [], () => ({
+      width: content.screen.width,
+      height: content.screen.height,
+      availWidth: content.screen.availWidth,
+      availHeight: content.screen.availHeight,
+      deviceWidth: content.matchMedia(
+        `(device-width: ${content.screen.width}px)`
+      ).matches,
+      deviceHeight: content.matchMedia(
+        `(device-height: ${content.screen.height}px)`
+      ).matches,
+      colorDepth: content.matchMedia(
+        `(color: ${content.screen.colorDepth / 3})`
+      ).matches,
+    }));
+
+    is(result.width, EXPECTED_SCREEN_WIDTH, "Configured screen width is used");
+    is(
+      result.height,
+      EXPECTED_SCREEN_HEIGHT,
+      "Configured screen height is used"
     );
-    assertNear(
-      result.clientRect.height,
-      result.rect1.height,
-      "Client rect height matches"
+    is(
+      result.availWidth,
+      EXPECTED_SCREEN_WIDTH,
+      "Configured available width is used"
     );
-    changedBy(
-      result.computedWidth,
-      137,
-      0.5,
-      "Computed width is noise-adjusted"
+    is(
+      result.availHeight,
+      EXPECTED_SCREEN_HEIGHT - 40,
+      "Configured available height is used"
+    );
+    ok(result.deviceWidth, "CSS device-width matches the Persona screen");
+    ok(result.deviceHeight, "CSS device-height matches the Persona screen");
+    ok(result.colorDepth, "CSS color depth matches the Persona screen");
+  });
+});
+
+add_task(async function test_ferifox_geolocation_avoids_host_provider() {
+  await withFerifoxContentTask(async browser => {
+    const result = await SpecialPowers.spawn(browser, [], async () => {
+      await SpecialPowers.pushPermissions([
+        {
+          type: "geo",
+          allow: SpecialPowers.Services.perms.ALLOW_ACTION,
+          context: content.document,
+        },
+      ]);
+
+      const status = await content.navigator.permissions.query({
+        name: "geolocation",
+      });
+      const coords = await new content.Promise((resolve, reject) => {
+        const timeout = content.setTimeout(
+          () => reject(new Error("Configured geolocation timed out")),
+          2000
+        );
+        content.navigator.geolocation.getCurrentPosition(
+          position => {
+            content.clearTimeout(timeout);
+            resolve(position.coords.toJSON());
+          },
+          error => {
+            content.clearTimeout(timeout);
+            reject(new Error(error.message));
+          }
+        );
+      });
+      return { coords, permission: status.state };
+    });
+
+    is(result.permission, "granted", "Geolocation permission is coherent");
+    is(
+      result.coords.latitude,
+      EXPECTED_GEOLOCATION.latitude,
+      "Configured latitude is returned"
+    );
+    is(
+      result.coords.longitude,
+      EXPECTED_GEOLOCATION.longitude,
+      "Configured longitude is returned"
+    );
+    is(
+      result.coords.accuracy,
+      EXPECTED_GEOLOCATION.accuracy,
+      "Configured accuracy is returned"
     );
   });
 });
@@ -347,28 +431,35 @@ add_task(async function test_ferifox_webgl_texture_unit_caps_are_consistent() {
       EXPECTED_WEBGL_MAX_TEX_UNITS,
       "Ferifox combined texture unit cap is applied"
     );
-    ok(
-      caps.vertex <= caps.combined,
+    Assert.lessOrEqual(
+      caps.vertex,
+      caps.combined,
       `Vertex texture unit cap is not above combined cap: ${caps.vertex} <= ${caps.combined}`
     );
-    ok(
-      caps.fragment <= caps.combined,
+    Assert.lessOrEqual(
+      caps.fragment,
+      caps.combined,
       `Fragment texture unit cap is not above combined cap: ${caps.fragment} <= ${caps.combined}`
     );
   });
 });
 
-add_task(async function test_ferifox_audio_noise_is_clamped() {
+add_task(async function test_ferifox_audio_noise_preserves_silence_and_range() {
   await withFerifoxContentTask(async browser => {
-    const { min, max } = await SpecialPowers.spawn(browser, [], async () => {
+    const result = await SpecialPowers.spawn(browser, [], async () => {
       const win = content.wrappedJSObject;
       const context = new win.AudioContext();
       await context.resume();
 
-      const source = new win.ConstantSourceNode(context);
-      source.offset.value = 1;
       const analyser = new win.AnalyserNode(context);
       analyser.fftSize = 32;
+      const silentFloats = new win.Float32Array(analyser.fftSize);
+      const silentBytes = new win.Uint8Array(analyser.fftSize);
+      analyser.getFloatTimeDomainData(silentFloats);
+      analyser.getByteTimeDomainData(silentBytes);
+
+      const source = new win.ConstantSourceNode(context);
+      source.offset.value = 1;
       source.connect(analyser);
       analyser.connect(context.destination);
       source.start();
@@ -393,85 +484,28 @@ add_task(async function test_ferifox_audio_noise_is_clamped() {
       return {
         min,
         max,
+        silentFloats: Array.from(silentFloats),
+        silentBytes: Array.from(silentBytes),
       };
     });
 
-    ok(min >= -1, `Analyser minimum stays in range: ${min}`);
-    ok(max <= 1, `Analyser maximum stays in range: ${max}`);
-  });
-});
-
-add_task(async function test_ferifox_webrtc_stats_strip_preserves_signaling() {
-  await withFerifoxContentTask(async browser => {
-    const result = await SpecialPowers.spawn(browser, [], async () => {
-      const pc = new content.wrappedJSObject.RTCPeerConnection();
-      pc.createDataChannel("ferifox");
-
-      let firstCandidate = null;
-      const gatheringComplete = new content.Promise(resolve => {
-        pc.onicecandidate = event => {
-          if (event.candidate && !firstCandidate) {
-            firstCandidate = event.candidate.candidate;
-          }
-          if (!event.candidate) {
-            resolve();
-          }
-        };
-      });
-
-      await pc.setLocalDescription();
-      await gatheringComplete;
-
-      const stats = await pc.getStats();
-      const candidateAddresses = [];
-      stats.forEach(stat => {
-        if (stat.type === "local-candidate" && "address" in stat) {
-          candidateAddresses.push(stat.address);
-        }
-      });
-
-      const localDescription = pc.localDescription.sdp;
-      pc.close();
-
-      return { firstCandidate, localDescription, candidateAddresses };
-    });
-
-    const firstCandidateAddress = getIceCandidateAddress(result.firstCandidate);
-    const localCandidateAddresses = result.localDescription
-      .split(/\r?\n/)
-      .filter(line => line.startsWith("a=candidate:"))
-      .map(getIceCandidateAddress)
-      .filter(Boolean);
-    const literalStatsAddresses =
-      result.candidateAddresses.filter(isIPAddressLiteral);
-
-    ok(result.firstCandidate, "Received a local ICE candidate");
-    ok(firstCandidateAddress, "Parsed the local ICE candidate address");
     ok(
-      !isWebRTCPlaceholderAddress(firstCandidateAddress),
-      `ICE candidate address is usable: ${result.firstCandidate}`
+      result.silentFloats.every(value => value === 0),
+      "Float analyser output preserves silence"
     );
     ok(
-      localCandidateAddresses.length > 0,
-      "Local description contains gathered ICE candidates"
+      result.silentBytes.every(value => value === 128),
+      "Byte analyser output preserves silence"
     );
-    ok(
-      localCandidateAddresses.some(
-        address => !isWebRTCPlaceholderAddress(address)
-      ),
-      "Local description keeps usable candidate addresses for signaling"
+    Assert.greaterOrEqual(
+      result.min,
+      -1,
+      `Analyser minimum stays in range: ${result.min}`
     );
-    ok(
-      result.candidateAddresses.length > 0,
-      "Page-visible getStats() includes local candidate addresses"
-    );
-    ok(
-      literalStatsAddresses.length > 0,
-      "Page-visible getStats() includes IP literal candidate addresses to check"
-    );
-    ok(
-      literalStatsAddresses.every(isWebRTCPlaceholderAddress),
-      `Page-visible getStats() IP literal addresses are stripped: ${result.candidateAddresses.join(", ")}`
+    Assert.lessOrEqual(
+      result.max,
+      1,
+      `Analyser maximum stays in range: ${result.max}`
     );
   });
 });

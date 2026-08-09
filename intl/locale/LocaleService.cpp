@@ -6,6 +6,7 @@
 
 #include "mozilla/ClearOnShutdown.h"
 #include "mozilla/DebugOnly.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Omnijar.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Services.h"
@@ -490,6 +491,14 @@ LocaleService::GetAppLocaleAsBCP47(nsACString& aRetVal) {
 
 NS_IMETHODIMP
 LocaleService::GetRegionalPrefsLocales(nsTArray<nsCString>& aRetVal) {
+  nsAutoCString personaLocale;
+  if (auto* cfg = FerifoxConfig::GetSingleton();
+      cfg && cfg->GetCanonicalLocale(personaLocale)) {
+    aRetVal.Clear();
+    aRetVal.AppendElement(personaLocale);
+    return NS_OK;
+  }
+
   bool useOSLocales =
       Preferences::GetBool("intl.regional_prefs.use_os_locales", false);
 
@@ -534,6 +543,14 @@ LocaleService::GetRegionalPrefsLocales(nsTArray<nsCString>& aRetVal) {
 
 NS_IMETHODIMP
 LocaleService::GetWebExposedLocales(nsTArray<nsCString>& aRetVal) {
+  nsAutoCString personaLocale;
+  if (auto* cfg = FerifoxConfig::GetSingleton();
+      cfg && cfg->GetCanonicalLocale(personaLocale)) {
+    aRetVal.Clear();
+    aRetVal.AppendElement(personaLocale);
+    return NS_OK;
+  }
+
   if (nsContentUtils::ShouldResistFingerprinting("No context",
                                                  RFPTarget::JSLocale)) {
     aRetVal = nsTArray<nsCString>({nsRFPService::GetSpoofedJSLocale()});

@@ -134,12 +134,14 @@ The in-tree risk point is `remote/shared/RecommendedPreferences.sys.mjs`. It is 
 
 The current branch audit found additional surfaces that must be controlled along with the obvious `navigator.userAgent`, `navigator.platform`, screen, WebGL, audio, and timezone values:
 
-- `navigator.plugins` and `navigator.mimeTypes` need consistent length, indexed getter, named getter, and supported-name behavior. Returning a spoofed length while leaving named entries reachable is detectable.
-- `navigator.geolocation` should be replaced at the position update source so both `getCurrentPosition()` and `watchPosition()` receive the configured position.
-- `navigator.connection.type` needs config handling in the Network Information implementation, not just the object presence or scalar metrics.
-- Window origin and viewport-origin geometry must be coherent. `window.screenX/screenY`, `window.mozInnerScreenX/Y`, `screen.orientation`, legacy orientation APIs, and trusted `MouseEvent`/`PointerEvent` `screenX/screenY` values should tell the same screen story as `screen.width/height`, `devicePixelRatio`, and `outerWidth/outerHeight`.
-- `window.innerWidth/innerHeight` are high-risk to spoof as standalone getters because layout APIs, CSS media queries, `documentElement.clientWidth`, `visualViewport`, and screenshots can expose the real viewport. The recommended default is to make the actual launch viewport match the persona, then only spoof origin and screen metadata that do not control layout.
-- HTTP `Priority` and top-window URI state are passive network/context signals. They are not JS getters, but they can expose request scheduling or embedding context to browser-side observers and should be stripped by stealth profiles.
+- `navigator.plugins` and `navigator.mimeTypes` must preserve Firefox's complete spec-defined PDF entries. Persona-controlled truncation creates detectable differences between length, indexed getters, named getters, and supported names.
+- Configured geolocation is delivered after the normal site permission decision and before Firefox consults the host provider or operating-system location permission. Both `getCurrentPosition()` and `watchPosition()` therefore see the same persona position without requiring host geolocation services.
+- Cookie availability, PDF support, online state, Network Information, DNT, and GPC are runtime policy or device state. Ferifox leaves them native so getters agree with cookie access, PDF handling, online/offline events, network updates, and outgoing privacy headers.
+- Storage quota, persistence, and compressor reduction are also live state. Ferifox leaves those values native instead of changing WebIDL results without changing quota enforcement, persistence policy, or audio processing.
+- WebMIDI identity fields remain tied to the actual port. Rewriting only the manufacturer, name, or version would contradict the port ID, type, connection state, and behavior.
+- Window origin and viewport-origin geometry must be coherent. `window.screenX/screenY`, `window.mozInnerScreenX/Y`, `screen.orientation`, legacy orientation APIs, and trusted `MouseEvent`/`PointerEvent` `screenX/screenY` values should tell the same screen story as `screen.width/height` and `devicePixelRatio`.
+- `window.innerWidth/innerHeight` and `window.outerWidth/outerHeight` are high-risk to spoof as standalone getters because layout APIs, CSS media queries, `documentElement.clientWidth`, `visualViewport`, screenshots, and window resizing expose the real dimensions. Ferifox leaves them native; the launcher must make the actual window and viewport match the Persona.
+- HTTP `Priority` and top-window URI state are internal parts of normal Firefox request scheduling, authentication, and partitioning behavior. Removing them does not remove an outgoing top-window header and instead makes the program-driven path differ from Firefox, so Ferifox leaves both mechanisms native.
 - Automation recommended prefs such as popup blocking, delayed input security, permission testing, push connection, focus test mode, offline status, and `dump()` exposure should inherit regular headed Firefox state unless a caller explicitly opts into a test-only behavior.
 
 ### Other Entry-Point Paths
@@ -207,12 +209,15 @@ The common detection methods to keep in scope are:
 - Behavioral probes: pointer, mouse, touch, focus, scroll, typing, navigation, retry timing, challenge solving, and visibility/occlusion state.
 - Inconsistency probes: contradictions between claimed browser/OS/GPU/locale/network, differences between main-window and worker APIs, and differences between page-visible APIs and automation protocol state.
 
-For the Cloudflare-relevant JavaScript interface layer, Ferifox now treats these signal families as a coherent group: navigator identity and automation state, language/locale/timezone, screen and window geometry, screen orientation, trusted pointer/mouse event screen coordinates, WebGL adapter strings, WebGPU's standard adapter-info fields, audio context metadata, font availability, geolocation, Network Information, Permissions API query state, storage estimate and persisted state, cookies/PDF/plugins/mimeTypes, and DNT/GPC. The latest geometry patch closes concrete mismatches where a persona could report a spoofed screen and outer window while page-visible `screenX`, `mozInnerScreenX/Y`, orientation, trusted event `screenX/Y`, `getBoundingClientRect()`, and `getClientRects()` still reflected conflicting geometry or host state. The storage patches add persona-configurable `navigator.storage.estimate()` usage/quota values and `persisted()`/`persist()` result values for window and worker callers without changing actual quota enforcement. The permissions patch can clamp `navigator.permissions.query()` states for window and worker callers after normal descriptor validation, but it does not report a state more permissive than the real browser/system permission state.
+For the Cloudflare-relevant JavaScript interface layer, Ferifox treats these signal families as a group: navigator identity and automation state, language/locale/timezone, screen and window geometry, screen orientation, trusted pointer/mouse event screen coordinates, WebGL adapter strings, Firefox's empty standard WebGPU adapter-info fields, audio context metadata, font availability, geolocation, cookies/PDF/plugins/mimeTypes, and the runtime state that must remain native. Persona state is loaded after profile and AutoConfig preferences but before application services, and the parsed configuration is passed through the inherited environment to sandboxed child processes. Persona-controlled preferences are locked on the default branch for the lifetime of the process, keeping them authoritative without writing Persona state into the profile. This prevents the first consumer from deciding when the Persona takes effect and avoids child-process dependence on source-file access. Screen device-pixel ratio now drives Firefox's native CSS pixel scale and the physical dimensions of the headless screen instead of changing only the DOM getter; host OS text scaling is disabled when a Persona DPR is present so it cannot silently multiply that value. CSS device-size, color, and resolution media queries use the same Persona screen values. The canonical persona locale also drives Gecko's regional preferences, preventing default `Intl` formatting from inheriting a same-language host region. Native font whitelisting filters CSS matching and metrics as well as enumeration. Configured geolocation is returned only after browser permission is granted, but does not depend on the host provider or system location permission. Layout geometry is left native because independently perturbing rectangles and computed CSS pixels creates impossible relationships with layout, hit testing, screenshots, and media queries. Cookie availability, PDF support, online/network state, storage, DNT, GPC, permission-query state, dynamic audio reduction, and hardware-port identity remain on Firefox's native paths because static Persona values would contradict browser actions, events, request headers, or actual device behavior.
 
 Running on a personal computer with a normal residential network improves the network and hardware story compared with a datacenter VM, but it does not close the remaining gaps:
 
 - TLS/HTTP2/HTTP3 transport fingerprinting is not configurable in this branch.
-- Cloudflare challenge execution can still observe Firefox-specific rendering, timing, WebGL/canvas/audio/font behavior, and interaction patterns.
+- Personas must run on the matching compiled operating system and graphics backend. Navigator and WebGL strings cannot make Linux font rasterization, Windows DirectWrite, or macOS CoreText behave like another platform.
+- Every font named by `fonts.visible` should be installed in the runtime image. Firefox's native whitelist exposes the installed intersection and ignores a whitelist with no visible match, so different host font packages can still create different metrics and fallback behavior.
+- Cloudflare challenge execution can still observe Firefox-specific rendering, timing, WebGL/canvas/audio/font behavior, and interaction patterns. Standard Personas normalize WebGL adapter strings but leave extensions, capabilities, and actual rendering host-derived.
+- WebGPU limits and features, media codec and DRM availability, speech voices, media-device inventory, peripheral APIs, and operating-system accessibility/input behavior remain host-derived.
 - Viewport sizing must be real. A launcher should size the actual window and automation viewport to the persona; spoofing only `innerWidth/innerHeight` would create layout and screenshot contradictions.
 - Trusted mouse, pointer, and widget-originated touch event `screenX/Y` now align with configured `window.mozInnerScreenX/Y` for content callers. Personas that declare `maxTouchPoints: 0` should still avoid enabling touch input surfaces.
 - Remote Agent, Marionette, WebDriver BiDi, and Puppeteer/Playwright command algorithms remain distinct program-driven paths unless the crawler avoids them or limits them to native snapshot reads.
@@ -221,17 +226,18 @@ Running on a personal computer with a normal residential network improves the ne
 
 #### Future Work: Personal-Information Interfaces
 
-Cloudflare does not publish the exact JavaScript probes used by every challenge or Bot Management configuration, so this map is based on its documented signal families: JavaScript Detections, browser signals, request headers and session features, static heuristics such as header-order mismatches, bot scores, and JA3/JA4 transport fingerprints. The Ferifox patches now cover the main navigator, geometry, WebGL identity, WebGPU standard adapter-info string, audio-context, font, geolocation, Network Information, plugin/mime-type, privacy-signal, cookie, and trusted-input-coordinate surfaces. Several personal-information or device-state interfaces still need explicit future work:
+Cloudflare does not publish the exact JavaScript probes used by every challenge or Bot Management configuration, so this map is based on its documented signal families: JavaScript Detections, browser signals, request headers and session features, static heuristics such as header-order mismatches, bot scores, and JA3/JA4 transport fingerprints. The Ferifox patches now cover the main navigator, geometry, WebGL identity, Firefox's native empty WebGPU adapter-info string, audio-context, font, geolocation, plugin/mime-type, and trusted-input-coordinate surfaces while preserving native runtime state. Several personal-information or device-state interfaces still need explicit future work:
 
-- `navigator.mediaDevices`, `enumerateDevices()`, `devicechange`, and active capture metadata should normalize device counts, kinds, labels, group IDs, and capture state to the persona. Firefox already gates labels and IDs, but the device inventory itself can still disclose host hardware.
-- Permission prompts, actual API access decisions, and protocol permission overrides must not contradict persona-configured `navigator.permissions.query()` state.
-- Storage and quota behavior beyond the WebIDL return values still needs review. Actual persistence policy, origin storage behavior, cache availability, and filesystem access should follow profile/persona policy while preserving normal cookie behavior required for `cf_clearance` and ordinary browsing sessions.
-- `speechSynthesis.getVoices()` should filter voice names, languages, defaults, and local-service metadata to the OS and locale persona.
+- `navigator.mediaDevices`, `enumerateDevices()`, `devicechange`, and active capture metadata should normalize device counts, kinds, labels, group IDs, and capture state to the persona. The optional Ferifox count fields only cap enumeration of real devices; they do not fabricate missing devices, so the inventory can still disclose host hardware.
+- Permission queries, prompts, API access decisions, and protocol permission overrides remain native and must agree. Geolocation is the one explicit host-system exception: after browser permission is granted, a valid configured position bypasses the host provider and operating-system location permission.
+- Storage, quota, and persistence remain native. Any future normalization must change actual origin storage behavior, cache availability, and filesystem access together while preserving normal cookie behavior required for `cf_clearance` and ordinary browsing sessions.
+- The optional `speechSynthesis.getVoices()` allow-list and count cap only hide installed voices. Language, default, and local-service metadata still need alignment with the OS and locale persona.
 - WebGPU still needs capability-level review. Standard `GPUAdapterInfo` strings are already empty in Firefox, but exposed features, limits, fallback state, subgroup sizes, timing, and worker/window parity should be checked against the declared persona.
 - Media capability and codec interfaces, including `navigator.mediaCapabilities` and related EME/key-system support checks, should be normalized so decoder availability does not reveal an unexpected platform or build.
 - Peripheral APIs such as Gamepad, WebMIDI, Web Serial, WebHID, WebUSB, Bluetooth, VR, and XR should either remain disabled or expose only persona-declared devices.
-- WebRTC needs deeper persona alignment beyond host-candidate suppression and default-address-only prefs. SDP contents, ICE candidate details, mDNS hostnames, TURN/STUN behavior, and `getStats()` values should be audited.
-- Canvas 2D rendering and readback, text metrics, media rendering, and fine-grained timing should be evaluated as a coherent rendering surface. Any defense should be deterministic per persona, not random per read.
+- WebRTC needs deeper persona alignment beyond Firefox's native host-candidate suppression and default-address-only prefs. SDP contents, ICE candidate details, mDNS hostnames, TURN/STUN behavior, and `getStats()` values should be audited together; Ferifox does not rewrite statistics independently of signaling.
+- Canvas 2D rendering and readback, text metrics, media rendering, and fine-grained timing should be evaluated as a coherent rendering surface. Configured canvas noise is stable per persona and consistent for opaque readback/encoding paths, but partially transparent rendering, screenshots, text rasterization, and GPU-backed output still need joint validation.
+- Noise seeds must be shared by a sufficiently large persona cohort. A unique persistent `canvas.noiseSeed` or `audio.noiseSeed` becomes a stable identifier instead of an anonymity defense.
 - Worker and service-worker exposure needs parity for every patched API that is available off the main window.
 - Marionette, WebDriver BiDi, Remote Agent, and crawler runtime paths must keep geolocation, permission, storage, cookie, viewport, user-agent, locale, and timezone state aligned with regular page-visible APIs.
 
@@ -267,41 +273,27 @@ remote.prefs.recommended
 remote.bidi.dismiss_file_pickers.enabled
 screenshots.browser.component.enabled
 navigator.webdriver
-navigator.pluginsLength
-navigator.mimeTypesLength
-navigator.connection.type
+intl.locale
+canvas.noiseSeed
+audio.noiseSeed
 geolocation.latitude
 geolocation.longitude
 geolocation.accuracy
-storage.estimate.usage
-storage.estimate.quota
-storage.persisted
-permissions.geolocation
-permissions.notifications
-permissions.push
-permissions.persistent-storage
-permissions.midi
-permissions.storage-access
-permissions.screen-wake-lock
-permissions.camera
-permissions.microphone
-permissions.loopback-network
-permissions.local-network
-network.stripTopWindowURI
-network.stripPriorityHeader
+screen.devicePixelRatio
+fonts.visible
+webrtc.noHostCandidates
+webrtc.defaultAddressOnly
 window.screenX
 window.screenY
 window.mozInnerScreenX
 window.mozInnerScreenY
-window.outerWidth
-window.outerHeight
 screen.orientation.type
 screen.orientation.angle
 webgl.forceEnabled
 webgl.forceEGL
 ```
 
-Permission values use the WebIDL strings `granted`, `denied`, or `prompt` and are applied as a clamp over the real effective permission state. The important constraint is still consistency: geolocation must match proxy egress, timezone, locale, `Accept-Language`, and the persona's regional assumptions. Permission states must match the corresponding API behavior and any automation protocol overrides. Plugin and MIME counts must match the actual objects exposed by the engine unless the implementation also creates synthetic entries.
+The important constraint is consistency: geolocation must match proxy egress, timezone, locale, `Accept-Language`, and the persona's regional assumptions. Permission states must match the corresponding API behavior and any automation protocol overrides, so permissions are intentionally not Persona keys. Firefox's native PDF plugin and MIME collections should remain intact unless an implementation creates a complete alternative set of entries. Cookie availability, PDF enablement, online state, Network Information, DNT, and GPC are also intentionally not Persona keys because they must follow live policy and transport state.
 
 ## What Remains Unsolved
 
