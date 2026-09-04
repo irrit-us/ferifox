@@ -2,6 +2,8 @@
 
 ## v0.3.0 - 2026-09-04
 
+Third Ferifox stealth hardening release based on Firefox 155.0.
+
 ### Added
 
 - Added a Persona authoring guide covering the startup contract, supported fields, coherence rules, native-state boundaries, and validation checklist.
