@@ -480,9 +480,9 @@ bool FerifoxConfig::SetPersistentEnv(const nsACString& aName,
   auto storage = MakeUnique<nsCString>(aName);
   storage->Append('=');
   storage->Append(aValue);
-  const char* value = storage->get();
+  nsCString& kept = *storage;
   mPersistentEnvStrings.AppendElement(std::move(storage));
-  if (PR_SetEnv(value) == PR_SUCCESS) {
+  if (PR_SetEnv(kept.get()) == PR_SUCCESS) {
     return true;
   }
   MOZ_LOG(sFerifoxLog, LogLevel::Warning,
