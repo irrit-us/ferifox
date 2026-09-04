@@ -3,7 +3,7 @@
     "webdriver": false,
     "platform": "Win32",
     "oscpu": "Windows NT 10.0; Win64; x64",
-    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:155.0) Gecko/20100101 Firefox/155.0",
     "hardwareConcurrency": 12,
     "maxTouchPoints": 0,
     "vendor": "",

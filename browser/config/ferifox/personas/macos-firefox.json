@@ -3,7 +3,7 @@
     "webdriver": false,
     "platform": "MacIntel",
     "oscpu": "Intel Mac OS X 10.15",
-    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:152.0) Gecko/20100101 Firefox/152.0",
+    "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:155.0) Gecko/20100101 Firefox/155.0",
     "hardwareConcurrency": 8,
     "maxTouchPoints": 0,
     "vendor": "",

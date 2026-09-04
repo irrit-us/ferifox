@@ -8,6 +8,7 @@
 
 ### Changed
 
+- Rebased the source tree on `FIREFOX_155_0_RELEASE` and aligned checked-in Persona user agents with Firefox 155.0.
 - Applied persona device-pixel ratio through Firefox's native layout scale and the headless screen backend instead of overriding only `window.devicePixelRatio`.
 - Aligned CSS device-size, color, and resolution media queries with Persona screen dimensions, depth, and effective pixel scale.
 - Applied persona font visibility through Firefox's native system-font whitelist so CSS matching, metrics, and enumeration use the same filtered set.
