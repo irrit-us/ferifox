@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.0 - 2026-09-04
 
 ### Added
 
@@ -36,6 +36,10 @@
 - Made a configured empty `speech.voices` list expose no voices instead of falling through to every host voice.
 - Clamped `screen.availWidth`/`availHeight` values exceeding the screen dimensions at Persona load so impossible geometry cannot be exposed.
 - Adopted stock-shaped WebRTC host candidates in checked-in Personas and added `webrtc.proxyOnlyIfBehindProxy`: offering no ICE candidates at all is itself detectable, and UDP STUN must not bypass a configured proxy.
+
+### Removed
+
+- Removed the GitHub Actions release workflow; releases are now built and published manually (Windows on a local machine, Linux via Docker).
 
 ## v0.2.0 - 2026-07-09
 
