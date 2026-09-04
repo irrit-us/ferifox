@@ -43,6 +43,39 @@ static void LockDefaultPref(const char* aName, nsresult aSetResult) {
   }
 }
 
+// An available rectangle larger than its screen is geometry no real display
+// reports; clamp it before any consumer can expose the contradiction.
+static void NormalizeScreenGeometry(Json::Value& aRoot) {
+  Json::Value& screen = aRoot["screen"];
+  if (!screen.isObject()) {
+    return;
+  }
+  auto positiveInt = [](const Json::Value& aValue, int64_t& aOut) {
+    if (!aValue.isIntegral()) {
+      return false;
+    }
+    int64_t v = aValue.asInt64();
+    if (v <= 0 || v > INT32_MAX) {
+      return false;
+    }
+    aOut = v;
+    return true;
+  };
+  int64_t dimension, avail;
+  if (positiveInt(screen["width"], dimension) &&
+      positiveInt(screen["availWidth"], avail) && avail > dimension) {
+    screen["availWidth"] = static_cast<Json::Int>(dimension);
+    MOZ_LOG(sFerifoxLog, LogLevel::Warning,
+            ("FERIFOX_CONFIG: clamped screen.availWidth to screen.width"));
+  }
+  if (positiveInt(screen["height"], dimension) &&
+      positiveInt(screen["availHeight"], avail) && avail > dimension) {
+    screen["availHeight"] = static_cast<Json::Int>(dimension);
+    MOZ_LOG(sFerifoxLog, LogLevel::Warning,
+            ("FERIFOX_CONFIG: clamped screen.availHeight to screen.height"));
+  }
+}
+
 FerifoxConfig* FerifoxConfig::sSingleton;
 nsCString FerifoxConfig::sTestingConfigJson;
 
@@ -193,6 +226,8 @@ bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,
     return false;
   }
 
+  NormalizeScreenGeometry(*root);
+
   if (XRE_IsParentProcess()) {
     Json::StreamWriterBuilder builder;
     builder["indentation"] = "";
@@ -317,6 +352,14 @@ bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,
                         Preferences::SetBool(
                             "media.peerconnection.ice.default_address_only",
                             defaultOnly.asBool(), PrefValueKind::Default));
+      }
+      if (const Json::Value& proxyOnly = (*webrtc)["proxyOnlyIfBehindProxy"];
+          proxyOnly.isBool()) {
+        LockDefaultPref(
+            "media.peerconnection.ice.proxy_only_if_behind_proxy",
+            Preferences::SetBool(
+                "media.peerconnection.ice.proxy_only_if_behind_proxy",
+                proxyOnly.asBool(), PrefValueKind::Default));
       }
       MOZ_LOG(sFerifoxLog, LogLevel::Info,
               ("FERIFOX_CONFIG: WebRTC privacy prefs applied"));

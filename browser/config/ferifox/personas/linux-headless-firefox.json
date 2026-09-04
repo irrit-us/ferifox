@@ -75,8 +75,9 @@
     "acceptLanguage": "en-US,en;q=0.5"
   },
   "webrtc": {
-    "noHostCandidates": true,
-    "defaultAddressOnly": true
+    "noHostCandidates": false,
+    "defaultAddressOnly": true,
+    "proxyOnlyIfBehindProxy": true
   },
   "automation": {
     "stealth": true

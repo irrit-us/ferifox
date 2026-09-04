@@ -41,8 +41,8 @@ The checked-in Personas show the recommended baseline. Supported fields are:
 | `audio` | `sampleRate`, `outputLatency`, `maxChannelCount`, `noiseSeed` | Controls supported AudioContext metadata and optional analyser noise. Silence remains unchanged. |
 | `canvas` | `noiseSeed` | Enables deterministic Canvas 2D readback and canvas encoding protection for opaque pixels. |
 | `mediaDevices` | `audioInputCount`, `audioOutputCount`, `videoInputCount` | Caps real enumerated devices; it never creates devices. |
-| `speech` | `voices`, `voiceCount` | Filters and caps voices installed on the host. |
-| `webrtc` | `noHostCandidates`, `defaultAddressOnly` | Locks Firefox's corresponding ICE privacy preferences. |
+| `speech` | `voices`, `voiceCount` | Filters and caps voices installed on the host. A configured `voices` list fails closed: an empty list exposes no voices instead of falling through to every host voice. |
+| `webrtc` | `noHostCandidates`, `defaultAddressOnly`, `proxyOnlyIfBehindProxy` | Locks Firefox's corresponding ICE privacy preferences. Prefer `noHostCandidates: false`: stock Firefox exposes mDNS-obfuscated host candidates, and offering none is itself detectable. `proxyOnlyIfBehindProxy` stops UDP STUN from bypassing a configured proxy. |
 | `automation` | `stealth` | Locks the regular-browser preference baseline before automation services start. |
 
 Unknown fields have no effect. Values are consumed only when their expected JSON
@@ -68,6 +68,13 @@ A Persona must describe the runtime that actually executes it:
   difference between `mozInnerScreenX/Y` and `screenX/Y` equal to the real or
   emulated browser chrome offset, and verify trusted mouse and touch event
   coordinates against that origin.
+- Keep the screen geometry hierarchy plausible: `availWidth`/`availHeight`
+  must not exceed `width`/`height` (the loader clamps such contradictions),
+  and a headed desktop persona should keep a taskbar or menu-bar gap between
+  them. Headless personas natively report identical values.
+- Keep the WebGL renderer plausible for the screen. Consistency checkers flag
+  pairings no real machine ships, such as a discrete desktop GPU behind a
+  netbook-sized panel; integrated graphics fit any geometry.
 - Match touch, media-device, audio, GPU, and accessibility claims to available
   host behavior. Capability caps can hide entries but cannot fabricate them.
 - Share canvas and audio noise seeds across a sufficiently large cohort. A

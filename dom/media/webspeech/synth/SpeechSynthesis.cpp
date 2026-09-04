@@ -272,9 +272,10 @@ void SpeechSynthesis::GetVoices(
   }
 
   if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    // A configured voice list fails closed: an empty list exposes no voices
+    // instead of falling through to every host voice.
     nsTArray<nsString> allowedVoices;
-    if (cfg->GetStringList("speech.voices"_ns, allowedVoices) &&
-        !allowedVoices.IsEmpty()) {
+    if (cfg->GetStringList("speech.voices"_ns, allowedVoices)) {
       nsTArray<RefPtr<SpeechSynthesisVoice>> filtered;
       for (auto& voice : aResult) {
         nsString voiceName;

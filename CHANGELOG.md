@@ -33,6 +33,9 @@
 - Rejected invalid timezone, locale, geolocation, device-pixel ratio, font-list, string-array, and non-finite numeric values before applying host-visible state.
 - Aligned Linux headless WebGL adapter strings with the regular Linux persona.
 - Kept configured trusted mouse, pointer, and touch screen coordinates authoritative when fingerprinting resistance is also enabled.
+- Made a configured empty `speech.voices` list expose no voices instead of falling through to every host voice.
+- Clamped `screen.availWidth`/`availHeight` values exceeding the screen dimensions at Persona load so impossible geometry cannot be exposed.
+- Adopted stock-shaped WebRTC host candidates in checked-in Personas and added `webrtc.proxyOnlyIfBehindProxy`: offering no ICE candidates at all is itself detectable, and UDP STUN must not bypass a configured proxy.
 
 ## v0.2.0 - 2026-07-09
 
