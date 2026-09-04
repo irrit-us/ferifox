@@ -5,6 +5,7 @@
 #include "SpeechSynthesis.h"
 
 #include "AutoplayPolicy.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Logging.h"
 #include "mozilla/dom/Document.h"
 #include "mozilla/dom/Element.h"
@@ -268,6 +269,30 @@ void SpeechSynthesis::GetVoices(
     }
 
     aResult.AppendElement(voice);
+  }
+
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsTArray<nsString> allowedVoices;
+    if (cfg->GetStringList("speech.voices"_ns, allowedVoices) &&
+        !allowedVoices.IsEmpty()) {
+      nsTArray<RefPtr<SpeechSynthesisVoice>> filtered;
+      for (auto& voice : aResult) {
+        nsString voiceName;
+        voice->GetName(voiceName);
+        for (const auto& allowed : allowedVoices) {
+          if (voiceName.Equals(allowed)) {
+            filtered.AppendElement(std::move(voice));
+            break;
+          }
+        }
+      }
+      aResult = std::move(filtered);
+    }
+
+    auto vc = cfg->GetUint32("speech.voiceCount"_ns);
+    if (vc && *vc < aResult.Length()) {
+      aResult.TruncateLength(*vc);
+    }
   }
 
   mVoiceCache.Clear();

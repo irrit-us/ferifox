@@ -94,6 +94,7 @@ void ClientWebGLContext::GetExtension(JSContext* cx, const nsAString& wideName,
   }
 
   if (ext == WebGLExtensionID::Max) return;
+  if (!IsSupported(ext, callerType)) return;
 
   RefPtr<ClientWebGLExtensionBase> extObj;
   if (ext == WebGLExtensionID::WEBGL_lose_context) {

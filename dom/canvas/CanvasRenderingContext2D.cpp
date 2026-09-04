@@ -2295,6 +2295,9 @@ UniquePtr<uint8_t[]> CanvasRenderingContext2D::GetImageBuffer(
           out_imageSize->width * out_imageSize->height * 4,
           SurfaceFormat::A8R8G8B8_UINT32);
     }
+    CanvasUtils::ApplyFerifoxCanvasNoise(
+        ret.get(), out_imageSize->width, out_imageSize->height,
+        out_imageSize->width * 4, SurfaceFormat::A8R8G8B8_UINT32);
   }
 
   return ret;
@@ -6739,6 +6742,10 @@ nsresult CanvasRenderingContext2D::GetImageDataArray(
                         aWidth * 4, SurfaceFormat::R8G8B8A8,
                         dstWriteRect.Size());
     }
+
+    CanvasUtils::ApplyFerifoxCanvasNoise(
+        dst, dstWriteRect.Width(), dstWriteRect.Height(), aWidth * 4,
+        SurfaceFormat::R8G8B8A8, srcReadRect.x, srcReadRect.y);
   } while (false);
 
   readback->Unmap();

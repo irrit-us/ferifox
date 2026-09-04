@@ -21,6 +21,7 @@
 #include "WebGLVertexArray.h"
 #include "gfxEnv.h"
 #include "jsfriendapi.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/StaticPrefs_webgl.h"
 #include "nsPrintfCString.h"
@@ -79,6 +80,14 @@ static bool RestrictCap(T* const cap, const T restrictedVal) {
 
   *cap = restrictedVal;
   return true;
+}
+
+template <class T>
+static void RestrictConfiguredCap(T* const cap, const T configuredVal,
+                                  const T minVal) {
+  if (configuredVal >= minVal && configuredVal < *cap) {
+    *cap = configuredVal;
+  }
 }
 
 ////////////////////
@@ -474,6 +483,72 @@ bool WebGLContext::InitAndValidateGL(FailureReason* const out_failReason) {
       GenerateWarning(
           "Unable to restrict WebGL limits in order to resist fingerprinting");
       return false;
+    }
+  }
+
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetUint32("webgl.maxTex2dSize"_ns)) {
+      RestrictConfiguredCap(&limits.maxTex2dSize, *val, kMinMaxTextureSize);
+    }
+    if (auto val = cfg->GetUint32("webgl.maxTexCubeSize"_ns)) {
+      RestrictConfiguredCap(&limits.maxTexCubeSize, *val,
+                            kMinMaxCubeMapTextureSize);
+    }
+    if (auto val = cfg->GetUint32("webgl.maxViewportDim"_ns)) {
+      RestrictConfiguredCap(&limits.maxViewportDim, *val, 1u);
+    }
+    if (auto val = cfg->GetUint32("webgl.maxVertexAttribs"_ns)) {
+      RestrictConfiguredCap(&limits.maxVertexAttribs, *val,
+                            kMinMaxVertexAttribs);
+    }
+    if (auto val = cfg->GetUint32("webgl.maxTexUnits"_ns)) {
+      RestrictConfiguredCap(&limits.maxTexUnits, *val,
+                            kMinMaxCombinedTextureImageUnits);
+      if (*val >= kMinMaxCombinedTextureImageUnits) {
+        uint32_t configured = std::min(*val, limits.maxTexUnits);
+        RestrictConfiguredCap(&mGLMaxVertexTextureImageUnits, configured,
+                              kMinMaxVertexTextureImageUnits);
+        RestrictConfiguredCap(&mGLMaxFragmentTextureImageUnits, configured,
+                              kMinMaxFragmentTextureImageUnits);
+      }
+    }
+    if (auto val = cfg->GetUint32("webgl.maxVertexTextureImageUnits"_ns)) {
+      RestrictConfiguredCap(&mGLMaxVertexTextureImageUnits,
+                            std::min(*val, limits.maxTexUnits),
+                            kMinMaxVertexTextureImageUnits);
+    }
+    if (auto val = cfg->GetUint32("webgl.maxFragmentTextureImageUnits"_ns)) {
+      RestrictConfiguredCap(&mGLMaxFragmentTextureImageUnits,
+                            std::min(*val, limits.maxTexUnits),
+                            kMinMaxFragmentTextureImageUnits);
+    }
+    if (auto val = cfg->GetDouble("webgl.pointSizeRangeMin"_ns)) {
+      float configured = static_cast<float>(*val);
+      if (configured > 0 && configured > limits.pointSizeRange[0] &&
+          configured <= limits.pointSizeRange[1]) {
+        limits.pointSizeRange[0] = configured;
+      }
+    }
+    if (auto val = cfg->GetDouble("webgl.pointSizeRangeMax"_ns)) {
+      float configured = static_cast<float>(*val);
+      if (configured >= limits.pointSizeRange[0] &&
+          configured < limits.pointSizeRange[1]) {
+        limits.pointSizeRange[1] = configured;
+      }
+    }
+    if (auto val = cfg->GetDouble("webgl.lineWidthRangeMin"_ns)) {
+      float configured = static_cast<float>(*val);
+      if (configured > 0 && configured > limits.lineWidthRange[0] &&
+          configured <= limits.lineWidthRange[1]) {
+        limits.lineWidthRange[0] = configured;
+      }
+    }
+    if (auto val = cfg->GetDouble("webgl.lineWidthRangeMax"_ns)) {
+      float configured = static_cast<float>(*val);
+      if (configured >= limits.lineWidthRange[0] &&
+          configured < limits.lineWidthRange[1]) {
+        limits.lineWidthRange[1] = configured;
+      }
     }
   }
 

@@ -222,4 +222,6 @@ JSObject* DynamicsCompressorNode::WrapObject(
   return DynamicsCompressorNode_Binding::Wrap(aCx, this, aGivenProto);
 }
 
+float DynamicsCompressorNode::Reduction() const { return mReduction; }
+
 }  // namespace mozilla::dom

@@ -9,6 +9,7 @@
 #include "RuntimeService.h"
 #include "WorkerRunnable.h"
 #include "WorkerScope.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/dom/LockManager.h"
 #include "mozilla/dom/MediaCapabilities.h"
 #include "mozilla/dom/Navigator.h"
@@ -125,6 +126,64 @@ bool WorkerNavigator::GlobalPrivacyControl() const {
          gpcStatus;
 }
 
+void WorkerNavigator::GetAppCodeName(nsString& aAppCodeName,
+                                     ErrorResult& /* unused */) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.appCodeName"_ns, val);
+    if (!val.IsEmpty()) {
+      aAppCodeName = std::move(val);
+      return;
+    }
+  }
+
+  aAppCodeName.AssignLiteral("Mozilla");
+}
+
+void WorkerNavigator::GetAppName(nsString& aAppName) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.appName"_ns, val);
+    if (!val.IsEmpty()) {
+      aAppName = std::move(val);
+      return;
+    }
+  }
+
+  aAppName.AssignLiteral("Netscape");
+}
+
+void WorkerNavigator::GetProduct(nsString& aProduct) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.product"_ns, val);
+    if (!val.IsEmpty()) {
+      aProduct = std::move(val);
+      return;
+    }
+  }
+
+  aProduct.AssignLiteral("Gecko");
+}
+
+void WorkerNavigator::GetLanguage(nsString& aLanguage) const {
+  nsTArray<nsString> languages;
+  GetLanguages(languages);
+  MOZ_ASSERT(languages.Length() >= 1);
+  aLanguage.Assign(languages[0]);
+}
+
+void WorkerNavigator::GetLanguages(nsTArray<nsString>& aLanguages) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    cfg->GetStringList("navigator.languages"_ns, aLanguages);
+    if (!aLanguages.IsEmpty()) {
+      return;
+    }
+  }
+
+  aLanguages = mProperties.mLanguages.Clone();
+}
+
 void WorkerNavigator::SetLanguages(const nsTArray<nsString>& aLanguages) {
   WorkerNavigator_Binding::ClearCachedLanguageValue(this);
   WorkerNavigator_Binding::ClearCachedLanguagesValue(this);
@@ -134,6 +193,15 @@ void WorkerNavigator::SetLanguages(const nsTArray<nsString>& aLanguages) {
 void WorkerNavigator::GetAppVersion(nsString& aAppVersion,
                                     CallerType aCallerType,
                                     ErrorResult& aRv) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.appVersion"_ns, val);
+    if (!val.IsEmpty()) {
+      aAppVersion = std::move(val);
+      return;
+    }
+  }
+
   WorkerPrivate* workerPrivate = GetCurrentThreadWorkerPrivate();
   MOZ_ASSERT(workerPrivate);
 
@@ -156,6 +224,15 @@ void WorkerNavigator::GetAppVersion(nsString& aAppVersion,
 
 void WorkerNavigator::GetPlatform(nsString& aPlatform, CallerType aCallerType,
                                   ErrorResult& aRv) const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString val;
+    cfg->GetString("navigator.platform"_ns, val);
+    if (!val.IsEmpty()) {
+      aPlatform = std::move(val);
+      return;
+    }
+  }
+
   WorkerPrivate* workerPrivate = GetCurrentThreadWorkerPrivate();
   MOZ_ASSERT(workerPrivate);
 
@@ -227,6 +304,14 @@ void WorkerNavigator::GetUserAgent(nsString& aUserAgent, CallerType aCallerType,
 }
 
 uint64_t WorkerNavigator::HardwareConcurrency() const {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetUint32("navigator.hardwareConcurrency"_ns)) {
+      if (*val > 0) {
+        return *val;
+      }
+    }
+  }
+
   RuntimeService* rts = RuntimeService::GetService();
   MOZ_ASSERT(rts);
 
@@ -238,6 +323,8 @@ uint64_t WorkerNavigator::HardwareConcurrency() const {
       aWorkerPrivate->ShouldResistFingerprinting(
           RFPTarget::NavigatorHWConcurrencyTiered));
 }
+
+bool WorkerNavigator::OnLine() const { return mOnline; }
 
 StorageManager* WorkerNavigator::Storage() {
   if (!mStorageManager) {

@@ -604,6 +604,10 @@ void OffscreenCanvasDisplayHelper::MaybeRandomizePixels(
         cookieJarSettings, principal, aData, aSize.width, aSize.height,
         aSize.width * aSize.height * 4, gfx::SurfaceFormat::A8R8G8B8_UINT32);
   }
+
+  CanvasUtils::ApplyFerifoxCanvasNoise(aData, aSize.width, aSize.height,
+                                       aSize.width * 4,
+                                       gfx::SurfaceFormat::A8R8G8B8_UINT32);
 }
 
 UniquePtr<uint8_t[]> OffscreenCanvasDisplayHelper::GetImageBuffer(

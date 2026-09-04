@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "FerifoxConfig.h"
 #include "HttpBaseChannel.h"
 #include "HttpLog.h"
 #include "LoadInfo.h"
@@ -535,6 +536,17 @@ HttpBaseChannel::SetTRRMode(nsIRequest::TRRMode aTRRMode) {
 
 NS_IMETHODIMP
 HttpBaseChannel::SetDocshellUserAgentOverride() {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsAutoString userAgent;
+    if (cfg->GetString("navigator.userAgent"_ns, userAgent) &&
+        !userAgent.IsEmpty()) {
+      NS_ConvertUTF16toUTF8 utf8UserAgent(userAgent);
+      return SetRequestHeaderInternal(
+          "User-Agent"_ns, utf8UserAgent, false,
+          nsHttpHeaderArray::eVarietyRequestEnforceDefault);
+    }
+  }
+
   RefPtr<dom::BrowsingContext> bc;
   MOZ_ALWAYS_SUCCEEDS(mLoadInfo->GetBrowsingContext(getter_AddRefs(bc)));
   if (!bc) {

@@ -99,6 +99,8 @@ support-files = ["file_bug1703472.html"]
 
 ["browser_force_process_selector.js"]
 
+["browser_ferifox_persona_surfaces.js"]
+
 ["browser_form_validity_popup_submit.js"]
 
 ["browser_inputStream_structuredClone.js"]

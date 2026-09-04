@@ -111,7 +111,6 @@
 #include "nsNetUtil.h"
 #include "nsPIDOMWindowInlines.h"
 #include "nsPrintfCString.h"
-#include "nsURLHelper.h"
 #include "nsXULAppAPI.h"
 #include "transport/nr_socket_proxy_config.h"
 

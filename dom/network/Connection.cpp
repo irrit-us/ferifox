@@ -51,17 +51,23 @@ JSObject* Connection::WrapObject(JSContext* aCx,
   return NetworkInformation_Binding::Wrap(aCx, this, aGivenProto);
 }
 
+ConnectionType Connection::Type() const {
+  return mShouldResistFingerprinting
+             ? static_cast<ConnectionType>(ConnectionType::Unknown)
+             : mType;
+}
+
 void Connection::Update(ConnectionType aType, bool aIsWifi,
                         uint32_t aDHCPGateway, bool aNotify) {
   NS_ASSERT_OWNINGTHREAD(Connection);
 
-  ConnectionType previousType = mType;
+  ConnectionType previousType = Type();
 
   mType = aType;
   mIsWifi = aIsWifi;
   mDHCPGateway = aDHCPGateway;
 
-  if (aNotify && previousType != aType && !mShouldResistFingerprinting) {
+  if (aNotify && previousType != Type()) {
     DispatchTrustedEvent(CHANGE_EVENT_NAME);
   }
 }

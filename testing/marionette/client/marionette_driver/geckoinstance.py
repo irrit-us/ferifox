@@ -74,29 +74,12 @@ class GeckoInstance:
         # Do not show datareporting policy notifications which can interfere with tests
         "datareporting.policy.dataSubmissionEnabled": False,
         "datareporting.policy.dataSubmissionPolicyBypassNotification": True,
-        # Disable popup-blocker
-        "dom.disable_open_during_load": False,
         # Enabling the support for File object creation in the content process.
         "dom.file.createInChild": True,
-        # Disable delayed user input event handling
-        "dom.input_events.security.minNumTicks": 0,
-        # Disable delayed user input event handling
-        "dom.input_events.security.minTimeElapsedInMS": 0,
         # Disable the ProcessHangMonitor
         "dom.ipc.reportProcessHangs": False,
-        # No slow script dialogs
-        "dom.max_chrome_script_run_time": 0,
-        "dom.max_script_run_time": 0,
-        # Disable navigation change rate limitation
-        "dom.navigation.navigationRateLimit.count": 0,
-        # Disable system permission checks for navigator.permissions.query
-        "dom.permissions.testing.enabled": True,
-        # DOM Push
-        "dom.push.connection.enabled": False,
         # Screen Orientation API
         "dom.screenorientation.allow-lock": True,
-        # Disable dialog abuse if alerts are triggered too quickly
-        "dom.successive_dialog_time_limit": 0,
         # Only load extensions from the application and user profile
         # AddonManager.SCOPE_PROFILE + AddonManager.SCOPE_APPLICATION
         "extensions.autoDisableScopes": 0,
@@ -128,19 +111,12 @@ class GeckoInstance:
         "extensions.getAddons.search.browseURL": (
             "http://%(server)s/extensions-dummy/repositoryBrowseURL"
         ),
-        # Allow the application to have focus even it runs in the background
-        "focusmanager.testmode": True,
         # Disable useragent updates
         "general.useragent.updates.enabled": False,
         # Do not open system settings when geolocation is requested without OS permission
         "geo.prompt.open_system_prefs": False,
         # Disable geolocation ping (#2)
         "geo.provider.network.url": "",
-        # Always use network provider for geolocation tests
-        # so we bypass the OSX dialog raised by the corelocation provider
-        "geo.provider.testing": True,
-        # Do not scan Wifi
-        "geo.wifi.scan": False,
         # Ensure webrender is on, no need for environment variables
         "gfx.webrender.all": True,
         # Disable idle-daily notifications to avoid expensive operations
@@ -153,17 +129,12 @@ class GeckoInstance:
         # Disable the GFX sanity window
         "media.sanity-test.disabled": True,
         "media.volume_scale": "0.01",
-        # Allow scroll amount larger than one page on a single mouse wheel
-        # event.
-        "mousewheel.allow_scrolling_more_than_one_page": True,
         # Disable captive portal
         "network.captive-portal-service.enabled": False,
         # Disable connectivity service pings
         "network.connectivity-service.enabled": False,
         # Do not prompt for temporary redirects
         "network.http.prompt-temp-redirect": False,
-        # Do not automatically switch between offline and online
-        "network.manage-offline-status": False,
         # Make sure SNTP requests don't hit the network
         "network.sntp.pools": "%(server)s",
         # Disabled for causing marionette crashes on OSX. See bug 1882856
@@ -175,8 +146,6 @@ class GeckoInstance:
         "remote.prefs.recommended": False,
         # Don't do network connections for mitm priming
         "security.certerrors.mitm.priming.enabled": False,
-        # Tests don't wait for the notification button security delay
-        "security.notification_enable_delay": 0,
         # Do not download intermediate certificates
         "security.remote_settings.intermediates.enabled": False,
         # Disable logging for remote settings
@@ -507,9 +476,6 @@ class GeckoInstance:
 
 class FennecInstance(GeckoInstance):
     fennec_prefs = {
-        # Enable output for dump() and chrome console API
-        "browser.dom.window.dump.enabled": True,
-        "devtools.console.stdout.chrome": True,
         # Disable safe browsing / tracking protection updates
         "browser.safebrowsing.update.enabled": False,
         # Do not restore the last open set of tabs if the browser has crashed
@@ -643,9 +609,6 @@ class DesktopInstance(GeckoInstance):
         # We use a larger number than the default 22 to have some buffer
         # This can be removed once Firefox 69 and 68 ESR and are no longer supported.
         "browser.contentblocking.introCount": 99,
-        # Enable output for dump() and chrome console API
-        "browser.dom.window.dump.enabled": True,
-        "devtools.console.stdout.chrome": True,
         # Don't open the downloads panel every time a download begins.
         # The first download ever run in a new profile will still open the panel,
         # but because "browser.download.panel.shown" is set to true,

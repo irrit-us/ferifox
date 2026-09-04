@@ -1,0 +1,82 @@
+{
+  "navigator": {
+    "webdriver": false,
+    "platform": "Linux x86_64",
+    "oscpu": "Linux x86_64",
+    "userAgent": "Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0",
+    "hardwareConcurrency": 8,
+    "maxTouchPoints": 0,
+    "vendor": "",
+    "vendorSub": "",
+    "product": "Gecko",
+    "productSub": "20100101",
+    "buildID": "20181001000000",
+    "appVersion": "5.0 (X11)",
+    "languages": ["en-US", "en"],
+    "appCodeName": "Mozilla",
+    "appName": "Netscape"
+  },
+  "screen": {
+    "width": 1600,
+    "height": 900,
+    "availWidth": 1600,
+    "availHeight": 860,
+    "colorDepth": 24,
+    "pixelDepth": 24,
+    "devicePixelRatio": 1.5,
+    "orientation": {
+      "type": "landscape-primary",
+      "angle": 0
+    }
+  },
+  "window": {
+    "screenX": 0,
+    "screenY": 0,
+    "mozInnerScreenX": 0.0,
+    "mozInnerScreenY": 86.0
+  },
+  "webgl": {
+    "unmaskedVendor": "Mesa/X.org",
+    "unmaskedRenderer": "Mesa Intel(R) Iris(R) Xe Graphics"
+  },
+  "audio": {
+    "sampleRate": 48000,
+    "outputLatency": 0.032,
+    "maxChannelCount": 2
+  },
+  "intl": {
+    "timezone": "America/Denver",
+    "locale": "en_US.UTF-8"
+  },
+  "geolocation": {
+    "latitude": 39.7392,
+    "longitude": -104.9903,
+    "accuracy": 120
+  },
+  "fonts": {
+    "visible": [
+      "Cantarell",
+      "DejaVu Sans",
+      "DejaVu Serif",
+      "DejaVu Sans Mono",
+      "Liberation Sans",
+      "Liberation Serif",
+      "Liberation Mono",
+      "Noto Sans",
+      "Noto Serif",
+      "Noto Sans Mono",
+      "Ubuntu",
+      "Ubuntu Mono"
+    ]
+  },
+  "headers": {
+    "acceptLanguage": "en-US,en;q=0.5"
+  },
+  "webrtc": {
+    "noHostCandidates": true,
+    "defaultAddressOnly": true
+  },
+  "automation": {
+    "stealth": true
+  }
+}

@@ -38,11 +38,7 @@ class Connection : public DOMEventTargetHelper {
   virtual JSObject* WrapObject(JSContext* aCx,
                                JS::Handle<JSObject*> aGivenProto) override;
 
-  ConnectionType Type() const {
-    return mShouldResistFingerprinting
-               ? static_cast<ConnectionType>(ConnectionType::Unknown)
-               : mType;
-  }
+  ConnectionType Type() const;
 
   bool GetIsWifi() const {
     NS_ASSERT_OWNINGTHREAD(Connection);

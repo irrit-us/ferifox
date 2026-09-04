@@ -206,6 +206,9 @@ mozilla::UniquePtr<uint8_t[]> ImageBitmapRenderingContext::GetImageBuffer(
           data->GetSize().width * data->GetSize().height * 4,
           gfx::SurfaceFormat::A8R8G8B8_UINT32);
     }
+    CanvasUtils::ApplyFerifoxCanvasNoise(
+        ret.get(), data->GetSize().width, data->GetSize().height,
+        data->GetSize().width * 4, gfx::SurfaceFormat::A8R8G8B8_UINT32);
   }
   return ret;
 }

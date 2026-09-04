@@ -69,12 +69,8 @@ class WorkerNavigator final : public nsWrapperCache {
 
   nsISupports* GetParentObject() const { return nullptr; }
 
-  void GetAppCodeName(nsString& aAppCodeName, ErrorResult& /* unused */) const {
-    aAppCodeName.AssignLiteral("Mozilla");
-  }
-  void GetAppName(nsString& aAppName) const {
-    aAppName.AssignLiteral("Netscape");
-  }
+  void GetAppCodeName(nsString& aAppCodeName, ErrorResult& /* unused */) const;
+  void GetAppName(nsString& aAppName) const;
 
   void GetAppVersion(nsString& aAppVersion, CallerType aCallerType,
                      ErrorResult& aRv) const;
@@ -82,23 +78,17 @@ class WorkerNavigator final : public nsWrapperCache {
   void GetPlatform(nsString& aPlatform, CallerType aCallerType,
                    ErrorResult& aRv) const;
 
-  void GetProduct(nsString& aProduct) const { aProduct.AssignLiteral("Gecko"); }
+  void GetProduct(nsString& aProduct) const;
 
   bool TaintEnabled() const { return false; }
 
-  void GetLanguage(nsString& aLanguage) const {
-    MOZ_ASSERT(mProperties.mLanguages.Length() >= 1);
-    aLanguage.Assign(mProperties.mLanguages[0]);
-  }
-
-  void GetLanguages(nsTArray<nsString>& aLanguages) const {
-    aLanguages = mProperties.mLanguages.Clone();
-  }
+  void GetLanguage(nsString& aLanguage) const;
+  void GetLanguages(nsTArray<nsString>& aLanguages) const;
 
   void GetUserAgent(nsString& aUserAgent, CallerType aCallerType,
                     ErrorResult& aRv) const;
 
-  bool OnLine() const { return mOnline; }
+  bool OnLine() const;
 
   // Worker thread only!
   void SetOnLine(bool aOnline) { mOnline = aOnline; }

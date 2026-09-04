@@ -37,6 +37,7 @@
 #include "blink/PeriodicWave.h"
 #include "js/ArrayBuffer.h"  // JS::StealArrayBufferContents
 #include "mozilla/ErrorResult.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/OwningNonNull.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/RefPtr.h"
@@ -145,10 +146,19 @@ static float GetSampleRateForAudioContext(bool aIsOffline, float aSampleRate,
                                           bool aShouldResistFingerprinting) {
   if (aIsOffline || aSampleRate != 0.0) {
     return aSampleRate;
-  } else {
-    return static_cast<float>(
-        CubebUtils::PreferredSampleRate(aShouldResistFingerprinting));
   }
+
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetDouble("audio.sampleRate"_ns)) {
+      if (*val >= WebAudioUtils::MinSampleRate &&
+          *val <= WebAudioUtils::MaxSampleRate) {
+        return static_cast<float>(*val);
+      }
+    }
+  }
+
+  return static_cast<float>(
+      CubebUtils::PreferredSampleRate(aShouldResistFingerprinting));
 }
 
 AudioContext::AudioContext(nsPIDOMWindowInner* aWindow, bool aIsOffline,
@@ -558,6 +568,15 @@ double AudioContext::OutputLatency() {
   if (mIsShutDown) {
     return 0.0;
   }
+
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetDouble("audio.outputLatency"_ns)) {
+      if (*val >= 0.0) {
+        return *val;
+      }
+    }
+  }
+
   // When reduceFingerprinting is enabled, return a latency figure that is
   // fixed, but plausible for the platform.
   double latency_s = 0.0;
@@ -713,6 +732,19 @@ void AudioContext::UnregisterActiveNode(AudioNode* aNode) {
 }
 
 uint32_t AudioContext::MaxChannelCount() const {
+  if (!mIsOffline) {
+    if (auto* cfg = FerifoxConfig::GetSingleton()) {
+      if (auto val = cfg->GetUint32("audio.maxChannelCount"_ns)) {
+        if (*val > 0) {
+          uint32_t maxChannelCount =
+              std::min<uint32_t>(WebAudioUtils::MaxChannelCount,
+                                 CubebUtils::MaxNumberOfChannels());
+          return std::min(*val, maxChannelCount);
+        }
+      }
+    }
+  }
+
   if (mShouldResistFingerprinting) {
     return 2;
   }

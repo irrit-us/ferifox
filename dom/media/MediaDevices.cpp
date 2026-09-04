@@ -5,6 +5,7 @@
 #include "mozilla/dom/MediaDevices.h"
 
 #include "AudioDeviceInfo.h"
+#include "mozilla/FerifoxConfig.h"
 #include "MediaEngine.h"
 #include "MediaEngineFake.h"
 #include "MediaTrackConstraints.h"
@@ -509,6 +510,38 @@ void MediaDevices::ResolveEnumerateDevicesPromise(
         exposeLabel ? device->mName : u""_ns,
         exposeInfo ? device->mGroupID : u""_ns));
   }
+
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    auto aiCount = cfg->GetUint32("mediaDevices.audioInputCount"_ns);
+    auto aoCount = cfg->GetUint32("mediaDevices.audioOutputCount"_ns);
+    auto viCount = cfg->GetUint32("mediaDevices.videoInputCount"_ns);
+    if (aiCount || aoCount || viCount) {
+      uint32_t ai = 0, ao = 0, vi = 0;
+      nsTArray<RefPtr<MediaDeviceInfo>> filtered;
+      for (auto& info : infos) {
+        bool keep = true;
+        switch (info->Kind()) {
+          case MediaDeviceKind::Audioinput:
+            if (aiCount && ai >= *aiCount) keep = false;
+            else ai++;
+            break;
+          case MediaDeviceKind::Audiooutput:
+            if (aoCount && ao >= *aoCount) keep = false;
+            else ao++;
+            break;
+          case MediaDeviceKind::Videoinput:
+            if (viCount && vi >= *viCount) keep = false;
+            else vi++;
+            break;
+        }
+        if (keep) {
+          filtered.AppendElement(std::move(info));
+        }
+      }
+      infos = std::move(filtered);
+    }
+  }
+
   aPromise->MaybeResolve(std::move(infos));
 }
 

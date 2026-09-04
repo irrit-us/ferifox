@@ -6,6 +6,7 @@
 
 #include "mozilla/BasePrincipal.h"
 #include "mozilla/EventForwards.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/MouseEvents.h"
 #include "mozilla/PresShell.h"
 #include "mozilla/StaticPrefs_dom.h"
@@ -21,6 +22,20 @@ static nsIntPoint DevPixelsToCSSPixels(const LayoutDeviceIntPoint& aPoint,
                                        nsPresContext* aContext) {
   return nsIntPoint(aContext->DevPixelsToIntCSSPixels(aPoint.x),
                     aContext->DevPixelsToIntCSSPixels(aPoint.y));
+}
+
+static Maybe<CSSDoublePoint> GetConfiguredInnerScreenPoint() {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return Nothing();
+  }
+
+  auto x = cfg->GetDouble("window.mozInnerScreenX"_ns);
+  auto y = cfg->GetDouble("window.mozInnerScreenY"_ns);
+  if (x && y) {
+    return Some(CSSDoublePoint(*x, *y));
+  }
+  return Nothing();
 }
 
 MouseEvent::MouseEvent(EventTarget* aOwner, nsPresContext* aPresContext,
@@ -307,6 +322,13 @@ CSSDoublePoint MouseEvent::ScreenPoint(CallerType aCallerType) const {
   MOZ_ASSERT_IF(!mUseFractionalCoords,
                 mWidgetOrScreenRelativePoint ==
                     LayoutDeviceIntPoint::Floor(mWidgetOrScreenRelativePoint));
+  if (aCallerType != CallerType::System && IsTrusted()) {
+    if (auto innerScreenPoint = GetConfiguredInnerScreenPoint()) {
+      const CSSDoublePoint screenPoint = *innerScreenPoint + ClientPoint();
+      return mUseFractionalCoords ? screenPoint : RoundedToInt(screenPoint);
+    }
+  }
+
   if (nsContentUtils::ShouldResistFingerprinting(
           aCallerType, GetParentObject(), RFPTarget::MouseEventScreenPoint)) {
     // Sanitize to something sort of like client coords, but not quite

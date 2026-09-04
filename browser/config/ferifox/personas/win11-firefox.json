@@ -1,0 +1,85 @@
+{
+  "navigator": {
+    "webdriver": false,
+    "platform": "Win32",
+    "oscpu": "Windows NT 10.0; Win64; x64",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0",
+    "hardwareConcurrency": 12,
+    "maxTouchPoints": 0,
+    "vendor": "",
+    "vendorSub": "",
+    "product": "Gecko",
+    "productSub": "20100101",
+    "buildID": "20181001000000",
+    "appVersion": "5.0 (Windows)",
+    "languages": ["en-US", "en"],
+    "appCodeName": "Mozilla",
+    "appName": "Netscape"
+  },
+  "screen": {
+    "width": 1536,
+    "height": 864,
+    "availWidth": 1536,
+    "availHeight": 824,
+    "colorDepth": 24,
+    "pixelDepth": 24,
+    "devicePixelRatio": 1.25,
+    "orientation": {
+      "type": "landscape-primary",
+      "angle": 0
+    }
+  },
+  "window": {
+    "screenX": 0,
+    "screenY": 0,
+    "mozInnerScreenX": 0.0,
+    "mozInnerScreenY": 88.0
+  },
+  "webgl": {
+    "unmaskedVendor": "Google Inc. (Intel)",
+    "unmaskedRenderer": "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "audio": {
+    "sampleRate": 48000,
+    "outputLatency": 0.04,
+    "maxChannelCount": 2
+  },
+  "intl": {
+    "timezone": "America/New_York",
+    "locale": "en_US.UTF-8"
+  },
+  "geolocation": {
+    "latitude": 40.7128,
+    "longitude": -74.006,
+    "accuracy": 80
+  },
+  "fonts": {
+    "visible": [
+      "Aptos",
+      "Arial",
+      "Calibri",
+      "Cambria",
+      "Cambria Math",
+      "Candara",
+      "Consolas",
+      "Courier New",
+      "Georgia",
+      "Segoe UI",
+      "Segoe UI Variable",
+      "Tahoma",
+      "Times New Roman",
+      "Trebuchet MS",
+      "Verdana"
+    ]
+  },
+  "headers": {
+    "acceptLanguage": "en-US,en;q=0.5"
+  },
+  "webrtc": {
+    "noHostCandidates": true,
+    "defaultAddressOnly": true
+  },
+  "automation": {
+    "stealth": true
+  }
+}

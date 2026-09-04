@@ -11,6 +11,7 @@
 
 #include "AccessCheck.h"
 #include "CompositableHost.h"
+#include "mozilla/FerifoxConfig.h"
 #include "GLBlitHelper.h"
 #include "GLContext.h"
 #include "GLContextProvider.h"
@@ -345,7 +346,12 @@ bool WebGLContext::CreateAndInitGL(
 
   // --
 
-  const bool useEGL = PR_GetEnv("MOZ_WEBGL_FORCE_EGL");
+  bool useEGL = PR_GetEnv("MOZ_WEBGL_FORCE_EGL");
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto configuredForceEGL = cfg->GetBool("webgl.forceEGL"_ns)) {
+      useEGL = *configuredForceEGL;
+    }
+  }
 
   bool tryNativeGL = true;
   bool tryANGLE = false;
@@ -531,7 +537,12 @@ RefPtr<WebGLContext> WebGLContext::Create(HostWebGLContext* host,
                                           webgl::InitContextResult* const out) {
   AUTO_PROFILER_LABEL("WebGLContext::Create", GRAPHICS);
   nsCString failureId = "FEATURE_FAILURE_WEBGL_UNKOWN"_ns;
-  const bool forceEnabled = StaticPrefs::webgl_force_enabled();
+  bool forceEnabled = StaticPrefs::webgl_force_enabled();
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto configuredForceEnabled = cfg->GetBool("webgl.forceEnabled"_ns)) {
+      forceEnabled = *configuredForceEnabled;
+    }
+  }
   ScopedGfxFeatureReporter reporter("WebGL", forceEnabled);
 
   auto res = [&]() -> Result<RefPtr<WebGLContext>, std::string> {

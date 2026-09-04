@@ -4,15 +4,59 @@
 
 #include "mozilla/dom/PermissionStatus.h"
 
+#include <cmath>
+
 #include "PermissionStatusSink.h"
 #include "PermissionUtils.h"
 #include "mozilla/AsyncEventDispatcher.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/Permission.h"
 #include "mozilla/Services.h"
 #include "nsGlobalWindowInner.h"
 #include "nsIPermissionManager.h"
 
 namespace mozilla::dom {
+
+namespace {
+
+bool HasConfiguredGeolocation(PermissionName aName) {
+  if (aName != PermissionName::Geolocation) {
+    return false;
+  }
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return false;
+  }
+  auto latitude = cfg->GetDouble("geolocation.latitude"_ns);
+  auto longitude = cfg->GetDouble("geolocation.longitude"_ns);
+  if (!latitude || !longitude || !std::isfinite(*latitude) ||
+      !std::isfinite(*longitude) || *latitude < -90.0 || *latitude > 90.0 ||
+      *longitude < -180.0 || *longitude > 180.0) {
+    return false;
+  }
+  if (auto accuracy = cfg->GetDouble("geolocation.accuracy"_ns)) {
+    if (!std::isfinite(*accuracy) || *accuracy < 0.0) {
+      return false;
+    }
+  }
+  bool hasAltitude = false;
+  if (auto altitude = cfg->GetDouble("geolocation.altitude"_ns)) {
+    if (!std::isfinite(*altitude)) {
+      return false;
+    }
+    hasAltitude = true;
+  }
+  if (auto altitudeAccuracy =
+          cfg->GetDouble("geolocation.altitudeAccuracy"_ns)) {
+    if (!hasAltitude || !std::isfinite(*altitudeAccuracy) ||
+        *altitudeAccuracy < 0.0) {
+      return false;
+    }
+  }
+  return true;
+}
+
+}  // namespace
 
 PermissionStatus::PermissionStatus(nsIGlobalObject* aGlobal,
                                    PermissionName aName)
@@ -53,6 +97,16 @@ PermissionStatus::~PermissionStatus() {
 JSObject* PermissionStatus::WrapObject(JSContext* aCx,
                                        JS::Handle<JSObject*> aGivenProto) {
   return PermissionStatus_Binding::Wrap(aCx, this, aGivenProto);
+}
+
+PermissionState PermissionStatus::State() const {
+  PermissionState state = mState;
+  if (mState == PermissionState::Granted &&
+      mSystemState != PermissionState::Granted &&
+      !HasConfiguredGeolocation(mName)) {
+    state = mSystemState;
+  }
+  return state;
 }
 
 nsLiteralCString PermissionStatus::GetPermissionType() const {

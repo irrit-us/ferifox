@@ -90,6 +90,7 @@ class Touch final : public nsISupports,
   LayoutDeviceIntPoint mRadius;
   float mRotationAngle;
   float mForce;
+  bool mCreatedFromWidgetEvent;
 
  protected:
   ~Touch();

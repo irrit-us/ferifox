@@ -57,6 +57,7 @@
 #include "mozilla/EventListenerManager.h"
 #include "mozilla/EventQueue.h"
 #include "mozilla/ExtensionPolicyService.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/FlushType.h"
 #include "mozilla/Likely.h"
@@ -3802,12 +3803,24 @@ static nsPresContext* GetPresContextForRatio(Document* aDoc) {
 
 double nsGlobalWindowInner::GetDevicePixelRatio(CallerType aCallerType,
                                                 ErrorResult& aError) {
+  bool hasConfiguredRatio = false;
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto val = cfg->GetDouble("screen.devicePixelRatio"_ns)) {
+      hasConfiguredRatio = *val > 0.0 && *val <= 10.0;
+    }
+  }
+
   ENSURE_ACTIVE_DOCUMENT(aError, 0.0);
 
   RefPtr<nsPresContext> presContext = GetPresContextForRatio(mDoc);
   if (NS_WARN_IF(!presContext)) {
     // Still nothing, oh well.
     return 1.0;
+  }
+
+  if (hasConfiguredRatio) {
+    return double(AppUnitsPerCSSPixel()) /
+           double(presContext->AppUnitsPerDevPixel());
   }
 
   if (nsIGlobalObject::ShouldResistFingerprinting(

@@ -5,6 +5,7 @@
 /* the features that media queries can test */
 
 #include "PreferenceSheet.h"
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/GeckoBindings.h"
 #include "mozilla/LookAndFeel.h"
 #include "mozilla/RelativeLuminanceUtils.h"
@@ -58,6 +59,14 @@ static nsSize GetSize(const Document& aDocument) {
 
 // A helper for three features below.
 static nsSize GetDeviceSize(const Document& aDocument) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    auto width = cfg->GetInt32("screen.width"_ns);
+    auto height = cfg->GetInt32("screen.height"_ns);
+    if (width && height && *width > 0 && *height > 0) {
+      return CSSPixel::ToAppUnits(CSSIntSize(*width, *height));
+    }
+  }
+
   if (aDocument.ShouldResistFingerprinting(RFPTarget::CSSDeviceSize)) {
     return GetSize(aDocument);
   }
@@ -174,8 +183,20 @@ int32_t Gecko_MediaFeatures_GetColorDepth(const Document* aDocument) {
   // Use depth of 24 when resisting fingerprinting, or when we're not being
   // rendered.
   int32_t depth = 24;
+  bool hasConfiguredDepth = false;
 
-  if (!aDocument->ShouldResistFingerprinting(RFPTarget::CSSColorInfo)) {
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    auto configuredDepth = cfg->GetInt32("screen.pixelDepth"_ns);
+    if (!configuredDepth || *configuredDepth <= 0) {
+      configuredDepth = cfg->GetInt32("screen.colorDepth"_ns);
+    }
+    if (configuredDepth && *configuredDepth > 0) {
+      depth = *configuredDepth;
+      hasConfiguredDepth = true;
+    }
+  }
+  if (!hasConfiguredDepth &&
+      !aDocument->ShouldResistFingerprinting(RFPTarget::CSSColorInfo)) {
     if (nsDeviceContext* dx = GetDeviceContextFor(aDocument)) {
       depth = dx->GetDepth();
     }
@@ -195,6 +216,13 @@ float Gecko_MediaFeatures_GetResolution(const Document* aDocument) {
   nsPresContext* pc = aDocument->GetPresContext();
   if (!pc) {
     return 1.;
+  }
+
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    if (auto ratio = cfg->GetDouble("screen.devicePixelRatio"_ns);
+        ratio && *ratio > 0.0 && *ratio <= 10.0) {
+      return float(AppUnitsPerCSSPixel()) / pc->AppUnitsPerDevPixel();
+    }
   }
 
   if (pc->GetOverrideDPPX() > 0.) {

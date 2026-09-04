@@ -25,13 +25,7 @@ class PermissionStatus : public DOMEventTargetHelper {
   JSObject* WrapObject(JSContext* aCx,
                        JS::Handle<JSObject*> aGivenProto) override;
 
-  PermissionState State() const {
-    if (mState == PermissionState::Granted &&
-        mSystemState != PermissionState::Granted) {
-      return mSystemState;
-    }
-    return mState;
-  }
+  PermissionState State() const;
   void SetState(PermissionState aState) { mState = aState; }
 
   IMPL_EVENT_HANDLER(change)

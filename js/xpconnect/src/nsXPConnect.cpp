@@ -34,6 +34,7 @@
 #include "nsJSEnvironment.h"
 #include "nsJSUtils.h"
 #include "nsRFPService.h"
+#include "FerifoxConfig.h"
 #include "nsScriptError.h"
 #include "nsScriptSecurityManager.h"
 #include "nsThreadUtils.h"
@@ -541,18 +542,38 @@ void InitGlobalObjectOptions(JS::RealmOptions& aOptions,
     aOptions.creationOptions().setSecureContext(aSecureContext);
   }
 
-  if (aForceUTC) {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  bool hasFerifoxTimeZone = false;
+  if (cfg) {
+    nsAutoCString timeZone;
+    if (cfg->GetTimeZone(timeZone)) {
+      aOptions.behaviors().setTimeZoneOverride(timeZone.get());
+      hasFerifoxTimeZone = true;
+    }
+  }
+
+  if (!hasFerifoxTimeZone && aForceUTC) {
     nsCString timeZone = nsRFPService::GetSpoofedJSTimeZone();
     aOptions.behaviors().setTimeZoneOverride(timeZone.get());
-  } else if (!aTimezoneOverride.IsEmpty()) {
+  } else if (!hasFerifoxTimeZone && !aTimezoneOverride.IsEmpty()) {
     aOptions.behaviors().setTimeZoneOverride(
         NS_ConvertUTF16toUTF8(aTimezoneOverride).get());
   }
   aOptions.creationOptions().setAlwaysUseFdlibm(aAlwaysUseFdlibm);
-  if (aLocaleEnUS) {
+
+  bool hasFerifoxLocale = false;
+  if (cfg) {
+    nsAutoCString locale;
+    if (cfg->GetCanonicalLocale(locale)) {
+      aOptions.behaviors().setLocaleOverride(locale.get());
+      hasFerifoxLocale = true;
+    }
+  }
+
+  if (!hasFerifoxLocale && aLocaleEnUS) {
     nsCString locale = nsRFPService::GetSpoofedJSLocale();
     aOptions.behaviors().setLocaleOverride(locale.get());
-  } else if (!aLanguageOverride.IsEmpty()) {
+  } else if (!hasFerifoxLocale && !aLanguageOverride.IsEmpty()) {
     aOptions.behaviors().setLocaleOverride(
         PromiseFlatCString(aLanguageOverride).get());
   }

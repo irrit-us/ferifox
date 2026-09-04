@@ -67,6 +67,7 @@ FINAL_LIBRARY = "xul"
 LOCAL_INCLUDES += [
     "/dom/base",
     "/dom/ipc",
+    "/toolkit/components/ferifox",
 ]
 
 BROWSER_CHROME_MANIFESTS += ["test/browser/browser.toml"]

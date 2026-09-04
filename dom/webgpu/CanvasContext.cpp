@@ -12,6 +12,7 @@
 #include "mozilla/SVGObserverUtils.h"
 #include "mozilla/StaticPrefs_privacy.h"
 #include "mozilla/dom/HTMLCanvasElement.h"
+#include "mozilla/dom/ImageEncoder.h"
 #include "mozilla/dom/WebGPUBinding.h"
 #include "mozilla/gfx/2D.h"
 #include "mozilla/gfx/CanvasManagerChild.h"
@@ -24,6 +25,7 @@
 #include "mozilla/layers/LayersSurfaces.h"
 #include "mozilla/layers/RenderRootStateManager.h"
 #include "mozilla/layers/WebRenderCanvasRenderer.h"
+#include "nsComponentManagerUtils.h"
 #include "nsDisplayList.h"
 
 namespace mozilla {
@@ -345,15 +347,23 @@ mozilla::UniquePtr<uint8_t[]> CanvasContext::GetImageBuffer(
   *out_imageSize = dataSurface->GetSize();
 
   nsRFPService::PotentiallyDumpImage(PrincipalOrNull(), dataSurface);
+  UniquePtr<uint8_t[]> imageBuffer;
   if (ShouldResistFingerprinting(RFPTarget::CanvasRandomization)) {
-    return gfxUtils::GetImageBufferWithRandomNoise(
+    imageBuffer = gfxUtils::GetImageBufferWithRandomNoise(
         dataSurface,
         /* aIsAlphaPremultiplied */ true, GetCookieJarSettings(),
         PrincipalOrNull(), &*out_format);
+  } else {
+    imageBuffer = gfxUtils::GetImageBuffer(
+        dataSurface, /* aIsAlphaPremultiplied */ true, &*out_format);
   }
 
-  return gfxUtils::GetImageBuffer(dataSurface, /* aIsAlphaPremultiplied */ true,
-                                  &*out_format);
+  if (imageBuffer) {
+    CanvasUtils::ApplyFerifoxCanvasNoise(
+        imageBuffer.get(), out_imageSize->width, out_imageSize->height,
+        out_imageSize->width * 4, gfx::SurfaceFormat::A8R8G8B8_UINT32);
+  }
+  return imageBuffer;
 }
 
 NS_IMETHODIMP CanvasContext::GetInputStream(
@@ -369,15 +379,51 @@ NS_IMETHODIMP CanvasContext::GetInputStream(
   RefPtr<gfx::DataSourceSurface> dataSurface = snapshot->GetDataSurface();
 
   nsRFPService::PotentiallyDumpImage(PrincipalOrNull(), dataSurface);
-  if (aExtractionBehavior == CanvasUtils::ImageExtraction::Randomize) {
-    return gfxUtils::GetInputStreamWithRandomNoise(
+  if (!CanvasUtils::IsFerifoxCanvasNoiseEnabled()) {
+    if (aExtractionBehavior == CanvasUtils::ImageExtraction::Randomize) {
+      return gfxUtils::GetInputStreamWithRandomNoise(
+          dataSurface, /* aIsAlphaPremultiplied */ true, aMimeType,
+          aEncoderOptions, GetCookieJarSettings(), PrincipalOrNull(), aStream);
+    }
+
+    return gfxUtils::GetInputStream(
         dataSurface, /* aIsAlphaPremultiplied */ true, aMimeType,
-        aEncoderOptions, GetCookieJarSettings(), PrincipalOrNull(), aStream);
+        aEncoderOptions, aRandomizationKey, aStream);
   }
 
-  return gfxUtils::GetInputStream(dataSurface, /* aIsAlphaPremultiplied */ true,
-                                  aMimeType, aEncoderOptions, aRandomizationKey,
-                                  aStream);
+  nsCString encoderContract("@mozilla.org/image/encoder;2?type=");
+  encoderContract += aMimeType;
+  nsCOMPtr<imgIEncoder> encoder = do_CreateInstance(encoderContract.get());
+  if (!encoder) {
+    return NS_ERROR_FAILURE;
+  }
+
+  int32_t format = 0;
+  UniquePtr<uint8_t[]> imageBuffer;
+  if (aExtractionBehavior == CanvasUtils::ImageExtraction::Randomize) {
+    imageBuffer = gfxUtils::GetImageBufferWithRandomNoise(
+        dataSurface, /* aIsAlphaPremultiplied */ true, GetCookieJarSettings(),
+        PrincipalOrNull(), &format);
+  } else {
+    imageBuffer = gfxUtils::GetImageBuffer(
+        dataSurface, /* aIsAlphaPremultiplied */ true, &format);
+  }
+  if (!imageBuffer) {
+    return NS_ERROR_FAILURE;
+  }
+
+  const gfx::IntSize imageSize = dataSurface->GetSize();
+  CanvasUtils::ApplyFerifoxCanvasNoise(imageBuffer.get(), imageSize.width,
+                                       imageSize.height, imageSize.width * 4,
+                                       gfx::SurfaceFormat::A8R8G8B8_UINT32);
+  if (aExtractionBehavior == CanvasUtils::ImageExtraction::Randomize) {
+    return dom::ImageEncoder::GetInputStream(
+        imageSize.width, imageSize.height, imageBuffer.get(), format, encoder,
+        aEncoderOptions, VoidCString(), aStream);
+  }
+  return dom::ImageEncoder::GetInputStream(
+      imageSize.width, imageSize.height, imageBuffer.get(), format, encoder,
+      aEncoderOptions, aRandomizationKey, aStream);
 }
 
 bool CanvasContext::GetIsOpaque() {

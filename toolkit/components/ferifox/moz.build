@@ -1,0 +1,47 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+with Files("**"):
+    BUG_COMPONENT = ("Core", "General")
+
+UNIFIED_SOURCES += [
+    "FerifoxConfig.cpp",
+]
+
+LOCAL_INCLUDES += [
+    "/toolkit/components/jsoncpp/include",
+]
+
+EXPORTS.mozilla += [
+    "FerifoxConfig.h",
+]
+
+if CONFIG["ENABLE_TESTS"]:
+    UNIFIED_SOURCES += [
+        "FerifoxTestUtils.cpp",
+    ]
+
+    EXPORTS += [
+        "FerifoxTestUtils.h",
+    ]
+
+    EXPORTS.mozilla += [
+        "FerifoxTestUtils.h",
+    ]
+
+    XPIDL_SOURCES += [
+        "nsIFerifoxTestUtils.idl",
+    ]
+
+    XPCOM_MANIFESTS += [
+        "components.conf",
+    ]
+
+    XPIDL_MODULE = "ferifox"
+
+FINAL_LIBRARY = "xul"
+
+USE_LIBS += [
+    "jsoncpp",
+]

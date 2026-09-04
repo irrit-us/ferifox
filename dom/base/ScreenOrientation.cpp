@@ -4,6 +4,7 @@
 
 #include "ScreenOrientation.h"
 
+#include "mozilla/FerifoxConfig.h"
 #include "mozilla/DOMEventTargetHelper.h"
 #include "mozilla/Hal.h"
 #include "mozilla/Preferences.h"
@@ -61,6 +62,43 @@ static hal::ScreenOrientation OrientationTypeToInternal(
     default:
       MOZ_CRASH("Bad aOrientation value");
   }
+}
+
+static Maybe<OrientationType> GetConfiguredDOMOrientationType() {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return Nothing();
+  }
+
+  nsString type;
+  cfg->GetString("screen.orientation.type"_ns, type);
+  if (type.EqualsLiteral("portrait-primary")) {
+    return Some(OrientationType::Portrait_primary);
+  }
+  if (type.EqualsLiteral("portrait-secondary")) {
+    return Some(OrientationType::Portrait_secondary);
+  }
+  if (type.EqualsLiteral("landscape-primary")) {
+    return Some(OrientationType::Landscape_primary);
+  }
+  if (type.EqualsLiteral("landscape-secondary")) {
+    return Some(OrientationType::Landscape_secondary);
+  }
+  return Nothing();
+}
+
+static Maybe<uint16_t> GetConfiguredDOMOrientationAngle() {
+  auto* cfg = FerifoxConfig::GetSingleton();
+  if (!cfg) {
+    return Nothing();
+  }
+
+  auto angle = cfg->GetUint32("screen.orientation.angle"_ns);
+  if (!angle ||
+      (*angle != 0 && *angle != 90 && *angle != 180 && *angle != 270)) {
+    return Nothing();
+  }
+  return Some(static_cast<uint16_t>(*angle));
 }
 
 ScreenOrientation::ScreenOrientation(nsPIDOMWindowInner* aWindow,
@@ -695,6 +733,10 @@ void ScreenOrientation::CleanupFullscreenListener() {
 }
 
 OrientationType ScreenOrientation::DeviceType(CallerType aCallerType) const {
+  if (auto type = GetConfiguredDOMOrientationType()) {
+    return *type;
+  }
+
   if (nsContentUtils::ShouldResistFingerprinting(
           aCallerType, GetRelevantGlobal(), RFPTarget::ScreenOrientation)) {
     Document* doc = GetResponsibleDocument();
@@ -709,6 +751,10 @@ OrientationType ScreenOrientation::DeviceType(CallerType aCallerType) const {
 }
 
 uint16_t ScreenOrientation::DeviceAngle(CallerType aCallerType) const {
+  if (auto angle = GetConfiguredDOMOrientationAngle()) {
+    return *angle;
+  }
+
   if (nsContentUtils::ShouldResistFingerprinting(
           aCallerType, GetRelevantGlobal(), RFPTarget::ScreenOrientation)) {
     Document* doc = GetResponsibleDocument();
@@ -724,6 +770,10 @@ uint16_t ScreenOrientation::DeviceAngle(CallerType aCallerType) const {
 
 OrientationType ScreenOrientation::GetType(CallerType aCallerType,
                                            ErrorResult& aRv) const {
+  if (auto type = GetConfiguredDOMOrientationType()) {
+    return *type;
+  }
+
   Document* doc = GetResponsibleDocument();
   BrowsingContext* bc = doc ? doc->GetBrowsingContext() : nullptr;
   if (!bc) {
@@ -742,6 +792,10 @@ OrientationType ScreenOrientation::GetType(CallerType aCallerType,
 
 uint16_t ScreenOrientation::GetAngle(CallerType aCallerType,
                                      ErrorResult& aRv) const {
+  if (auto angle = GetConfiguredDOMOrientationAngle()) {
+    return *angle;
+  }
+
   Document* doc = GetResponsibleDocument();
   BrowsingContext* bc = doc ? doc->GetBrowsingContext() : nullptr;
   if (!bc) {

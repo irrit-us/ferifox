@@ -11,3 +11,6 @@
 # For the mozilla-aurora repository, use "aurora".
 MOZ_BRANDING_DIRECTORY=browser/branding/unofficial
 MOZ_OFFICIAL_BRANDING_DIRECTORY=browser/branding/official
+MOZ_APP_BASENAME=Ferifox
+MOZ_APP_NAME=ferifox
+MOZ_APP_REMOTINGNAME=ferifox

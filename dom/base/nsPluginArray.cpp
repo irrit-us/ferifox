@@ -58,7 +58,7 @@ JSObject* nsPluginArray::WrapObject(JSContext* aCx,
 }
 
 nsPluginElement* nsPluginArray::IndexedGetter(uint32_t aIndex, bool& aFound) {
-  if (!ForceNoPlugins() && aIndex < std::size(mPlugins)) {
+  if (aIndex < EffectiveLength()) {
     aFound = true;
     return mPlugins[aIndex];
   }
@@ -69,15 +69,11 @@ nsPluginElement* nsPluginArray::IndexedGetter(uint32_t aIndex, bool& aFound) {
 
 nsPluginElement* nsPluginArray::NamedGetter(const nsAString& aName,
                                             bool& aFound) {
-  if (ForceNoPlugins()) {
-    aFound = false;
-    return nullptr;
-  }
-
-  for (const auto& plugin : mPlugins) {
-    if (plugin->Name().Equals(aName)) {
+  uint32_t length = EffectiveLength();
+  for (uint32_t i = 0; i < length; ++i) {
+    if (mPlugins[i]->Name().Equals(aName)) {
       aFound = true;
-      return plugin;
+      return mPlugins[i];
     }
   }
 
@@ -86,13 +82,19 @@ nsPluginElement* nsPluginArray::NamedGetter(const nsAString& aName,
 }
 
 void nsPluginArray::GetSupportedNames(nsTArray<nsString>& aRetval) {
-  if (ForceNoPlugins()) {
-    return;
+  uint32_t length = EffectiveLength();
+  for (uint32_t i = 0; i < length; ++i) {
+    aRetval.AppendElement(mPlugins[i]->Name());
   }
+}
 
-  for (auto& plugin : mPlugins) {
-    aRetval.AppendElement(plugin->Name());
+uint32_t nsPluginArray::Length() { return EffectiveLength(); }
+
+uint32_t nsPluginArray::EffectiveLength() {
+  if (ForceNoPlugins()) {
+    return 0;
   }
+  return mPlugins.size();
 }
 
 bool nsPluginArray::ForceNoPlugins() {

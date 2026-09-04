@@ -10,6 +10,7 @@
 #include "ASpdySession.h"
 #include "AltServiceChild.h"
 #include "EventTokenBucket.h"
+#include "FerifoxConfig.h"
 #include "HttpLog.h"
 #include "LoadContextInfo.h"
 #include "SerializedLoadContext.h"
@@ -281,6 +282,7 @@ nsHttpHandler::nsHttpHandler()
   mAuthCache->Init();
   mPrivateAuthCache->Init();
 
+  mFerifoxUserAgent.SetIsVoid(true);
   mUserAgentOverride.SetIsVoid(true);
 
   MOZ_ASSERT(!gHttpHandler, "HTTP handler already created!");
@@ -774,26 +776,32 @@ nsresult nsHttpHandler::AddStandardRequestHeaders(
                           nsHttpHeaderArray::eVarietyRequestOverride);
   if (NS_FAILED(rv)) return rv;
 
-  if (!aLanguageOverride.IsEmpty()) {
-    nsAutoCString acceptLanguage;
-    acceptLanguage.Assign(aLanguageOverride.get());
-    rv = request->SetHeader(nsHttp::Accept_Language, acceptLanguage, false,
+  // Add the "Accept-Language" header.  This header is also exposed to the
+  // service worker.
+  nsCString acceptLang;
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString al;
+    cfg->GetString("headers.acceptLanguage"_ns, al);
+    if (!al.IsEmpty()) {
+      acceptLang = NS_ConvertUTF16toUTF8(al);
+    }
+  }
+  if (acceptLang.IsEmpty()) {
+    if (!aLanguageOverride.IsEmpty()) {
+      acceptLang.Assign(aLanguageOverride.get());
+    } else {
+      if (mAcceptLanguagesIsDirty) {
+        rv = SetAcceptLanguages();
+        MOZ_ASSERT(NS_SUCCEEDED(rv));
+      }
+      acceptLang = mAcceptLanguages;
+    }
+  }
+
+  if (!acceptLang.IsEmpty()) {
+    rv = request->SetHeader(nsHttp::Accept_Language, acceptLang, false,
                             nsHttpHeaderArray::eVarietyRequestOverride);
     if (NS_FAILED(rv)) return rv;
-  } else {
-    // Add the "Accept-Language" header.  This header is also exposed to the
-    // service worker.
-    if (mAcceptLanguagesIsDirty) {
-      rv = SetAcceptLanguages();
-      MOZ_ASSERT(NS_SUCCEEDED(rv));
-    }
-
-    // Add the "Accept-Language" header
-    if (!mAcceptLanguages.IsEmpty()) {
-      rv = request->SetHeader(nsHttp::Accept_Language, mAcceptLanguages, false,
-                              nsHttpHeaderArray::eVarietyRequestOverride);
-      if (NS_FAILED(rv)) return rv;
-    }
   }
 
   // add the "Send Hint" header
@@ -993,6 +1001,21 @@ uint8_t nsHttpHandler::UrgencyFromCoSFlags(uint32_t cos,
 //-----------------------------------------------------------------------------
 
 const nsCString& nsHttpHandler::UserAgent(bool aShouldResistFingerprinting) {
+  if (!mFerifoxUserAgent.IsVoid()) {
+    LOG(("using ferifox config userAgent : %s\n", mFerifoxUserAgent.get()));
+    return mFerifoxUserAgent;
+  }
+
+  if (auto* cfg = FerifoxConfig::GetSingleton()) {
+    nsString ua;
+    cfg->GetString("navigator.userAgent"_ns, ua);
+    if (!ua.IsEmpty()) {
+      mFerifoxUserAgent = NS_ConvertUTF16toUTF8(ua);
+      LOG(("using ferifox config userAgent : %s\n", mFerifoxUserAgent.get()));
+      return mFerifoxUserAgent;
+    }
+  }
+
   if (aShouldResistFingerprinting && !mSpoofedUserAgent.IsEmpty()) {
     LOG(("using spoofed userAgent : %s\n", mSpoofedUserAgent.get()));
     return mSpoofedUserAgent;
