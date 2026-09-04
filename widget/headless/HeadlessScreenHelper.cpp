@@ -37,10 +37,10 @@ static Maybe<int32_t> GetScaledDimension(const nsACString& aPath,
 /* static */
 LayoutDeviceIntRect HeadlessScreenHelper::GetScreenRect() {
   double scale = GetScale();
-  auto width = GetScaledDimension("screen.width"_ns, scale);
-  auto height = GetScaledDimension("screen.height"_ns, scale);
-  if (width && height) {
-    return LayoutDeviceIntRect(0, 0, *width, *height);
+  auto cfgWidth = GetScaledDimension("screen.width"_ns, scale);
+  auto cfgHeight = GetScaledDimension("screen.height"_ns, scale);
+  if (cfgWidth && cfgHeight) {
+    return LayoutDeviceIntRect(0, 0, *cfgWidth, *cfgHeight);
   }
 
   char* ev = PR_GetEnv("MOZ_HEADLESS_WIDTH");
