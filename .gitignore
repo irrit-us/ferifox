@@ -411,6 +411,9 @@ toolkit/crashreporter/minidump-analyzer/target/
 # Ignore mozperftest artifacts folder
 /artifacts/
 
+# Local session handoff notes (not for upstream)
+/HANDOFF.md
+
 # Ignore personal preferences files
 CLAUDE.local.md
 **/.claude/settings.local.json
