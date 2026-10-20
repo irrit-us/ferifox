@@ -12,6 +12,8 @@
 
 #include <cstdint>
 
+class nsIFile;
+
 namespace Json {
 class Value;
 }
@@ -42,6 +44,7 @@ class FerifoxConfig {
   ~FerifoxConfig();
 
   void Load();
+  bool LoadFromFile(nsIFile* aFile, const nsACString& aSource);
   bool LoadFromJSONString(const nsACString& aContent, const char* aSource);
   bool SetPersistentEnv(const nsACString& aName, const nsACString& aValue);
 

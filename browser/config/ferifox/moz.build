@@ -1,0 +1,18 @@
+# -*- Mode: python; indent-tabs-mode: nil; tab-width: 40 -*-
+# vim: set filetype=python:
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+# Packaged so FerifoxConfig can fall back to the platform default persona
+# when FERIFOX_CONFIG is not set, and so launchers can reference the
+# checked-in personas next to the binary.
+FINAL_TARGET_FILES.personas += [
+    "personas/linux-firefox.json",
+    "personas/linux-headless-firefox.json",
+    "personas/linux-hidpi-firefox.json",
+    "personas/macos-firefox.json",
+    "personas/win10-firefox.json",
+    "personas/win11-cn-firefox.json",
+    "personas/win11-firefox.json",
+]

@@ -14,6 +14,7 @@ DIRS += [
     "actors",
     "base",
     "components",
+    "config/ferifox",
     "fonts",
     "fxr",
     "locales",

@@ -86,6 +86,17 @@ Load the specified chrome.
 \fIMOZILLA_DISABLE_PLUGINS\fR - when set, totally disables loading browser plugins
 (the ones that appear at the about:plugins url)
 
+\fIFERIFOX_CONFIG\fR - path to a Ferifox persona JSON file. The special value
+\fBnone\fR disables persona loading. When unset, the packaged platform default
+persona (\fIpersonas/<platform>-firefox.json\fR next to the binary) is loaded
+if present.
+
+\fIFERIFOX_COOKIES\fR - path to a JSON cookie file imported at startup. When
+unset, \fI.ferifox\-cookie\fR in the profile directory is imported if present.
+The file holds a JSON array of cookie objects with \fIname\fR, \fIvalue\fR, and
+\fIdomain\fR plus optional \fIpath\fR, \fIsecure\fR, \fIhttpOnly\fR,
+\fIsameSite\fR, and \fIexpires\fR (Unix seconds) fields.
+
 .SH FILES
 \fI/usr/bin/${PKG_NAME}\fR - symbolic link to \fB/usr/lib/${PKG_NAME}/${PKG_NAME}\fR.
 .br
@@ -93,6 +104,13 @@ Load the specified chrome.
 \fI/usr/lib/${PKG_NAME}/${PKG_NAME}\fR - ${DISPLAY_NAME} executable.
 
 \fI/usr/lib/${PKG_NAME}/firefox\-bin\fR - Legacy executable.
+.br
+
+\fI/usr/lib/${PKG_NAME}/browser/personas/\fR - packaged Ferifox persona files; the
+platform default persona is loaded from here when \fIFERIFOX_CONFIG\fR is unset.
+.br
+
+\fI<profile>/.ferifox\-cookie\fR - JSON cookie file imported at startup.
 .br
 
 .SH BUGS

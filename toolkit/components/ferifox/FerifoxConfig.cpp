@@ -13,6 +13,8 @@
 #include "mozilla/SyncRunnable.h"
 #include "mozilla/intl/LocaleService.h"
 #include "mozilla/intl/TimeZone.h"
+#include "nsDirectoryServiceDefs.h"
+#include "nsDirectoryServiceUtils.h"
 #include "nsIFile.h"
 #include "nsIInputStream.h"
 #include "nsNetUtil.h"
@@ -21,6 +23,7 @@
 #include "prenv.h"
 
 #include <cmath>
+#include <cstring>
 #include <inttypes.h>
 #include <string>
 
@@ -159,42 +162,100 @@ void FerifoxConfig::Load() {
   }
 
   const char* path = PR_GetEnv("FERIFOX_CONFIG");
-  if (!path || !*path) {
+  if (path && *path) {
+    if (!strcmp(path, "none")) {
+      MOZ_LOG(sFerifoxLog, LogLevel::Info,
+              ("FERIFOX_CONFIG: persona loading disabled"));
+      return;
+    }
+    nsCOMPtr<nsIFile> file;
+    nsresult rv =
+        NS_NewLocalFile(NS_ConvertUTF8toUTF16(path), getter_AddRefs(file));
+    if (NS_FAILED(rv)) {
+      MOZ_LOG(sFerifoxLog, LogLevel::Warning,
+              ("FERIFOX_CONFIG: invalid path '%s'", path));
+      return;
+    }
+    (void)LoadFromFile(file, nsDependentCString(path));
+    return;
+  }
+
+  // Test harnesses (mozrunner-based: mochitest, reftest, wpt, ...) must see
+  // deterministic stock state; only explicit FERIFOX_CONFIG loads there.
+  // geckodriver-driven automation does not set this variable.
+  if (PR_GetEnv("MOZ_DISABLE_NONLOCAL_CONNECTIONS")) {
+    MOZ_LOG(sFerifoxLog, LogLevel::Debug,
+            ("FERIFOX_CONFIG: test harness detected, skipping default "
+             "persona"));
+    return;
+  }
+
+#if defined(XP_WIN)
+  constexpr const char* kDefaultPersonaName = "win11-cn-firefox.json";
+#elif defined(XP_MACOSX)
+  constexpr const char* kDefaultPersonaName = "macos-firefox.json";
+#elif defined(XP_LINUX)
+  constexpr const char* kDefaultPersonaName = "linux-firefox.json";
+#else
+  constexpr const char* kDefaultPersonaName = "";
+#endif
+
+  if (!*kDefaultPersonaName) {
     MOZ_LOG(sFerifoxLog, LogLevel::Debug, ("FERIFOX_CONFIG not set, skipping"));
     return;
   }
 
-  nsCOMPtr<nsIFile> file;
+  nsCOMPtr<nsIFile> defaultPersona;
   nsresult rv =
-      NS_NewLocalFile(NS_ConvertUTF8toUTF16(path), getter_AddRefs(file));
-  if (NS_FAILED(rv)) {
-    MOZ_LOG(sFerifoxLog, LogLevel::Warning,
-            ("FERIFOX_CONFIG: invalid path '%s'", path));
+      NS_GetSpecialDirectory(NS_GRE_DIR, getter_AddRefs(defaultPersona));
+  bool exists = false;
+  if (NS_SUCCEEDED(rv) && defaultPersona) {
+    rv = defaultPersona->AppendNative("browser"_ns);
+    if (NS_SUCCEEDED(rv)) {
+      rv = defaultPersona->AppendNative("personas"_ns);
+    }
+    if (NS_SUCCEEDED(rv)) {
+      rv =
+          defaultPersona->AppendNative(nsDependentCString(kDefaultPersonaName));
+    }
+    if (NS_SUCCEEDED(rv)) {
+      rv = defaultPersona->Exists(&exists);
+    }
+  }
+  if (NS_FAILED(rv) || !exists) {
+    MOZ_LOG(sFerifoxLog, LogLevel::Debug,
+            ("FERIFOX_CONFIG not set and no default persona found, skipping"));
     return;
   }
+  nsAutoString displayPath;
+  (void)defaultPersona->GetPath(displayPath);
+  (void)LoadFromFile(defaultPersona, NS_ConvertUTF16toUTF8(displayPath));
+}
 
+bool FerifoxConfig::LoadFromFile(nsIFile* aFile, const nsACString& aSource) {
   bool exists = false;
-  rv = file->Exists(&exists);
+  nsresult rv = aFile->Exists(&exists);
   if (NS_FAILED(rv) || !exists) {
     MOZ_LOG(sFerifoxLog, LogLevel::Warning,
-            ("FERIFOX_CONFIG: file not found '%s'", path));
-    return;
+            ("FERIFOX_CONFIG: file not found '%s'",
+             PromiseFlatCString(aSource).get()));
+    return false;
   }
 
   int64_t fileSize = 0;
-  rv = file->GetFileSize(&fileSize);
+  rv = aFile->GetFileSize(&fileSize);
   if (NS_FAILED(rv) || fileSize <= 0 || fileSize > 1024 * 1024) {
     MOZ_LOG(sFerifoxLog, LogLevel::Warning,
             ("FERIFOX_CONFIG: bad file size %" PRId64, fileSize));
-    return;
+    return false;
   }
 
   nsCOMPtr<nsIInputStream> inputStream;
-  rv = NS_NewLocalFileInputStream(getter_AddRefs(inputStream), file);
+  rv = NS_NewLocalFileInputStream(getter_AddRefs(inputStream), aFile);
   if (NS_FAILED(rv)) {
     MOZ_LOG(sFerifoxLog, LogLevel::Warning,
             ("FERIFOX_CONFIG: failed to open file"));
-    return;
+    return false;
   }
 
   nsAutoCString content;
@@ -203,11 +264,9 @@ void FerifoxConfig::Load() {
   if (NS_FAILED(rv)) {
     MOZ_LOG(sFerifoxLog, LogLevel::Warning,
             ("FERIFOX_CONFIG: failed to read file"));
-    return;
+    return false;
   }
-  if (!LoadFromJSONString(content, path)) {
-    return;
-  }
+  return LoadFromJSONString(content, PromiseFlatCString(aSource).get());
 }
 
 bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,

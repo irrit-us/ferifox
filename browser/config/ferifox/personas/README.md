@@ -15,8 +15,21 @@ $env:FERIFOX_CONFIG = (Resolve-Path .\browser\config\ferifox\personas\win11-fire
 ```
 
 ```sh
-FERIFOX_CONFIG="$PWD/browser/config/ferifox/personas/linux-firefox.json" ./firefox
+FERIFOX_CONFIG="$PWD/browser/config/ferifox/personas/linux-firefox.json" ./ferifox
 ```
+
+### Default Persona
+
+The checked-in personas are packaged next to the binary under
+`browser/personas/`. When
+`FERIFOX_CONFIG` is not set, the platform default is loaded from
+`browser/personas/win11-cn-firefox.json` on Windows (the zh-CN persona shared with the
+ferifox_crawler_skills crawler), `browser/personas/macos-firefox.json` on macOS, or
+`browser/personas/linux-firefox.json` on Linux. Set `FERIFOX_CONFIG=none` to disable
+persona loading entirely. An explicitly set `FERIFOX_CONFIG` always takes
+precedence over the default persona. The default persona is skipped when a
+mozrunner-based test harness drives the build (`MOZ_DISABLE_NONLOCAL_CONNECTIONS`);
+geckodriver-driven sessions are unaffected and do get the default persona.
 
 The parent process reads the file after profile and AutoConfig preferences are
 loaded, applies Persona-controlled preferences as locked defaults, and passes a

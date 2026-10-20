@@ -1,0 +1,7 @@
+. "$topsrcdir/build/mozconfig.win-common"
+. "$topsrcdir/browser/config/mozconfigs/win64/common-win64"
+. "$topsrcdir/browser/config/mozconfigs/win64/common-opt"
+ac_add_options --disable-tests
+ac_add_options --enable-lto=cross
+mk_add_options "export CARGO_BUILD_JOBS=1"
+. "$topsrcdir/build/mozconfig.common.override"

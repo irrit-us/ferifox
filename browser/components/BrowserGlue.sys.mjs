@@ -37,6 +37,7 @@ ChromeUtils.defineESModuleGetters(lazy, {
   DownloadsViewableInternally:
     "moz-src:///browser/components/downloads/DownloadsViewableInternally.sys.mjs",
   ExtensionsUI: "resource:///modules/ExtensionsUI.sys.mjs",
+  FerifoxCookieImport: "resource:///modules/FerifoxCookieImport.sys.mjs",
   FormAutofillUtils: "resource://gre/modules/shared/FormAutofillUtils.sys.mjs",
   Interactions: "moz-src:///browser/components/places/Interactions.sys.mjs",
   LoginBreaches: "resource:///modules/LoginBreaches.sys.mjs",
@@ -385,6 +386,9 @@ BrowserGlue.prototype = {
   // runs on startup, before the first command line handler is invoked
   // (i.e. before the first window is opened)
   _beforeUIStartup: function BG__beforeUIStartup() {
+    // Import FERIFOX_COOKIES / <profile>/.ferifox-cookie before pages load.
+    lazy.FerifoxCookieImport.importFerifoxCookiesForStartup();
+
     lazy.SessionStartup.init();
 
     // check if we're in safe mode

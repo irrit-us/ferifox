@@ -1,5 +1,31 @@
 # Changelog
 
+## v0.4.0 - 2026-10-20
+
+Fourth Ferifox release based on Firefox 155.0: default persona, startup cookie import, and agent tooling.
+
+### Added
+
+- Added a packaged platform default persona: the checked-in personas are now shipped next to the binary under `browser/personas/`, and when `FERIFOX_CONFIG` is unset the persona matching the build platform is loaded automatically (`win11-cn-firefox.json`, the zh-CN persona shared with ferifox_crawler_skills, on Windows; `macos` or `linux` otherwise). `FERIFOX_CONFIG=none` disables persona loading entirely. mozrunner-based test harnesses skip the default persona to keep tests deterministic.
+- Added startup cookie import: cookies are loaded from the JSON file named by `FERIFOX_COOKIES`, or from `.ferifox-cookie` in the profile directory when the variable is unset.
+- Documented the Ferifox environment (`FERIFOX_CONFIG`, `FERIFOX_COOKIES`, default persona, cookie import) in `ferifox --help` and the Linux manpage.
+- Added an in-tree agent skill (`.agents/skills/ferifox`) covering builds, personas, cookie import, crawler usage, and spawning the MCP listener via `./mach firefox-devtools-mcp`.
+
+### Fixed
+
+- Fixed xpcshell startup crashes for browser-module tests on Ferifox-branded builds: the harness now falls back to the `firefox-appdir` manifest key so `resource:///modules` resolves to the browser app directory instead of aborting with `Missing chrome or resource URLs`.
+
+### Verification
+
+- `python3 -m json.tool` on all `browser/config/ferifox/personas/*.json`
+- `./mach build` (Windows x86_64)
+- `./mach xpcshell-test browser/components/ferifox/tests/xpcshell/test_cookie_import.js` (30/30 subtests)
+- `./mach xpcshell-test browser/components/backup/tests/xpcshell/test_ArchiveUtils_countReplacementCharacters.js` (appdir regression canary)
+- `./mach test dom/base/test/browser_ferifox_persona_surfaces.js --headless` (35/37; two graphics subtests fail on this machine's software-GL backend, unchanged from the pre-change baseline)
+- Marionette end-to-end smoke: default win11-cn persona applied (user agent, languages, screen geometry, font whitelist, WebRTC prefs, ICU timezone, Accept-Language header); `.ferifox-cookie` imported at startup and sent on the wire
+- `git diff --check`
+- Formatting: clang-format 20.1.8 on touched C++ ranges, prettier 3.8.1 on JS, `ruff format --check` on Python (`mach format`'s lint venv cannot be created here: its `rumdl==0.1.91` pin has no Python 3.14 wheel)
+
 ## v0.3.0 - 2026-09-04
 
 Third Ferifox stealth hardening release based on Firefox 155.0.

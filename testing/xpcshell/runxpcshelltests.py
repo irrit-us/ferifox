@@ -1010,9 +1010,14 @@ class XPCShellTestThread(Thread):
 
         # By default self.appPath will equal the gre dir. If specified in the
         # xpcshell.toml file, set a different app dir for this test.
-        if self.app_dir_key and self.app_dir_key in self.test_object:
-            rel_app_dir = self.test_object[self.app_dir_key]
-            rel_app_dir = os.path.join(self.xrePath, rel_app_dir)
+        app_dir_value = None
+        if self.app_dir_key:
+            app_dir_value = self.test_object.get(self.app_dir_key)
+            if app_dir_value is None and self.app_dir_key != "firefox-appdir":
+                # Ferifox: manifests declare firefox-appdir for Firefox.
+                app_dir_value = self.test_object.get("firefox-appdir")
+        if app_dir_value:
+            rel_app_dir = os.path.join(self.xrePath, app_dir_value)
             self.appPath = os.path.abspath(rel_app_dir)
         else:
             self.appPath = None

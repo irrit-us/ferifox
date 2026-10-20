@@ -169,6 +169,8 @@
 #endif
 #endif
 @RESPATH@/platform.ini
+; Ferifox personas (default persona and launch-time references)
+@RESPATH@/browser/personas/*.json
 #ifndef MOZ_FOLD_LIBS
 @BINPATH@/@DLL_PREFIX@mozsqlite3@DLL_SUFFIX@
 #endif

@@ -2251,6 +2251,16 @@ static void DumpHelp() {
       "script) for it.\n");
 #endif
 
+  printf(
+      "\nFerifox environment\n"
+      "  FERIFOX_CONFIG=<file>   Load a Ferifox persona from <file>; \"none\"\n"
+      "                          disables persona loading. When unset, the\n"
+      "                          packaged platform default persona is used if\n"
+      "                          present.\n"
+      "  FERIFOX_COOKIES=<file>  Import cookies from a JSON file at startup.\n"
+      "                          When unset, <profile>/.ferifox-cookie is\n"
+      "                          imported if present.\n");
+
   // this works, but only after the components have registered.  so if you drop
   // in a new command line handler, --help won't not until the second run. out
   // of the bug, because we ship a component.reg file, it works correctly.
