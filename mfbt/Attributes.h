@@ -969,7 +969,7 @@
 #      define MOZ_GLOBINIT \
         MOZ_RUNINIT __attribute__((annotate("moz_generated")))
 #      define MOZ_BINDING(direction, language, kind, symbol) \
-        __attribute__((annotate(#direction, #language, #kind, #symbol)))
+        [[clang::annotate(#direction, #language, #kind, #symbol)]]
 #    else
 #      define MOZ_UNANNOTATED  /* nothing */
 #      define MOZ_ANNOTATED    /* nothing */
