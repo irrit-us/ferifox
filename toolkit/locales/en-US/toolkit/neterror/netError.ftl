@@ -30,6 +30,51 @@ neterror-add-exception-button = Always continue for this site
 neterror-settings-button = Change DNS settings
 neterror-view-certificate-link = View Certificate
 
+## Search call-to-action shown on the online dnsNotFound error page when
+## browser.netError.searchCTA.enabled is true. Offers a one-click web search
+## derived from the address that failed to resolve.
+
+neterror-search-cta-title = This site can’t be reached
+
+# $hostname (String) - The host of the address that failed to load, including
+# any subdomains, for example "docs.example.com". The host is emphasized.
+neterror-search-cta-intro2 = Could not connect to the server at <strong>{ $hostname }</strong>.
+
+# Heading above the list of recovery hints on the search CTA error page.
+neterror-search-cta-things-to-try = Try these steps:
+
+neterror-search-cta-hint-check-address = Double-check the website address
+
+# Shown when no Search button is offered, so no specific query can be named.
+neterror-search-cta-hint-search = Search the web to find the site
+
+# Shown when the Search button is offered, naming the exact query it will run.
+# $query (String) - The search query derived from the address that failed to
+# load, beginning with the site's name, for example "example best hiking
+# boots". The query and the quotation marks around it are emphasized.
+neterror-search-cta-hint-search-query = Search the web for <strong>“{ $query }”</strong>
+
+# .tooltiptext doubles as the button's accessible description, so it explains
+# that results open in a new tab.
+neterror-search-cta-search-button =
+    .label = Search
+    .accesskey = c
+    .tooltiptext = Opens search results in a new tab
+
+neterror-search-cta-reload-button =
+    .label = Reload
+    .accesskey = R
+
+# Shown in place of the Search button when the user clicks it but connectivity
+# has dropped since the page loaded, so the search cannot be performed.
+neterror-search-cta-offline = You appear to be offline. Reconnect and try again.
+
+# $error (String) - The error code, for example "dnsNotFound".
+neterror-search-cta-error-code = Error code: { $error }
+
+# The search CTA's own "Learn more" link text (no trailing ellipsis).
+neterror-search-cta-learn-more = Learn more
+
 ##
 
 neterror-pref-reset = It looks like your network security settings might be causing this. Do you want the default settings to be restored?
@@ -54,9 +99,6 @@ neterror-load-osx-permission = If you are trying to load a local network page, p
 
 neterror-http-error-page = Check to make sure you’ve typed the website address correctly.
 neterror-http-empty-response = Check to make sure you’ve typed the website address correctly and try again in a few moments.
-# Variables:
-#   $hostname (String) - Hostname of the website to which the user was trying to connect.
-neterror-http-empty-response-description = { $hostname } sent back an empty page.
 
 neterror-captive-portal = You must log in to this network before you can access the internet.
 
@@ -73,6 +115,19 @@ neterror-dns-not-found-offline-hint-header = <strong>What can you do about it?</
 neterror-dns-not-found-offline-hint-different-device = Try connecting on a different device.
 neterror-dns-not-found-offline-hint-modem = Check your modem or router.
 neterror-dns-not-found-offline-hint-reconnect = Disconnect and reconnect to Wi-Fi.
+
+## Hints shown, as one list of steps, when a connection to this computer
+## (localhost) is refused.
+## Variables:
+##   $port (String) - The port number the connection was refused on.
+
+neterror-loopback-refused-not-running = Nothing is accepting connections on port { $port }. Check that your local server is running.
+# "it" is the local server that the user is trying to reach.
+neterror-loopback-refused-wrong-port = If it is running, check that it is using port { $port }.
+# "this address" is the IP address of the page that failed to load, for example
+# 127.0.0.1 or [::1]. Do not translate or reformat the literal addresses [::1]
+# and 127.0.0.1 in the text.
+neterror-loopback-refused-address = Check that the server accepts connections on this address. Some servers listen only on [::1] or only on 127.0.0.1.
 
 ## TRR-only specific messages
 ## Variables:

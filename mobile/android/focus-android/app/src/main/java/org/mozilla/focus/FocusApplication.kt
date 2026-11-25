@@ -12,12 +12,14 @@ import android.util.Log.INFO
 import androidx.annotation.OpenForTesting
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.UserManagerCompat
 import androidx.emoji2.text.DefaultEmojiCompatConfig
 import androidx.emoji2.text.EmojiCompat
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.work.Configuration.Builder
 import androidx.work.Configuration.Provider
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,6 +27,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import mozilla.components.browser.state.action.SearchAction
 import mozilla.components.support.AppServicesInitializer
+import mozilla.components.support.AppServicesInitializer.Config as AppServiceConfig
 import mozilla.components.support.base.facts.register
 import mozilla.components.support.base.log.Log
 import mozilla.components.support.base.log.sink.AndroidLogSink
@@ -42,17 +45,36 @@ import org.mozilla.focus.session.VisibilityLifeCycleCallback
 import org.mozilla.focus.telemetry.FactsProcessor
 import org.mozilla.focus.telemetry.ProfilerMarkerFactProcessor
 import org.mozilla.focus.utils.AppConstants
-import mozilla.components.support.AppServicesInitializer.Config as AppServiceConfig
 
-/**
- * Focus application class.
- */
+/** Focus application class. */
 open class FocusApplication : Application(), Provider {
 
-    protected val applicationScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+    /**
+     * A [CoroutineScope] tied to the application's lifecycle.
+     *
+     * This scope is used for launching long-running or global asynchronous tasks that should survive the destruction of
+     * individual activities. It uses [Dispatchers.Main] as the default dispatcher and a [SupervisorJob] to ensure that
+     * a failure in one child coroutine does not cancel others.
+     *
+     * Note: Tasks should be scoped to the container which holds their UI. If necessary, applicationScope can be used
+     * for top-level background work that must remain active for the whole duration of the application.
+     */
+    private val applicationScope: CoroutineScope =
+        CoroutineScope(
+            SupervisorJob() +
+                Dispatchers.Main +
+                CoroutineExceptionHandler { _, throwable ->
+                    Log.log(
+                        priority = Log.Priority.ERROR,
+                        tag = "ApplicationScope",
+                        message = "Unhandled error: ${throwable.message}",
+                        throwable = throwable,
+                    )
+                }
+        )
     protected val ioDispatcher = Dispatchers.IO
 
-    open val components: Components by lazy { Components(this) }
+    open val components: Components by lazy { Components(this, applicationScope = applicationScope) }
 
     var visibilityLifeCycleCallback: VisibilityLifeCycleCallback? = null
         private set
@@ -64,6 +86,10 @@ open class FocusApplication : Application(), Provider {
         super.onCreate()
 
         Log.addSink(AndroidLogSink("Focus"))
+
+        // Read buildMetadata once at startup, so that it is in memory before anything can crash.
+        components.buildMetadata
+
         components.crashReporter.install(this)
 
         if (isMainProcess()) {
@@ -164,14 +190,15 @@ open class FocusApplication : Application(), Provider {
     /**
      * Initializes EmojiCompat manually on a background thread.
      *
-     * By initializing manually, we avoid the startup penalty associated with the default
-     * EmojiCompat initializer's ContentProvider. [DefaultEmojiCompatConfig] is used to
-     * automatically find a compatible font provider (such as Google Play Services).
+     * By initializing manually, we avoid the startup penalty associated with the default EmojiCompat initializer's
+     * ContentProvider. [DefaultEmojiCompatConfig] is used to automatically find a compatible font provider (such as
+     * Google Play Services).
      *
-     * @param dispatcher The [CoroutineDispatcher] on which the initialization will occur.
-     * Defaults to [ioDispatcher].
+     * @param dispatcher The [CoroutineDispatcher] on which the initialization will occur. Defaults to [ioDispatcher].
      */
     private suspend fun initializeEmojiCompat(dispatcher: CoroutineDispatcher = ioDispatcher) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) return
+
         withContext(dispatcher) {
             // If the device has no compatible provider (e.g. no Play Services), config will be null.
             val config = DefaultEmojiCompatConfig.create(applicationContext) ?: return@withContext
@@ -194,7 +221,7 @@ open class FocusApplication : Application(), Provider {
                             message = "EmojiCompat initialization failed",
                         )
                     }
-                },
+                }
             )
 
             EmojiCompat.init(config)
@@ -212,32 +239,26 @@ open class FocusApplication : Application(), Provider {
     /**
      * Initiate Megazord sequence! Megazord Battle Mode!
      *
-     * The application-services combined libraries are known as the "megazord". We use the default `full`
-     * megazord - it contains everything that fenix needs, and (currently) nothing more.
+     * The application-services combined libraries are known as the "megazord". We use the default `full` megazord - it
+     * contains everything that fenix needs, and (currently) nothing more.
      *
      * Documentation on what megazords are, and why they're needed:
      * - https://github.com/mozilla/application-services/blob/master/docs/design/megazords.md
      * - https://mozilla.github.io/application-services/docs/applications/consuming-megazord-libraries.html
      *
-     * This is the initialization of the megazord without setting up networking, i.e. needing the
-     * engine for networking. This should do the minimum work necessary as it is done on the main
-     * thread, early in the app startup sequence.
+     * This is the initialization of the megazord without setting up networking, i.e. needing the engine for networking.
+     * This should do the minimum work necessary as it is done on the main thread, early in the app startup sequence.
      */
     private fun beginSetupMegazord() {
-        AppServicesInitializer.init(
-            AppServiceConfig(components.crashReporter),
-        )
+        AppServicesInitializer.init(AppServiceConfig(components.crashReporter))
     }
 
-    /**
-     * Finish Megazord setup sequence.
-     */
+    /** Finish Megazord setup sequence. */
     @OpenForTesting
     open fun finishSetupMegazord(dispatcher: CoroutineDispatcher = ioDispatcher) {
         // We need to use an unwrapped client because native components do not support private
         // requests.
-        @Suppress("Deprecation")
-        RustHttpConfig.setClient(lazy { components.client.unwrap() })
+        @Suppress("Deprecation") RustHttpConfig.setClient(lazy { components.client.unwrap() })
 
         applicationScope.launch(dispatcher) {
             // Now viaduct (the RustHttp client) is initialized we can ask Nimbus to fetch
@@ -255,15 +276,11 @@ open class FocusApplication : Application(), Provider {
         val settings = context.settings
         when {
             settings.lightThemeSelected -> {
-                AppCompatDelegate.setDefaultNightMode(
-                    AppCompatDelegate.MODE_NIGHT_NO,
-                )
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
             }
 
             settings.darkThemeSelected -> {
-                AppCompatDelegate.setDefaultNightMode(
-                    AppCompatDelegate.MODE_NIGHT_YES,
-                )
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
             }
 
             settings.useDefaultThemeSelected -> {
@@ -280,13 +297,9 @@ open class FocusApplication : Application(), Provider {
 
     private fun setDefaultTheme() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            AppCompatDelegate.setDefaultNightMode(
-                AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM,
-            )
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
         } else {
-            AppCompatDelegate.setDefaultNightMode(
-                AppCompatDelegate.MODE_NIGHT_AUTO_BATTERY,
-            )
+            AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_AUTO_BATTERY)
         }
     }
 
@@ -294,12 +307,13 @@ open class FocusApplication : Application(), Provider {
         // Only enable StrictMode in debug builds
         if (AppConstants.isDevBuild) {
             val threadPolicyBuilder = StrictMode.ThreadPolicy.Builder().detectAll()
-            val vmPolicyBuilder = StrictMode.VmPolicy.Builder()
-                .detectActivityLeaks()
-                .detectFileUriExposure()
-                .detectLeakedClosableObjects()
-                .detectLeakedRegistrationObjects()
-                .detectLeakedSqlLiteObjects()
+            val vmPolicyBuilder =
+                StrictMode.VmPolicy.Builder()
+                    .detectActivityLeaks()
+                    .detectFileUriExposure()
+                    .detectLeakedClosableObjects()
+                    .detectLeakedRegistrationObjects()
+                    .detectLeakedSqlLiteObjects()
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 vmPolicyBuilder.detectNonSdkApiUsage()
@@ -336,5 +350,13 @@ open class FocusApplication : Application(), Provider {
     }
 
     override val workManagerConfiguration
-        get() = Builder().setMinimumLoggingLevel(INFO).build()
+        get() =
+            Builder()
+                .setMinimumLoggingLevel(INFO)
+                .setInitializationExceptionHandler { throwable ->
+                    if (UserManagerCompat.isUserUnlocked(this)) {
+                        throw throwable
+                    }
+                }
+                .build()
 }

@@ -91,6 +91,20 @@ already_AddRefed<MFMediaEngineParent> MFMediaEngineParent::GetMediaEngineById(
   return engine.forget();
 }
 
+/* static */
+bool MFMediaEngineParent::IsMediaEngineIdAllowed(
+    uint64_t aId, const RemoteMediaManagerParent* aManager) {
+  MOZ_ASSERT(RemoteMediaManagerParent::OnManagerThread());
+  MOZ_ASSERT(aManager);
+  if (aId == 0 || aId > sMediaEngineIdx) {
+    return false;
+  }
+  StaticMutexAutoLock lock(sMediaEnginesLock);
+  MFMediaEngineParent* engine =
+      sMediaEngines ? sMediaEngines->Get(aId) : nullptr;
+  return !engine || engine->mManager.get() == aManager;
+}
+
 MFMediaEngineParent::MFMediaEngineParent(RemoteMediaManagerParent* aManager,
                                          nsISerialEventTarget* aManagerThread)
     : mMediaEngineId(++sMediaEngineIdx),
@@ -597,16 +611,22 @@ HRESULT MFMediaEngineParent::SetMediaInfo(const MediaInfoIPDL& aInfo,
 
   const bool isEncrypted = mMediaSource->IsEncrypted();
   ENGINE_MARKER("MFMediaEngineParent,CreatedMediaSource");
+  const gfx::IntSize videoImage =
+      aInfo.videoInfo() ? aInfo.videoInfo()->mImage : gfx::IntSize{};
+  const gfx::IntSize videoDisplay =
+      aInfo.videoInfo() ? aInfo.videoInfo()->mDisplay : gfx::IntSize{};
   nsPrintfCString message(
       "Created the media source, audio=%s, video=%s, encrypted-audio=%s, "
-      "encrypted-video=%s, aIsEncryptedCustomInit=%d, isEncrypted=%d",
+      "encrypted-video=%s, aIsEncryptedCustomInit=%d, isEncrypted=%d, "
+      "video-image=[%dx%d], video-display=[%dx%d]",
       aInfo.audioInfo() ? aInfo.audioInfo()->mMimeType.get() : "none",
       aInfo.videoInfo() ? aInfo.videoInfo()->mMimeType.get() : "none",
       aInfo.audioInfo() && aInfo.audioInfo()->mCrypto.IsEncrypted() ? "yes"
                                                                     : "no",
       aInfo.videoInfo() && aInfo.videoInfo()->mCrypto.IsEncrypted() ? "yes"
                                                                     : "no",
-      aIsEncryptedCustomInit, isEncrypted);
+      aIsEncryptedCustomInit, isEncrypted, videoImage.width, videoImage.height,
+      videoDisplay.width, videoDisplay.height);
   LOG("{}", message.get());
 
   if (aInfo.videoInfo()) {

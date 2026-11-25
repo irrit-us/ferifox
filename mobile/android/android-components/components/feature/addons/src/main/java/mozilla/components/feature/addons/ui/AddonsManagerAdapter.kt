@@ -22,6 +22,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.isInvisible
@@ -29,7 +30,9 @@ import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import mozilla.components.browser.state.action.ExtensionsProcessAction
+import mozilla.components.browser.state.selector.pendingExtensionUpdatesNeedingAttention
 import mozilla.components.browser.state.store.BrowserStore
+import mozilla.components.compose.base.theme.AcornTheme
 import mozilla.components.feature.addons.Addon
 import mozilla.components.feature.addons.R
 import mozilla.components.feature.addons.ui.CustomViewHolder.AddonViewHolder
@@ -47,9 +50,8 @@ private const val VIEW_HOLDER_TYPE_FOOTER = 3
 private const val VIEW_HOLDER_TYPE_HEADER = 4
 
 /**
- * An adapter for displaying add-on items. This will display information related to the state of
- * an add-on such as recommended, unsupported or installed. In addition, it will perform actions
- * such as installing an add-on.
+ * An adapter for displaying add-on items. This will display information related to the state of an add-on such as
+ * recommended, unsupported or installed. In addition, it will perform actions such as installing an add-on.
  *
  * @property addonsManagerDelegate Delegate that will provides method for handling the add-on items.
  * @param addons The list of add-ons to display.
@@ -65,9 +67,8 @@ class AddonsManagerAdapter(
     private val store: BrowserStore,
 ) : ListAdapter<Any, CustomViewHolder>(DifferCallback) {
     /**
-     * Represents all the add-ons that will be distributed in multiple headers like
-     * enabled, recommended and unsupported, this help have the data source of the items,
-     * displayed in the UI.
+     * Represents all the add-ons that will be distributed in multiple headers like enabled, recommended and
+     * unsupported, this help have the data source of the items, displayed in the UI.
      */
     @VisibleForTesting
     internal var addonsMap: MutableMap<String, Addon> = addons.associateBy({ it.id }, { it }).toMutableMap()
@@ -111,22 +112,24 @@ class AddonsManagerAdapter(
     private fun createFooterSectionViewHolder(parent: ViewGroup): CustomViewHolder {
         val context = parent.context
         val inflater = LayoutInflater.from(context)
-        val view = inflater.inflate(
-            R.layout.mozac_feature_addons_footer_section_item,
-            parent,
-            false,
-        )
+        val view =
+            inflater.inflate(
+                R.layout.mozac_feature_addons_footer_section_item,
+                parent,
+                false,
+            )
         return FooterViewHolder(view)
     }
 
     private fun createHeaderSectionViewHolder(parent: ViewGroup): CustomViewHolder {
         val context = parent.context
         val inflater = LayoutInflater.from(context)
-        val view = inflater.inflate(
-            R.layout.mozac_feature_addons_header_section_item,
-            parent,
-            false,
-        )
+        val view =
+            inflater.inflate(
+                R.layout.mozac_feature_addons_header_section_item,
+                parent,
+                false,
+            )
         val restartButton = view.findViewById<TextView>(R.id.restart_button)
 
         return HeaderViewHolder(view, restartButton)
@@ -135,11 +138,12 @@ class AddonsManagerAdapter(
     private fun createUnsupportedSectionViewHolder(parent: ViewGroup): CustomViewHolder {
         val context = parent.context
         val inflater = LayoutInflater.from(context)
-        val view = inflater.inflate(
-            R.layout.mozac_feature_addons_section_unsupported_section_item,
-            parent,
-            false,
-        )
+        val view =
+            inflater.inflate(
+                R.layout.mozac_feature_addons_section_unsupported_section_item,
+                parent,
+                false,
+            )
         val titleView = view.findViewById<TextView>(R.id.title)
         val descriptionView = view.findViewById<TextView>(R.id.description)
 
@@ -161,6 +165,7 @@ class AddonsManagerAdapter(
         val allowedInPrivateBrowsingLabel = view.findViewById<ImageView>(R.id.allowed_in_private_browsing_label)
         val messageBarWarningView = view.findViewById<View>(R.id.add_on_messagebar_warning)
         val messageBarErrorView = view.findViewById<View>(R.id.add_on_messagebar_error)
+        val messageBarUpdateView = view.findViewById<ComposeView>(R.id.add_on_messagebar_update)
 
         return AddonViewHolder(
             view,
@@ -175,6 +180,7 @@ class AddonsManagerAdapter(
             allowedInPrivateBrowsingLabel,
             messageBarWarningView,
             messageBarErrorView,
+            messageBarUpdateView,
         )
     }
 
@@ -194,38 +200,42 @@ class AddonsManagerAdapter(
         val item = getItem(position)
 
         // Configure an accessibility delegate for each item.
-        holder.itemView.accessibilityDelegate = object : View.AccessibilityDelegate() {
-            override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
-                super.onInitializeAccessibilityNodeInfo(host, info)
+        holder.itemView.accessibilityDelegate =
+            object : View.AccessibilityDelegate() {
+                override fun onInitializeAccessibilityNodeInfo(host: View, info: AccessibilityNodeInfo) {
+                    super.onInitializeAccessibilityNodeInfo(host, info)
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    info.collectionItemInfo = AccessibilityNodeInfo.CollectionItemInfo(
-                        holder.bindingAdapterPosition,
-                        1,
-                        1,
-                        1,
-                        holder is SectionViewHolder,
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    info.collectionItemInfo = AccessibilityNodeInfo.CollectionItemInfo.obtain(
-                        holder.bindingAdapterPosition,
-                        1,
-                        1,
-                        1,
-                        holder is SectionViewHolder,
-                    )
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        info.collectionItemInfo =
+                            AccessibilityNodeInfo.CollectionItemInfo(
+                                holder.bindingAdapterPosition,
+                                1,
+                                1,
+                                1,
+                                holder is SectionViewHolder,
+                            )
+                    } else {
+                        @Suppress("DEPRECATION")
+                        info.collectionItemInfo =
+                            AccessibilityNodeInfo.CollectionItemInfo.obtain(
+                                holder.bindingAdapterPosition,
+                                1,
+                                1,
+                                1,
+                                holder is SectionViewHolder,
+                            )
+                    }
                 }
             }
-        }
 
         when (holder) {
             is SectionViewHolder -> bindSection(holder, item as Section, position)
             is AddonViewHolder -> bindAddon(holder, item as Addon)
-            is UnsupportedSectionViewHolder -> bindNotYetSupportedSection(
-                holder,
-                item as NotYetSupportedSection,
-            )
+            is UnsupportedSectionViewHolder ->
+                bindNotYetSupportedSection(
+                    holder,
+                    item as NotYetSupportedSection,
+                )
             is FooterViewHolder -> bindFooterButton(holder)
             is HeaderViewHolder -> bindHeaderButton(holder)
         }
@@ -322,10 +332,11 @@ class AddonsManagerAdapter(
         }
 
         holder.addButton.isInvisible = addon.isInstalled()
-        holder.addButton.contentDescription = context.getString(
-            R.string.mozac_feature_addons_install_addon_content_description_2,
-            addonName,
-        )
+        holder.addButton.contentDescription =
+            context.getString(
+                R.string.mozac_feature_addons_install_addon_content_description_2,
+                addonName,
+            )
         holder.addButton.setOnClickListener {
             if (!addon.isInstalled()) {
                 addonsManagerDelegate.onInstallAddonButtonClicked(addon)
@@ -340,15 +351,26 @@ class AddonsManagerAdapter(
         style?.maybeSetAddonNameTextColor(holder.titleView)
         style?.maybeSetAddonSummaryTextColor(holder.summaryView)
 
+        val pendingUpdateMessage =
+            if (store.state.pendingExtensionUpdatesNeedingAttention.containsKey(addon.id)) {
+                context.getString(R.string.mozac_feature_addons_update_requires_new_settings, addonName)
+            } else {
+                null
+            }
+
         bindMessageBars(
             context,
             holder.messageBarWarningView,
             holder.messageBarErrorView,
+            holder.messageBarUpdateView,
             onLearnMoreLinkClicked = { link -> addonsManagerDelegate.onLearnMoreLinkClicked(link, addon) },
             addon,
             addonName,
             appName,
             appVersion,
+            pendingUpdateMessage = pendingUpdateMessage,
+            onReviewUpdateClicked = { addonsManagerDelegate.onReviewExtensionUpdateClicked(addon) },
+            onCancelUpdateClicked = { addonsManagerDelegate.onCancelExtensionUpdateClicked(addon) },
         )
     }
 
@@ -415,19 +437,13 @@ class AddonsManagerAdapter(
     )
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    internal data class NotYetSupportedSection(
-        @param:StringRes val title: Int,
-    )
+    internal data class NotYetSupportedSection(@param:StringRes val title: Int)
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    internal object FooterSection
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE) internal object FooterSection
 
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    internal object HeaderSection
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE) internal object HeaderSection
 
-    /**
-     * Allows to customize how items should look like.
-     */
+    /** Allows to customize how items should look like. */
     data class Style(
         @param:ColorRes val sectionsTextColor: Int? = null,
         @param:ColorRes val addonNameTextColor: Int? = null,
@@ -483,6 +499,7 @@ class AddonsManagerAdapter(
 
     /**
      * Update the portion of the list that contains the provided [addon].
+     *
      * @property addon The add-on to be updated.
      */
     fun updateAddon(addon: Addon) {
@@ -491,10 +508,11 @@ class AddonsManagerAdapter(
     }
 
     /**
-     * Updates only the portion of the list that changes between the current list and the new provided [addons].
-     * Be aware that updating a subset of the visible list is not supported, [addons] will replace
-     * the current list, but only the add-ons that have been changed will be updated in the UI.
-     * If you provide a subset it will replace the current list.
+     * Updates only the portion of the list that changes between the current list and the new provided [addons]. Be
+     * aware that updating a subset of the visible list is not supported, [addons] will replace the current list, but
+     * only the add-ons that have been changed will be updated in the UI. If you provide a subset it will replace the
+     * current list.
+     *
      * @property addons A list of add-on to replace the actual list.
      */
     fun updateAddons(addons: List<Addon>) {
@@ -510,34 +528,53 @@ class AddonsManagerAdapter(
          * @param context UI context
          * @param messageBarWarningView The view of the "warning" message bar.
          * @param messageBarErrorView The view of the "error" messagebar.
+         * @param messageBarUpdateView The view of the "update" message bar.
          * @param onLearnMoreLinkClicked A callback function that reacts to a click on a learn more link. The link is
-         * passed to this function. In most cases, we'll want to open the link in a tab.
+         *   passed to this function. In most cases, we'll want to open the link in a tab.
          * @param addon The [Addon] to bind.
          * @param addonName The add-on name.
          * @param appName The application name.
          * @param appVersion The application version.
+         * @param pendingUpdateMessage The message of the "update" message bar, or null to hide it.
+         * @param onReviewUpdateClicked Invoked when "Review changes" is clicked on the "update" message bar.
+         * @param onCancelUpdateClicked Invoked when the close button of the "update" message bar is clicked.
          */
         @Suppress("LongParameterList")
         fun bindMessageBars(
             context: Context,
             messageBarWarningView: View,
             messageBarErrorView: View,
+            messageBarUpdateView: ComposeView,
             onLearnMoreLinkClicked: (AddonsManagerAdapterDelegate.LearnMoreLinks) -> Unit,
             addon: Addon,
             addonName: String,
             appName: String,
             appVersion: String,
+            pendingUpdateMessage: String? = null,
+            onReviewUpdateClicked: () -> Unit = {},
+            onCancelUpdateClicked: () -> Unit = {},
         ) {
             // Make the message-bars invisible by default.
             messageBarWarningView.isVisible = false
             messageBarErrorView.isVisible = false
+            messageBarUpdateView.isVisible = false
 
-            val messageBarErrorTextView = messageBarErrorView.findViewById<TextView>(
-                R.id.add_on_messagebar_error_text,
-            )
-            val messageBarErrorLearnMoreLink = messageBarErrorView.findViewById<TextView>(
-                R.id.add_on_messagebar_error_learn_more_link,
-            )
+            if (pendingUpdateMessage != null) {
+                messageBarUpdateView.setContent {
+                    AcornTheme {
+                        PendingExtensionUpdateBanner(
+                            message = pendingUpdateMessage,
+                            onReviewClick = onReviewUpdateClicked,
+                            onCancelClick = onCancelUpdateClicked,
+                        )
+                    }
+                }
+                messageBarUpdateView.isVisible = true
+            }
+
+            val messageBarErrorTextView = messageBarErrorView.findViewById<TextView>(R.id.add_on_messagebar_error_text)
+            val messageBarErrorLearnMoreLink =
+                messageBarErrorView.findViewById<TextView>(R.id.add_on_messagebar_error_learn_more_link)
             // Ensure the link is visible when this view holder gets recycled.
             messageBarErrorLearnMoreLink.isVisible = true
             // This learn more link should be underlined.
@@ -560,12 +597,13 @@ class AddonsManagerAdapter(
                 }
                 messageBarErrorView.isVisible = true
             } else if (addon.isDisabledAsIncompatible()) {
-                messageBarErrorTextView.text = context.getString(
-                    R.string.mozac_feature_addons_status_incompatible,
-                    addonName,
-                    appName,
-                    appVersion,
-                )
+                messageBarErrorTextView.text =
+                    context.getString(
+                        R.string.mozac_feature_addons_status_incompatible,
+                        addonName,
+                        appName,
+                        appVersion,
+                    )
                 // There is no link when the add-on is disabled because it isn't compatible with the application
                 // version.
                 messageBarErrorLearnMoreLink.isVisible = false
@@ -579,13 +617,14 @@ class AddonsManagerAdapter(
                             R.string.mozac_feature_addons_status_softblocked_re_enabled_2
                         } else {
                             R.string.mozac_feature_addons_status_softblocked_2
-                        },
+                        }
                     )
                 // This learn more link should be underlined.
-                messageBarWarningView.findViewById<TextView>(
-                    R.id.add_on_messagebar_warning_learn_more_link,
-                ).paintFlags = Paint.UNDERLINE_TEXT_FLAG
-                messageBarWarningView.findViewById<TextView>(R.id.add_on_messagebar_warning_learn_more_link)
+                messageBarWarningView
+                    .findViewById<TextView>(R.id.add_on_messagebar_warning_learn_more_link)
+                    .paintFlags = Paint.UNDERLINE_TEXT_FLAG
+                messageBarWarningView
+                    .findViewById<TextView>(R.id.add_on_messagebar_warning_learn_more_link)
                     .setOnClickListener {
                         onLearnMoreLinkClicked(AddonsManagerAdapterDelegate.LearnMoreLinks.BLOCKLISTED_ADDON)
                     }
@@ -612,6 +651,9 @@ class AddonsManagerAdapter(
 }
 
 private fun Addon.inUnsupportedSection() = isInstalled() && !isSupported()
+
 private fun Addon.inRecommendedSection() = !isInstalled()
+
 private fun Addon.inInstalledSection() = isInstalled() && isSupported() && isEnabled()
+
 private fun Addon.inDisabledSection() = isInstalled() && isSupported() && !isEnabled()

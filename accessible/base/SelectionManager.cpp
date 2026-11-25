@@ -116,6 +116,15 @@ void SelectionManager::ProcessTextSelChangeEvent(AccEvent* aEvent) {
       caretCntr,
       "No text container for focus while there's one for common ancestor?!");
   if (!caretCntr) return;
+  if (caretCntr->IsDefunct()) {
+    // XXX Bug 2085373: GetTextContainer really shouldn't return a defunct
+    // Accessible, but we see this occasionally in the wild. If it happens, the
+    // caret isn't useful, so just ignore it. We assert here so we know about
+    // this if it shows up in a debug build; e.g. a fuzzer might hopefully pick
+    // it up one day.
+    MOZ_ASSERT_UNREACHABLE("Text container for caret is defunct");
+    return;
+  }
 
   Selection* selection = caretCntr->DOMSelection();
 
@@ -193,7 +202,7 @@ void SelectionManager::ProcessSelectionChanged(SelData* aSelData) {
   Selection* selection = aSelData->mSel;
   if (!selection->GetPresShell()) return;
 
-  const nsRange* range = selection->GetAnchorFocusRange();
+  const mozilla::dom::Range* range = selection->GetAnchorFocusRange();
   nsINode* cntrNode = nullptr;
   if (range) {
     cntrNode = range->GetClosestCommonInclusiveAncestor();

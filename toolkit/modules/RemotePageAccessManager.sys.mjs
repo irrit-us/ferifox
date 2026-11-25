@@ -56,6 +56,7 @@ export let RemotePageAccessManager = {
         // CTA itself only ever renders on about:neterror. A denied read throws,
         // which would leave every cert error page blank.
         "browser.netError.searchCTA.enabled",
+        "browser.netError.illustration.enabled",
       ],
       RPMGetIntPref: [
         "security.dialog_enable_delay",
@@ -85,9 +86,12 @@ export let RemotePageAccessManager = {
       RPMSendQuery: ["getCertificates"],
     },
     "about:pdf": {
+      RPMAddMessageListener: ["PDF:HideFeaturesNotification"],
       RPMCanSetDefaultPDFHandler: ["*"],
       RPMGetBoolPref: ["browser.aboutpdf.promo.dismissed"],
       RPMPickPDFFile: ["*"],
+      RPMSendAsyncMessage: ["AboutPDF:DismissNotification"],
+      RPMSendQuery: ["AboutPDF:GoBack", "AboutPDF:NotificationEligible"],
       RPMSetDefaultPDFHandler: ["*"],
       RPMSetPref: ["browser.aboutpdf.promo.dismissed"],
     },
@@ -116,6 +120,8 @@ export let RemotePageAccessManager = {
         "Browser:ResetEnterpriseRootsPref",
         "DisplayOfflineSupportPage",
         "OpenTRRPreferences",
+        "SearchCTA:Search",
+        "SearchCTA:SearchAborted",
       ],
       RPMCheckAlternateHostAvailable: ["*"],
       RPMRecordGleanEvent: [
@@ -139,6 +145,7 @@ export let RemotePageAccessManager = {
         "browser.ipProtection.userEnabled",
         "network.sslkeylog_warning",
         "browser.netError.searchCTA.enabled",
+        "browser.netError.illustration.enabled",
       ],
       RPMGetHostForDisplay: ["*"],
       RPMGetInnermostAsciiHost: ["*"],
@@ -152,7 +159,7 @@ export let RemotePageAccessManager = {
       RPMSetTRRDisabledLoadFlags: ["*"],
       RPMShowOSXLocalNetworkPermissionWarning: ["*"],
       RPMIsSSLKeyLoggingEnabled: ["*"],
-      RPMSendQuery: ["Browser:AddTRRExcludedDomain"],
+      RPMSendQuery: ["Browser:AddTRRExcludedDomain", "SearchCTA:GetInfo"],
       RPMGetIntPref: ["network.trr.mode", "security.dialog_enable_delay"],
     },
     "about:newtab": {
@@ -166,6 +173,7 @@ export let RemotePageAccessManager = {
         "SearchBannerDismissed",
         "OpenSearchPreferences",
         "SearchHandoff",
+        "TRIGGER_MESSAGING_EVENT",
       ],
       RPMSendQuery: [
         "IsPromoBlocked",
@@ -177,7 +185,12 @@ export let RemotePageAccessManager = {
       RPMRemoveMessageListener: ["*"],
       RPMGetFormatURLPref: ["app.support.baseURL"],
       RPMIsWindowPrivate: ["*"],
-      RPMGetBoolPref: ["browser.nova.enabled"],
+      RPMGetBoolPref: [
+        "browser.nova.enabled",
+        "browser.privateWindowRedesign.enabled",
+        "browser.privatebrowsing.introAnimationShown",
+      ],
+      RPMSetPref: ["browser.privatebrowsing.introAnimationShown"],
     },
     "about:deleteprofile": {
       RPMSendQuery: ["Profiles:GetDeleteProfileContent"],
@@ -196,6 +209,7 @@ export let RemotePageAccessManager = {
         "Profiles:CloseProfileTab",
         "Profiles:MoreThemes",
         "Profiles:PageHide",
+        "Profiles:RecordThemeTelemetry",
       ],
     },
     "about:newprofile": {
@@ -203,6 +217,7 @@ export let RemotePageAccessManager = {
         "Profiles:GetNewProfileContent",
         "Profiles:UpdateProfileTheme",
         "Profiles:UpdateProfileAvatar",
+        "Profiles:GetEditProfileContent",
       ],
       RPMSendAsyncMessage: [
         "Profiles:UpdateProfileName",
@@ -210,6 +225,7 @@ export let RemotePageAccessManager = {
         "Profiles:CloseProfileTab",
         "Profiles:MoreThemes",
         "Profiles:PageHide",
+        "Profiles:RecordThemeTelemetry",
       ],
       RPMGetBoolPref: ["browser.profiles.profile-name.updated"],
       RPMGetFormatURLPref: ["app.support.baseURL"],

@@ -17,9 +17,8 @@ import mozilla.components.support.base.observer.ObserverRegistry
  *
  * @param pinnedSitesStorage An instance of [PinnedSiteStorage], used for storing pinned sites.
  */
-class DefaultTopSitesStorage(
-    private val pinnedSitesStorage: PinnedSiteStorage,
-) : TopSitesStorage, Observable<TopSitesStorage.Observer> by ObserverRegistry() {
+class DefaultTopSitesStorage(private val pinnedSitesStorage: PinnedSiteStorage) :
+    TopSitesStorage, Observable<TopSitesStorage.Observer> by ObserverRegistry() {
 
     override suspend fun addTopSite(title: String, url: String, isDefault: Boolean) {
         pinnedSitesStorage.addPinnedSite(title, url, isDefault)
@@ -39,10 +38,10 @@ class DefaultTopSitesStorage(
     }
 
     override suspend fun getTopSites(
-        totalSites: Int,
+        targetSitesCount: Int,
         frecencyConfig: TopSitesFrecencyConfig?,
         providerConfig: TopSitesProviderConfig?,
-    ): List<TopSite> = pinnedSitesStorage.getPinnedSites().take(totalSites)
+    ): List<TopSite> = pinnedSitesStorage.getPinnedSites().take(targetSitesCount)
 
     companion object {
         const val TOP_SITES_MAX_LIMIT = 4

@@ -16,6 +16,7 @@
 #include "CacheStorageService.h"
 #include "mozilla/DebugOnly.h"
 #include "mozilla/FileUtils.h"
+#include "mozilla/IOUtils.h"
 #include "mozilla/IntegerPrintfMacros.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Services.h"
@@ -224,6 +225,10 @@ CacheFileHandle::~CacheFileHandle() {
 }
 
 void CacheFileHandle::Log() {
+  if (!LOG_ENABLED()) {
+    return;
+  }
+
   nsAutoCString leafName;
   if (mFile) {
     mFile->GetNativeLeafName(leafName);
@@ -1291,10 +1296,14 @@ void CacheFileIOManager::ShutdownInternal() {
     // shutdown perfomrance.
     // Doomed files are already in the doomed directory from which
     // we never reuse files and delete the dir on next session startup.
-    // Invalid files don't have metadata and thus won't load anyway
-    // (hashes won't match).
+    // Invalid files end with an invalid trailer instead of metadata and thus
+    // won't load anyway (see WriteInvalidTrailer).
 
-    if (!h->IsSpecialFile() && !h->mIsDoomed && !h->mFileExists) {
+    // Past the shutdown I/O lag the index is no longer written to disk, so
+    // this bookkeeping would be thrown away. The next startup rescans the
+    // entries directory and drops the stale entries anyway.
+    if (!h->IsSpecialFile() && !h->mIsDoomed && !h->mFileExists &&
+        !CacheObserver::IsPastShutdownIOLag()) {
       CacheIndex::RemoveEntry(h->Hash(), h->Key());
     }
 
@@ -1505,8 +1514,14 @@ nsresult CacheFileIOManager::OnIdleDaily() {
               }
               if (leafName.Find(kPurgeExtension) != kNotFound) {
                 mozilla::glean::networking::residual_cache_folder_count.Add(1);
-                rv = subdir->Remove(true);
-                if (NS_SUCCEEDED(rv)) {
+                // A read-only entry anywhere in the folder makes both
+                // DeleteFileW and RemoveDirectoryW fail with ACCESS_DENIED, so
+                // clear the attribute and retry rather than leaving the folder
+                // behind forever (bug 1882163).
+                if (IOUtils::RemoveSync(subdir, /* aIgnoreAbsent */ true,
+                                        /* aRecursive */ true,
+                                        /* aRetryReadonly */ true)
+                        .isOk()) {
                   mozilla::glean::networking::residual_cache_folder_removal
                       .Get("success"_ns)
                       .Add(1);
@@ -2217,6 +2232,25 @@ static nsresult TruncFile(PRFileDesc* aFD, int64_t aEOF) {
   return NS_OK;
 }
 
+// An entry file whose last write was data rather than metadata (it was still
+// being written at a crash or shutdown) would otherwise end with that data,
+// which is usually web content.  The metadata hash isn't keyed, so content
+// ending in a well-formed metadata block would be loaded as the entry's
+// metadata.  Data writes therefore keep this trailer at the end of the file
+// until the metadata is written; its offset word points past any file.
+static nsresult WriteInvalidTrailer(PRFileDesc* aFD, int64_t aOffset) {
+  static const uint32_t kInvalidTrailer[2] = {UINT32_MAX, UINT32_MAX};
+
+  if (PR_Seek64(aFD, aOffset, PR_SEEK_SET) == -1) {
+    return NS_ERROR_FAILURE;
+  }
+  if (PR_Write(aFD, kInvalidTrailer, sizeof(kInvalidTrailer)) !=
+      int32_t(sizeof(kInvalidTrailer))) {
+    return NS_ERROR_FAILURE;
+  }
+  return NS_OK;
+}
+
 nsresult CacheFileIOManager::WriteInternal(CacheFileHandle* aHandle,
                                            int64_t aOffset, const char* aBuf,
                                            int32_t aCount, bool aValidate,
@@ -2286,7 +2320,8 @@ nsresult CacheFileIOManager::WriteInternal(CacheFileHandle* aHandle,
     } else {
       freeSpace >>= 10;  // bytes to kilobytes
       uint32_t limit = CacheObserver::DiskFreeSpaceHardLimit();
-      if (freeSpace - aOffset - aCount + aHandle->mFileSize < limit) {
+      // Convert to KiB for comparison
+      if (freeSpace - ((aOffset + aCount - aHandle->mFileSize) >> 10) < limit) {
         LOG(
             ("CacheFileIOManager::WriteInternal() - Low free space, refusing "
              "to write! [freeSpace=%" PRId64 "kB, limit=%ukB]",
@@ -2298,6 +2333,17 @@ nsresult CacheFileIOManager::WriteInternal(CacheFileHandle* aHandle,
 
   // Write invalidates the entry by default
   aHandle->mInvalid = true;
+
+  // The trailer goes in first, so the file never ends with the new data.
+  if (!aValidate && !aHandle->IsSpecialFile()) {
+    MOZ_ASSERT(!aTruncate);
+    int64_t end = std::max<int64_t>(aHandle->mFileSize, aOffset + aCount);
+    if (aHandle->mInvalidTrailerOffset < end) {
+      rv = WriteInvalidTrailer(aHandle->mFD, end);
+      NS_ENSURE_SUCCESS(rv, rv);
+      aHandle->mInvalidTrailerOffset = end;
+    }
+  }
 
   int64_t offset = PR_Seek64(aHandle->mFD, aOffset, PR_SEEK_SET);
   if (offset == -1) {
@@ -2315,6 +2361,7 @@ nsresult CacheFileIOManager::WriteInternal(CacheFileHandle* aHandle,
       NS_ENSURE_SUCCESS(rv, rv);
 
       aHandle->mFileSize = writeEnd;
+      aHandle->mInvalidTrailerOffset = -1;
     } else {
       if (aHandle->mFileSize < writeEnd) {
         aHandle->mFileSize = writeEnd;
@@ -2361,10 +2408,10 @@ nsresult CacheFileIOManager::DoomFile(CacheFileHandle* aHandle,
     return NS_ERROR_NOT_INITIALIZED;
   }
 
+  // The doom must run before any open of the same file requested after this
+  // point, whatever that open's priority is.
   RefPtr<DoomFileEvent> ev = new DoomFileEvent(aHandle, aCallback);
-  rv = ioMan->mIOThread->Dispatch(ev, aHandle->IsPriority()
-                                          ? CacheIOThread::OPEN_PRIORITY
-                                          : CacheIOThread::OPEN);
+  rv = ioMan->mIOThread->Dispatch(ev, CacheIOThread::OPEN_PRIORITY);
   NS_ENSURE_SUCCESS(rv, rv);
 
   return NS_OK;
@@ -2861,7 +2908,8 @@ nsresult CacheFileIOManager::TruncateSeekSetEOFInternal(
     } else {
       freeSpace >>= 10;  // bytes to kilobytes
       uint32_t limit = CacheObserver::DiskFreeSpaceHardLimit();
-      if (freeSpace - aEOFPos + aHandle->mFileSize < limit) {
+      // Convert to KiB for comparison
+      if (freeSpace - ((aEOFPos - aHandle->mFileSize) >> 10) < limit) {
         LOG(
             ("CacheFileIOManager::TruncateSeekSetEOFInternal() - Low free space"
              ", refusing to write! [freeSpace=%" PRId64 "kB, limit=%ukB]",
@@ -2876,11 +2924,12 @@ nsresult CacheFileIOManager::TruncateSeekSetEOFInternal(
 
   rv = TruncFile(aHandle->mFD, aTruncatePos);
   NS_ENSURE_SUCCESS(rv, rv);
+  aHandle->mInvalidTrailerOffset = -1;
 
-  if (aTruncatePos != aEOFPos) {
-    rv = TruncFile(aHandle->mFD, aEOFPos);
-    NS_ENSURE_SUCCESS(rv, rv);
-  }
+  // Writing the trailer at aEOFPos also extends the file to it.
+  rv = WriteInvalidTrailer(aHandle->mFD, aEOFPos);
+  NS_ENSURE_SUCCESS(rv, rv);
+  aHandle->mInvalidTrailerOffset = aEOFPos;
 
   uint32_t oldSizeInK = aHandle->FileSizeInK();
   aHandle->mFileSize = aEOFPos;
@@ -3968,6 +4017,7 @@ nsresult CacheFileIOManager::CreateFile(CacheFileHandle* aHandle) {
   NS_ENSURE_SUCCESS(rv, rv);
 
   aHandle->mFileSize = 0;
+  aHandle->mInvalidTrailerOffset = -1;
   return NS_OK;
 }
 

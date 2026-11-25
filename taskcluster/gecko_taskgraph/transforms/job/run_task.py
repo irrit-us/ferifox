@@ -19,7 +19,7 @@ from taskgraph.util.schema import (
 )
 from taskgraph.util.yaml import load_yaml
 
-from gecko_taskgraph.transforms.job import run_job_using
+from gecko_taskgraph.transforms.job import get_platform, run_job_using
 from gecko_taskgraph.transforms.job.common import (
     add_tooltool,
     clone_type,
@@ -88,6 +88,16 @@ def common_setup(config, job, taskdesc, command):
         if clone_type(config, job) == "git" and run.get("shallow-clone", True):
             command.append("--gecko-shallow-clone")
 
+        # For Mercurial checkouts, point run-task at the decision task's source
+        # bundle artifact so robustcheckout can obtain the head revision without
+        # an expensive pull from hg.mozilla.org. clone_type() resolves to "hg"
+        # exactly when run-task-hg / robustcheckout will run (e.g. on try, where
+        # there is no git push info). A missing or unusable bundle is non-fatal.
+        if clone_type(config, job) == "hg":
+            taskdesc["worker"].setdefault("env", {})["GECKO_HEAD_BUNDLE"] = {
+                "artifact-reference": "<decision/public/checkout.bundle>"
+            }
+
         if run_cwd:
             run_cwd = path.normpath(run_cwd.format(checkout=gecko_path))
 
@@ -125,6 +135,43 @@ worker_defaults = {
 
 load_yaml = functools.cache(load_yaml)
 
+RESOURCE_USAGE_ARTIFACT = "public/profile_run-task-resource-usage.json"
+
+# Fetch tasks providing abi3 wheels, which work with any python 3 version
+# run-task may run with, keyed by the platform of that python, as determined
+# in run-task. They are mounted rather than fetched with fetch-content because
+# resource usage is monitored from before fetch-content runs.
+PSUTIL_FETCHES = {
+    platform: f"psutil-{platform}"
+    for platform in (
+        "linux-x86_64",
+        "linux-aarch64",
+        "macosx-x86_64",
+        "macosx-arm64",
+        "win-amd64",
+        "win-arm64",
+    )
+}
+
+# The wheels to provide on each worker platform. The system python on arm64
+# workers may run natively, or as x86_64 under emulation.
+PSUTIL_PLATFORMS = {
+    "linux64": ["linux-x86_64"],
+    "linux64-aarch64": ["linux-aarch64"],
+    "macosx64": ["macosx-x86_64"],
+    "macosx64-aarch64": ["macosx-arm64", "macosx-x86_64"],
+    "win64": ["win-amd64"],
+    "win64-aarch64": ["win-arm64", "win-amd64"],
+}
+
+
+def psutil_platforms(job):
+    platform = get_platform(job)
+    worker_type = job["worker-type"]
+    if platform == "win64" and ("aarch64" in worker_type or "-a64" in worker_type):
+        platform = "win64-aarch64"
+    return PSUTIL_PLATFORMS[platform]
+
 
 def script_url(config, script):
     if "MOZ_AUTOMATION" in os.environ and "TASK_ID" not in os.environ:
@@ -144,6 +191,10 @@ def docker_worker_run_task(config, job, taskdesc):
     command = [f"/builds/worker/bin/{run_task_bin}"]
     common_setup(config, job, taskdesc, command)
 
+    worker.setdefault("env", {}).setdefault(
+        "RUN_TASK_PRE_COMMAND_HOOK", "/builds/worker/bin/run-task-setup.py"
+    )
+
     if run["tooltool-downloads"]:
         internal = run["tooltool-downloads"] == "internal"
         add_tooltool(config, job, taskdesc, internal=internal)
@@ -162,6 +213,19 @@ def docker_worker_run_task(config, job, taskdesc):
     command.append("--")
     command.extend(run_command)
     worker["command"] = command
+
+    if run_task_bin == "run-task-git":
+        worker["env"]["RUN_TASK_STARTUP_HOOK"] = (
+            "/builds/worker/bin/run_task_resource_monitor.py"
+        )
+    profile_path = "/builds/worker/run-task-resource-usage.json"
+    worker["env"]["RUN_TASK_RESOURCE_USAGE"] = profile_path
+    worker["env"]["RUN_TASK_RESOURCE_USAGE_NAME"] = taskdesc["label"]
+    worker.setdefault("artifacts", []).append({
+        "name": RESOURCE_USAGE_ARTIFACT,
+        "path": profile_path,
+        "type": "file",
+    })
 
 
 @run_job_using(
@@ -197,6 +261,40 @@ def generic_worker_run_task(config, job, taskdesc):
         "file": "./run-task",
     })
 
+    worker["mounts"].append({
+        "content": {
+            "url": script_url(config, "run_task_resource_monitor.py"),
+        },
+        "file": "./run_task_resource_monitor.py",
+    })
+    if run_task_bin == "run-task-git":
+        worker["env"]["RUN_TASK_STARTUP_HOOK"] = "run_task_resource_monitor.py"
+    worker["mounts"].append({
+        "content": {
+            "url": script_url(config, "resourcemonitor.py"),
+        },
+        "file": "./mozsystemmonitor/resourcemonitor.py",
+    })
+    for psutil_platform in psutil_platforms(job):
+        fetch_label = f"fetch-{PSUTIL_FETCHES[psutil_platform]}"
+        taskdesc.setdefault("dependencies", {})[fetch_label] = fetch_label
+        worker["mounts"].append({
+            "content": {
+                "artifact": f"public/psutil-{psutil_platform}.whl",
+                "task-id": {"task-reference": f"<{fetch_label}>"},
+            },
+            "directory": f"./resource-monitor-deps/{psutil_platform}",
+            "format": "zip",
+        })
+    profile_path = "run-task-resource-usage.json"
+    worker["env"]["RUN_TASK_RESOURCE_USAGE"] = profile_path
+    worker["env"]["RUN_TASK_RESOURCE_USAGE_NAME"] = taskdesc["label"]
+    worker.setdefault("artifacts", []).append({
+        "name": RESOURCE_USAGE_ARTIFACT,
+        "path": profile_path,
+        "type": "file",
+    })
+
     if (
         job.get("fetches")
         or job.get("use-uv")
@@ -215,6 +313,16 @@ def generic_worker_run_task(config, job, taskdesc):
             },
             "file": "./robustcheckout.py",
         })
+
+    worker["mounts"].append({
+        "content": {
+            "url": script_url(config, "run-task-setup.py"),
+        },
+        "file": "./run-task-setup.py",
+    })
+    worker.setdefault("env", {}).setdefault(
+        "RUN_TASK_PRE_COMMAND_HOOK", "./run-task-setup.py"
+    )
 
     run_command = run["command"]
 

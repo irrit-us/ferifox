@@ -85,7 +85,7 @@ class WorkerNavigator final : public nsWrapperCache {
   void GetLanguage(nsString& aLanguage) const;
   void GetLanguages(nsTArray<nsString>& aLanguages) const;
 
-  void GetUserAgent(nsString& aUserAgent, CallerType aCallerType,
+  void GetUserAgent(nsCString& aUserAgent, CallerType aCallerType,
                     ErrorResult& aRv) const;
 
   bool OnLine() const;

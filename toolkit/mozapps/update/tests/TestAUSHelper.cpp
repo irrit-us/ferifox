@@ -122,7 +122,8 @@ int NS_main(int argc, NS_tchar** argv) {
   if (argc >= 2) {
     if (!NS_tstrcmp(argv[1], NS_T("post-update-async")) ||
         !NS_tstrcmp(argv[1], NS_T("post-update-sync")) ||
-        !NS_tstrcmp(argv[1], NS_T("post-update-environment"))) {
+        !NS_tstrcmp(argv[1], NS_T("post-update-environment")) ||
+        !NS_tstrcmp(argv[1], NS_T("post-update-args"))) {
       NS_tchar exePath[MAXPATHLEN];
 #ifdef XP_WIN
       if (!::GetModuleFileNameW(0, exePath, MAXPATHLEN)) {
@@ -170,8 +171,6 @@ int NS_main(int argc, NS_tchar** argv) {
         return 1;
       }
 
-      WriteMsg(logFilePath, "post-update");
-
       if (!NS_tstrcmp(argv[1], NS_T("post-update-environment"))) {
         // Right now only one argument is supported for post update invocations,
         // so we hardcode the environment variable under test rather than
@@ -192,6 +191,21 @@ int NS_main(int argc, NS_tchar** argv) {
         WriteMsg(logFilePath,
                  "post-update-environment not supported on this platform");
 #endif  // defined(XP_WIN) || defined(XP_MACOSX)
+      } else if (!NS_tstrcmp(argv[1], NS_T("post-update-args"))) {
+#if defined(XP_WIN) || defined(XP_MACOSX)
+        // In this case, we want to specifically append to the log file so the
+        // arguments aren't erased by the second post-update invocation.
+        FILE* dest = NS_tfopen(logFilePath, NS_T("ab"));
+        for (int i = 2; i < argc; ++i) {
+          fprintf(dest, "%d: " LOG_S "\n", i, argv[i]);
+        }
+        fclose(dest);
+#else
+        WriteMsg(logFilePath,
+                 "post-update-args not supported on this platform");
+#endif
+      } else {
+        WriteMsg(logFilePath, "post-update");
       }
 
       return 0;
@@ -207,13 +221,14 @@ int NS_main(int argc, NS_tchar** argv) {
         "Usage: WORKINGDIR INFILE OUTFILE -s SECONDS [FILETOLOCK]\n"
         "   or: WORKINGDIR LOGFILE [ARG2 ARG3...]\n"
         "   or: signature-check filepath\n"
-        "   or: setup-symlink dir1 dir2 file symlink\n"
-        "   or: remove-symlink dir1 dir2 file symlink\n"
+        "   or: setup-symlink basedir dir1 dir2 file symlink\n"
+        "   or: remove-symlink basedir dir1 dir2 file symlink\n"
         "   or: check-symlink symlink\n"
         "   or: check-umask existing-umask\n"
         "   or: post-update-sync\n"
         "   or: post-update-async\n"
         "   or: post-update-environment\n"
+        "   or: post-update-args\n"
         "   or: create-update-dir\n"
         "   or: wait-for-pid-exit pid timeout\n"
         "\n"
@@ -260,22 +275,22 @@ int NS_main(int argc, NS_tchar** argv) {
 #ifdef XP_UNIX
     NS_tchar path[MAXPATHLEN];
     if (!NS_tvsnprintf(path, sizeof(path) / sizeof(path[0]), NS_T("%s/%s"),
-                       NS_T("/tmp"), argv[2])) {
+                       argv[2], argv[3])) {
       return 1;
     }
     if (mkdir(path, 0755)) {
       return 1;
     }
     if (!NS_tvsnprintf(path, sizeof(path) / sizeof(path[0]), NS_T("%s/%s/%s"),
-                       NS_T("/tmp"), argv[2], argv[3])) {
+                       argv[2], argv[3], argv[4])) {
       return 1;
     }
     if (mkdir(path, 0755)) {
       return 1;
     }
     if (!NS_tvsnprintf(path, sizeof(path) / sizeof(path[0]),
-                       NS_T("%s/%s/%s/%s"), NS_T("/tmp"), argv[2], argv[3],
-                       argv[4])) {
+                       NS_T("%s/%s/%s/%s"), argv[2], argv[3], argv[4],
+                       argv[5])) {
       return 1;
     }
     FILE* file = NS_tfopen(path, NS_T("w"));
@@ -283,14 +298,14 @@ int NS_main(int argc, NS_tchar** argv) {
       fputs(NS_T("test"), file);
       fclose(file);
     }
-    if (symlink(path, argv[5]) != 0) {
+    if (symlink(path, argv[6]) != 0) {
       return 1;
     }
     if (!NS_tvsnprintf(path, sizeof(path) / sizeof(path[0]), NS_T("%s/%s"),
-                       NS_T("/tmp"), argv[2])) {
+                       argv[2], argv[3])) {
       return 1;
     }
-    if (argc > 6 && !NS_tstrcmp(argv[6], NS_T("change-perm"))) {
+    if (argc > 7 && !NS_tstrcmp(argv[7], NS_T("change-perm"))) {
       if (chmod(path, 0644)) {
         return 1;
       }
@@ -310,29 +325,29 @@ int NS_main(int argc, NS_tchar** argv) {
     // errors.
     NS_tchar path[MAXPATHLEN];
     if (!NS_tvsnprintf(path, sizeof(path) / sizeof(path[0]), NS_T("%s/%s"),
-                       NS_T("/tmp"), argv[2])) {
+                       argv[2], argv[3])) {
       return 1;
     }
     if (chmod(path, 0755) && errno != ENOENT) {
       return 1;
     }
     if (!NS_tvsnprintf(path, sizeof(path) / sizeof(path[0]),
-                       NS_T("%s/%s/%s/%s"), NS_T("/tmp"), argv[2], argv[3],
-                       argv[4])) {
+                       NS_T("%s/%s/%s/%s"), argv[2], argv[3], argv[4],
+                       argv[5])) {
       return 1;
     }
     if (unlink(path) && errno != ENOENT) {
       return 1;
     }
     if (!NS_tvsnprintf(path, sizeof(path) / sizeof(path[0]), NS_T("%s/%s/%s"),
-                       NS_T("/tmp"), argv[2], argv[3])) {
+                       argv[2], argv[3], argv[4])) {
       return 1;
     }
     if (rmdir(path) && errno != ENOENT) {
       return 1;
     }
     if (!NS_tvsnprintf(path, sizeof(path) / sizeof(path[0]), NS_T("%s/%s"),
-                       NS_T("/tmp"), argv[2])) {
+                       argv[2], argv[3])) {
       return 1;
     }
     if (rmdir(path) && errno != ENOENT) {

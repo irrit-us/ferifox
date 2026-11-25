@@ -1,6 +1,6 @@
 ![Firefox Browser](./docs/readme/readme-banner.svg)
 
-This source tree is based on `FIREFOX_155_0_RELEASE` at commit `21a0961191033207dc167b842f6c251f337b0e54`.
+This source tree is based on `FIREFOX_161_0_RELEASE` at commit `9c70d5d48c866afc2e581d6b7ff6de98a1371d99`.
 
 ### Build
 
@@ -88,6 +88,6 @@ DEVELOPER_OPTIONS=1 CARGO_BUILD_JOBS=1 \
   ./mach package
 ```
 
-The runnable Windows archive is written to `obj-x86_64-pc-windows-gnu/dist/ferifox-155.0.en-US.win64.zip`. The launcher is `obj-x86_64-pc-windows-gnu/dist/ferifox/ferifox.exe` and requires the DLLs and resources from that zip.
+The runnable Windows archive is written to `obj-x86_64-pc-windows-gnu/dist/ferifox-161.0.en-US.win64.zip`. The launcher is `obj-x86_64-pc-windows-gnu/dist/ferifox/ferifox.exe` and requires the DLLs and resources from that zip.
 
 [Firefox](https://firefox.com/) is a fast, reliable and private web browser from the non-profit [Mozilla organization](https://mozilla.org/).

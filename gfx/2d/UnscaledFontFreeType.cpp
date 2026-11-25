@@ -8,6 +8,7 @@
 #include "NativeFontResourceFreeType.h"
 #include "ScaledFontFreeType.h"
 #include "StackArray.h"
+#include "mozilla/webrender/webrender_ffi.h"
 
 #include FT_MULTIPLE_MASTERS_H
 #include FT_TRUETYPE_TABLES_H
@@ -18,6 +19,11 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#ifdef MOZ_WIDGET_ANDROID
+#  include <linux/magic.h>
+#  include <sys/vfs.h>
+#endif
 
 namespace mozilla::gfx {
 
@@ -83,7 +89,7 @@ RefPtr<SharedFTFace> UnscaledFontFreeType::InitFace() {
   if (mFile.empty()) {
     return nullptr;
   }
-  mFace = Factory::NewSharedFTFace(nullptr, mFile.c_str(), mIndex);
+  mFace = Factory::NewSharedFTFace(mFile.c_str(), mIndex);
   if (!mFace) {
     gfxWarning() << "Failed initializing FreeType face from filename";
     return nullptr;
@@ -92,8 +98,9 @@ RefPtr<SharedFTFace> UnscaledFontFreeType::InitFace() {
 }
 
 void UnscaledFontFreeType::GetVariationSettingsFromFace(
-    std::vector<FontVariation>* aVariations, FT_Face aFace) {
-  if (!aFace || !(aFace->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS)) {
+    std::vector<wr::FontVariation>* aVariations, SharedFTFace* aFace) {
+  FT_Face face = aFace ? aFace->GetFace() : nullptr;
+  if (!face || !(face->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS)) {
     return;
   }
 
@@ -121,25 +128,28 @@ void UnscaledFontFreeType::GetVariationSettingsFromFace(
   }
 #endif
 
+  // Even a read-only query must lock the face. FreeType can temporarily
+  // replace and free face->glyph while rendering color glyphs.
+  AutoLockSharedFTFace lock(aFace);
   FT_MM_Var* mmVar = nullptr;
-  if ((*getVar)(aFace, &mmVar) == FT_Err_Ok) {
+  if ((*getVar)(face, &mmVar) == FT_Err_Ok) {
     aVariations->reserve(mmVar->num_axis);
     StackArray<FT_Fixed, 32> coords(mmVar->num_axis);
-    if ((*getCoords)(aFace, mmVar->num_axis, coords.data()) == FT_Err_Ok) {
+    if ((*getCoords)(face, mmVar->num_axis, coords.data()) == FT_Err_Ok) {
       bool changed = false;
       for (uint32_t i = 0; i < mmVar->num_axis; i++) {
         if (coords[i] != mmVar->axis[i].def) {
           changed = true;
         }
-        aVariations->push_back(FontVariation{uint32_t(mmVar->axis[i].tag),
-                                             float(coords[i] / 65536.0)});
+        aVariations->push_back(wr::FontVariation{uint32_t(mmVar->axis[i].tag),
+                                                 float(coords[i] / 65536.0)});
       }
       if (!changed) {
         aVariations->clear();
       }
     }
     if (doneVar) {
-      (*doneVar)(aFace->glyph->library, mmVar);
+      (*doneVar)(face->glyph->library, mmVar);
     } else {
       free(mmVar);
     }
@@ -147,7 +157,8 @@ void UnscaledFontFreeType::GetVariationSettingsFromFace(
 }
 
 void UnscaledFontFreeType::ApplyVariationsToFace(
-    const FontVariation* aVariations, uint32_t aNumVariations, FT_Face aFace) {
+    const wr::FontVariation* aVariations, uint32_t aNumVariations,
+    FT_Face aFace) {
   if (!aFace || !(aFace->face_flags & FT_FACE_FLAG_MULTIPLE_MASTERS)) {
     return;
   }
@@ -171,7 +182,7 @@ void UnscaledFontFreeType::ApplyVariationsToFace(
 
   StackArray<FT_Fixed, 32> coords(aNumVariations);
   for (uint32_t i = 0; i < aNumVariations; i++) {
-    coords[i] = std::round(aVariations[i].mValue * 65536.0f);
+    coords[i] = std::round(aVariations[i].value * 65536.0f);
   }
   if ((*setCoords)(aFace, aNumVariations, coords.data()) != FT_Err_Ok) {
     // ignore the problem?
@@ -180,9 +191,53 @@ void UnscaledFontFreeType::ApplyVariationsToFace(
 
 #ifdef MOZ_WIDGET_ANDROID
 
+#  ifndef TMPFS_MAGIC
+#    define TMPFS_MAGIC 0x01021994
+#  endif
+
+#  ifndef PROC_SUPER_MAGIC
+#    define PROC_SUPER_MAGIC 0x9fa0
+#  endif
+
+#  ifndef SYSFS_MAGIC
+#    define SYSFS_MAGIC 0x62656572
+#  endif
+
+bool UnscaledFontFreeType::ValidateFontDescriptor(const uint8_t* aName,
+                                                  size_t aNameLength,
+                                                  std::string& aResultName,
+                                                  uint32_t& aIndex) {
+  if (aNameLength == 0) {
+    gfxWarning() << "FreeType font descriptor is truncated.";
+    return false;
+  }
+  std::string path((const char*)aName, aNameLength);
+
+  struct stat st{};
+  if (stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode) && st.st_nlink > 0) {
+    struct statfs sfs{};
+    if (statfs(path.c_str(), &sfs) == 0) {
+      switch ((unsigned long)sfs.f_type) {
+        case TMPFS_MAGIC:
+        case PROC_SUPER_MAGIC:
+        case SYSFS_MAGIC:
+          // Disallow
+          break;
+        default:
+          // Allow other types
+          aResultName = std::move(path);
+          return true;
+      }
+    }
+  }
+
+  gfxWarning() << "Failed identifying font descriptor.";
+  return false;
+}
+
 already_AddRefed<ScaledFont> UnscaledFontFreeType::CreateScaledFont(
     Float aGlyphSize, const uint8_t* aInstanceData,
-    uint32_t aInstanceDataLength, const FontVariation* aVariations,
+    uint32_t aInstanceDataLength, const wr::FontVariation* aVariations,
     uint32_t aNumVariations) {
   if (aInstanceDataLength < sizeof(ScaledFontFreeType::InstanceData)) {
     gfxWarning() << "FreeType scaled font instance data is truncated.";
@@ -198,15 +253,14 @@ already_AddRefed<ScaledFont> UnscaledFontFreeType::CreateScaledFont(
     return nullptr;
   }
 
-  if (aNumVariations > 0 && face->GetData()) {
-    if (RefPtr<SharedFTFace> varFace = face->GetData()->CloneFace()) {
+  if (aNumVariations > 0) {
+    if (RefPtr<SharedFTFace> varFace = face->CloneFace()) {
       face = varFace;
     }
-  }
-
-  // Only apply variations if we have an explicitly cloned face.
-  if (aNumVariations > 0 && face != GetFace()) {
-    ApplyVariationsToFace(aVariations, aNumVariations, face->GetFace());
+    // Only apply variations if we have an explicitly cloned face.
+    if (face != GetFace()) {
+      ApplyVariationsToFace(aVariations, aNumVariations, face->GetFace());
+    }
   }
 
   RefPtr scaledFont = MakeRefPtr<ScaledFontFreeType>(
@@ -218,7 +272,7 @@ already_AddRefed<ScaledFont> UnscaledFontFreeType::CreateScaledFont(
 already_AddRefed<ScaledFont> UnscaledFontFreeType::CreateScaledFontFromWRFont(
     Float aGlyphSize, const wr::FontInstanceOptions* aOptions,
     const wr::FontInstancePlatformOptions* aPlatformOptions,
-    const FontVariation* aVariations, uint32_t aNumVariations) {
+    const wr::FontVariation* aVariations, uint32_t aNumVariations) {
   ScaledFontFreeType::InstanceData instanceData(aOptions, aPlatformOptions);
   return CreateScaledFont(aGlyphSize, reinterpret_cast<uint8_t*>(&instanceData),
                           sizeof(instanceData), aVariations, aNumVariations);
@@ -226,14 +280,11 @@ already_AddRefed<ScaledFont> UnscaledFontFreeType::CreateScaledFontFromWRFont(
 
 already_AddRefed<UnscaledFont> UnscaledFontFreeType::CreateFromFontDescriptor(
     const uint8_t* aData, uint32_t aDataLength, uint32_t aIndex) {
-  if (aDataLength == 0) {
-    gfxWarning() << "FreeType font descriptor is truncated.";
+  std::string path;
+  if (!ValidateFontDescriptor(aData, aDataLength, path, aIndex)) {
     return nullptr;
   }
-  const char* path = reinterpret_cast<const char*>(aData);
-  RefPtr unscaledFont =
-      MakeRefPtr<UnscaledFontFreeType>(std::string(path, aDataLength), aIndex);
-  return unscaledFont.forget();
+  return MakeAndAddRef<UnscaledFontFreeType>(std::move(path), aIndex);
 }
 
 #endif  // MOZ_WIDGET_ANDROID

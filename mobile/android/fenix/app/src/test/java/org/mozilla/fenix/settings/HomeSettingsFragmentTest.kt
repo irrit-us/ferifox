@@ -36,8 +36,7 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 internal class HomeSettingsFragmentTest {
-    @get:Rule
-    val gleanRule = FenixGleanTestRule(testContext)
+    @get:Rule val gleanRule = FenixGleanTestRule(testContext)
 
     private lateinit var homeSettingsFragment: HomeSettingsFragment
     private lateinit var appSettings: Settings
@@ -50,12 +49,14 @@ internal class HomeSettingsFragmentTest {
     @Before
     fun setup() {
         appPrefsEditor = mockk(relaxed = true)
-        appPrefs = mockk(relaxed = true) {
-            every { edit() } returns appPrefsEditor
-        }
-        appSettings = mockk(relaxed = true) {
-            every { preferences } returns appPrefs
-        }
+        appPrefs =
+            mockk(relaxed = true) {
+                every { edit() } returns appPrefsEditor
+            }
+        appSettings =
+            mockk(relaxed = true) {
+                every { preferences } returns appPrefs
+            }
         appStore = mockk(relaxed = true)
         pocketService = mockk(relaxed = true)
         contentRecommendationsHelper = mockk(relaxed = true)
@@ -77,6 +78,17 @@ internal class HomeSettingsFragmentTest {
         activateFragment()
 
         assertTrue(getSponsoredStoriesPreference().isVisible)
+    }
+
+    @Test
+    fun `GIVEN the homepage search bar is enabled WHEN accessing settings THEN the Jump back in, Bookmarks and Recently visited settings are visible`() {
+        every { appSettings.enableHomepageSearchBar } returns true
+
+        activateFragment()
+
+        assertTrue(getSwitchPreference(R.string.pref_key_recent_tabs).isVisible)
+        assertTrue(getSwitchPreference(R.string.pref_key_customization_bookmarks).isVisible)
+        assertTrue(getSwitchPreference(R.string.pref_key_history_metadata_feature).isVisible)
     }
 
     @Test
@@ -118,11 +130,7 @@ internal class HomeSettingsFragmentTest {
         verify {
             appPrefsEditor.putBoolean(homeSettingsFragment.getString(R.string.pref_key_pocket_sponsored_stories), false)
             pocketService.deleteUser()
-            appStore.dispatch(
-                ContentRecommendationsAction.SponsoredContentsChange(
-                    sponsoredContents = emptyList(),
-                ),
-            )
+            appStore.dispatch(ContentRecommendationsAction.SponsoredContentsChange(sponsoredContents = emptyList()))
         }
     }
 
@@ -160,6 +168,75 @@ internal class HomeSettingsFragmentTest {
         }
     }
 
+    @Test
+    fun `GIVEN the Wrexham widget feature is disabled WHEN accessing settings THEN the Wrexham widget setting is not visible`() {
+        every { appSettings.enableHomepageWrexhamWidget } returns false
+
+        activateFragment()
+
+        assertFalse(getWrexhamWidgetPreference().isVisible)
+    }
+
+    @Test
+    fun `GIVEN the Wrexham widget feature is enabled WHEN accessing settings THEN the Wrexham widget setting is visible`() {
+        every { appSettings.enableHomepageWrexhamWidget } returns true
+
+        activateFragment()
+
+        assertTrue(getWrexhamWidgetPreference().isVisible)
+    }
+
+    @Test
+    fun `GIVEN the Wrexham widget was shown WHEN accessing settings THEN the Wrexham widget setting is visible and checked`() {
+        every { appSettings.enableHomepageWrexhamWidget } returns true
+        every { appSettings.showHomepageWrexhamWidget } returns true
+
+        activateFragment()
+
+        assertTrue(getWrexhamWidgetPreference().isVisible)
+        assertTrue(getWrexhamWidgetPreference().isChecked)
+    }
+
+    @Test
+    fun `WHEN toggling the Wrexham widget setting THEN customize home preference_toggled is recorded with the wrexham_widget key`() {
+        every { appSettings.enableHomepageWrexhamWidget } returns true
+
+        activateFragment()
+
+        assertTrue(getWrexhamWidgetPreference().isVisible)
+        assertFalse(getWrexhamWidgetPreference().isChecked)
+
+        getWrexhamWidgetPreference().performClick()
+
+        assertTrue(getWrexhamWidgetPreference().isVisible)
+        assertTrue(getWrexhamWidgetPreference().isChecked)
+        val events = CustomizeHome.preferenceToggled.testGetValue()!!
+        assertEquals(1, events.size)
+        assertEquals("wrexham_widget", events.single().extra?.get("preference_key"))
+        assertEquals("true", events.single().extra?.get("enabled"))
+        verify {
+            appPrefsEditor.putBoolean(
+                homeSettingsFragment.getString(R.string.pref_key_show_homepage_wrexham_widget),
+                true,
+            )
+        }
+
+        getWrexhamWidgetPreference().performClick()
+
+        assertTrue(getWrexhamWidgetPreference().isVisible)
+        assertFalse(getWrexhamWidgetPreference().isChecked)
+        val eventsAfterSecondToggle = CustomizeHome.preferenceToggled.testGetValue()!!
+        assertEquals(2, eventsAfterSecondToggle.size)
+        assertEquals("wrexham_widget", eventsAfterSecondToggle.last().extra?.get("preference_key"))
+        assertEquals("false", eventsAfterSecondToggle.last().extra?.get("enabled"))
+        verify {
+            appPrefsEditor.putBoolean(
+                homeSettingsFragment.getString(R.string.pref_key_show_homepage_wrexham_widget),
+                false,
+            )
+        }
+    }
+
     private fun activateFragment() {
         val activity = Robolectric.buildActivity(FragmentActivity::class.java).create().get()
         homeSettingsFragment = HomeSettingsFragment()
@@ -167,33 +244,41 @@ internal class HomeSettingsFragmentTest {
         val mockCore: Core = mockk {
             every { pocketStoriesService } returns this@HomeSettingsFragmentTest.pocketService
         }
-        val mockComponents: Components = mockk(relaxed = true) {
-            every { appStore } returns this@HomeSettingsFragmentTest.appStore
-            every { core } returns mockCore
-            every { settings } returns this@HomeSettingsFragmentTest.appSettings
-        }
+        val mockComponents: Components =
+            mockk(relaxed = true) {
+                every { appStore } returns this@HomeSettingsFragmentTest.appStore
+                every { core } returns mockCore
+                every { settings } returns this@HomeSettingsFragmentTest.appSettings
+            }
 
         homeSettingsFragment.fenixSettings = appSettings
         homeSettingsFragment.fenixComponents = mockComponents
         homeSettingsFragment.contentRecommendationsHelper = contentRecommendationsHelper
 
-        activity.supportFragmentManager.beginTransaction()
+        activity.supportFragmentManager
+            .beginTransaction()
             .add(homeSettingsFragment, "HomeSettingFragmentTest")
             .commitNow()
     }
 
     private fun getSponsoredStoriesPreference(): CheckBoxPreference =
         homeSettingsFragment.findPreference(
-            homeSettingsFragment.getPreferenceKey(R.string.pref_key_pocket_sponsored_stories),
+            homeSettingsFragment.getPreferenceKey(R.string.pref_key_pocket_sponsored_stories)
         )!!
 
+    private fun getSwitchPreference(keyId: Int): SwitchPreferenceCompat =
+        homeSettingsFragment.findPreference(homeSettingsFragment.getPreferenceKey(keyId))!!
+
     private fun getPrivacyReportPreference(): SwitchPreferenceCompat =
-        homeSettingsFragment.findPreference(
-            homeSettingsFragment.getPreferenceKey(R.string.pref_key_privacy_report),
-        )!!
+        homeSettingsFragment.findPreference(homeSettingsFragment.getPreferenceKey(R.string.pref_key_privacy_report))!!
 
     private fun getWeatherPreference(): SwitchPreferenceCompat =
         homeSettingsFragment.findPreference(
-            homeSettingsFragment.getPreferenceKey(R.string.pref_key_show_homepage_weather_widget),
+            homeSettingsFragment.getPreferenceKey(R.string.pref_key_show_homepage_weather_widget)
+        )!!
+
+    private fun getWrexhamWidgetPreference(): SwitchPreferenceCompat =
+        homeSettingsFragment.findPreference(
+            homeSettingsFragment.getPreferenceKey(R.string.pref_key_show_homepage_wrexham_widget)
         )!!
 }

@@ -345,7 +345,7 @@ function makeUrlbarResult(queryContext, info) {
             url: action.params.url,
             title: info.title,
             icon: info.icon,
-            userContextId: info.userContextId,
+            userContext: UrlbarUtils.getUserContextData(info.userContextId),
             lastVisit: info.lastVisit,
             bookmarkDateMs: info.bookmarkDateMs,
             tabGroup: info.tabGroup,
@@ -769,8 +769,9 @@ class Search {
   }, /** @type {Record<Values<typeof MATCH_TYPE>, number>} */ ({}));
 
   /**
+   * The default behaviour for this search. This may be a mixture of behaviors.
+   *
    * @type {number}
-   *   The default behaviour for this search. This may be a mixture of behaviors.
    */
   #behavior;
   #matchBehavior = Ci.mozIPlacesAutoComplete.MATCH_BOUNDARY;
@@ -792,8 +793,9 @@ class Search {
   #heuristicToken;
   #inPrivateWindow;
   /**
+   * Used to interrupt running queries.
+   *
    * @type {?() => void}
-   *   Used to interrupt running queries.
    */
   #interrupt;
   #leadingRestrictionToken;
@@ -1595,6 +1597,11 @@ export class UrlbarProviderPlaces extends UrlbarProvider {
     search.notifyResult(false);
   }
 
+  /**
+   * @param {UrlbarQueryContext} queryContext
+   * @param {UrlbarParentController} controller
+   * @param {object} details
+   */
   onEngagement(queryContext, controller, details) {
     let { result } = details;
     if (details.selType == "dismiss") {

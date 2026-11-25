@@ -9,7 +9,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { batch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 import { actionCreators as ac, actionTypes as at } from "common/Actions.mjs";
 import {
   PREF_CLOCKS_SIZE,
@@ -22,7 +22,9 @@ import { AddClockForm } from "./AddClockForm";
 import { ClocksRow } from "./ClocksRow";
 import { EditClocksPanel } from "./EditClocksPanel";
 import { SizeSubmenu } from "../SizeSubmenu";
+import { WidgetMenuButton } from "../WidgetMenuButton";
 import { WidgetMenuFooter } from "../WidgetMenuFooter";
+import { useCuratedCityNames } from "./useCuratedCityNames";
 import {
   backfillClockLabelColors,
   buildNextClockZones,
@@ -152,18 +154,16 @@ function Clocks({ dispatch, handleUserInteraction, widgetEnabledMap }) {
 
   const handleChangeSize = useCallback(
     newSize => {
-      batch(() => {
-        dispatch(
-          ac.OnlyToMain({
-            type: at.SET_PREF,
-            data: { name: PREF_CLOCKS_SIZE, value: newSize },
-          })
-        );
-        recordUserAction(USER_ACTION_TYPES.CHANGE_SIZE, {
-          source: CLOCK_WIDGET_SOURCE.CONTEXT_MENU,
-          value: newSize,
-          size: newSize,
-        });
+      dispatch(
+        ac.OnlyToMain({
+          type: at.SET_PREF,
+          data: { name: PREF_CLOCKS_SIZE, value: newSize },
+        })
+      );
+      recordUserAction(USER_ACTION_TYPES.CHANGE_SIZE, {
+        source: CLOCK_WIDGET_SOURCE.CONTEXT_MENU,
+        value: newSize,
+        size: newSize,
       });
       handleClocksInteraction();
       closeContextMenu();
@@ -173,17 +173,15 @@ function Clocks({ dispatch, handleUserInteraction, widgetEnabledMap }) {
 
   const handleToggleHourFormat = useCallback(() => {
     const nextFormat = use12HourFormat ? "24" : "12";
-    batch(() => {
-      dispatch(
-        ac.OnlyToMain({
-          type: at.SET_PREF,
-          data: { name: PREF_CLOCKS_HOUR_FORMAT, value: nextFormat },
-        })
-      );
-      recordUserAction(USER_ACTION_TYPES.CHANGE_HOUR_FORMAT, {
-        source: CLOCK_WIDGET_SOURCE.CONTEXT_MENU,
-        value: nextFormat,
-      });
+    dispatch(
+      ac.OnlyToMain({
+        type: at.SET_PREF,
+        data: { name: PREF_CLOCKS_HOUR_FORMAT, value: nextFormat },
+      })
+    );
+    recordUserAction(USER_ACTION_TYPES.CHANGE_HOUR_FORMAT, {
+      source: CLOCK_WIDGET_SOURCE.CONTEXT_MENU,
+      value: nextFormat,
     });
     handleClocksInteraction();
     closeContextMenu();
@@ -225,6 +223,12 @@ function Clocks({ dispatch, handleUserInteraction, widgetEnabledMap }) {
 
   const canAddClock = clockZones.length < MAX_CLOCK_COUNT;
   const supportedTimeZones = useMemo(() => getSupportedTimeZones(), []);
+
+  // Localized names for the shown clocks only (<= MAX_CLOCK_COUNT); the add
+  // form resolves the full curated list on demand when it opens.
+  const curatedNames = useCuratedCityNames(
+    clockZones.map(clock => clock.cityId).filter(Boolean)
+  );
   const resetAddClockForm = useCallback(() => {
     setEditingClockIndex(null);
   }, []);
@@ -287,30 +291,28 @@ function Clocks({ dispatch, handleUserInteraction, widgetEnabledMap }) {
     zone => {
       const existingClock =
         editingClockIndex !== null ? clockZones[editingClockIndex] : null;
-      batch(() => {
-        dispatch(
-          ac.OnlyToMain({
-            type: at.SET_PREF,
-            data: {
-              name: PREF_CLOCKS_ZONES,
-              value: JSON.stringify(
-                buildNextClockZones(clockZones, editingClockIndex, zone)
-              ),
-            },
-          })
-        );
-        recordUserAction(
-          editingClockIndex !== null
-            ? USER_ACTION_TYPES.EDIT_CLOCK
-            : USER_ACTION_TYPES.ADD_CLOCK,
-          { source: formSource }
-        );
-        if (zone.label && !existingClock?.label) {
-          recordUserAction(USER_ACTION_TYPES.ADD_NICKNAME, {
-            source: formSource,
-          });
-        }
-      });
+      dispatch(
+        ac.OnlyToMain({
+          type: at.SET_PREF,
+          data: {
+            name: PREF_CLOCKS_ZONES,
+            value: JSON.stringify(
+              buildNextClockZones(clockZones, editingClockIndex, zone)
+            ),
+          },
+        })
+      );
+      recordUserAction(
+        editingClockIndex !== null
+          ? USER_ACTION_TYPES.EDIT_CLOCK
+          : USER_ACTION_TYPES.ADD_CLOCK,
+        { source: formSource }
+      );
+      if (zone.label && !existingClock?.label) {
+        recordUserAction(USER_ACTION_TYPES.ADD_NICKNAME, {
+          source: formSource,
+        });
+      }
       if (formSource === CLOCK_WIDGET_SOURCE.MANAGE) {
         setActivePanel(CLOCKS_PANEL.EDIT);
         resetAddClockForm();
@@ -336,18 +338,16 @@ function Clocks({ dispatch, handleUserInteraction, widgetEnabledMap }) {
       if (clockZones.length <= 1) {
         return;
       }
-      batch(() => {
-        dispatch(
-          ac.OnlyToMain({
-            type: at.SET_PREF,
-            data: {
-              name: PREF_CLOCKS_ZONES,
-              value: JSON.stringify(removeClockZoneAtIndex(clockZones, index)),
-            },
-          })
-        );
-        recordUserAction(USER_ACTION_TYPES.REMOVE_CLOCK, { source });
-      });
+      dispatch(
+        ac.OnlyToMain({
+          type: at.SET_PREF,
+          data: {
+            name: PREF_CLOCKS_ZONES,
+            value: JSON.stringify(removeClockZoneAtIndex(clockZones, index)),
+          },
+        })
+      );
+      recordUserAction(USER_ACTION_TYPES.REMOVE_CLOCK, { source });
       handleClocksInteraction();
     },
     [clockZones, dispatch, recordUserAction, handleClocksInteraction]
@@ -382,16 +382,17 @@ function Clocks({ dispatch, handleUserInteraction, widgetEnabledMap }) {
             ref={addButtonRef}
           />
         )}
-        <moz-button
+        <WidgetMenuButton
           className="clocks-context-menu-button"
-          data-l10n-id="newtab-clock-widget-menu-button"
-          iconSrc="chrome://global/skin/icons/more.svg"
           menuId="clocks-widget-context-menu"
-          type="icon ghost"
-          size="small"
+          l10nId="newtab-clock-widget-open-menu-button"
           ref={contextMenuButtonRef}
         />
-        <panel-list ref={contextMenuRef} id="clocks-widget-context-menu">
+        <panel-list
+          className="panel-list-no-icons"
+          ref={contextMenuRef}
+          id="clocks-widget-context-menu"
+        >
           <panel-item
             data-l10n-id="newtab-clock-widget-menu-edit"
             onClick={() => {
@@ -445,6 +446,7 @@ function Clocks({ dispatch, handleUserInteraction, widgetEnabledMap }) {
       {isEditingClocks && (
         <EditClocksPanel
           clockZones={clockZones}
+          curatedNames={curatedNames}
           canAddClock={canAddClock}
           onShowAddClock={() => handleShowAddClock(CLOCK_WIDGET_SOURCE.MANAGE)}
           onEditClock={index =>
@@ -470,6 +472,7 @@ function Clocks({ dispatch, handleUserInteraction, widgetEnabledMap }) {
             <ClocksRow
               key={`${c.timeZone}-${i}`}
               clock={c}
+              curatedNames={curatedNames}
               locale={locale}
               now={now}
               onEdit={

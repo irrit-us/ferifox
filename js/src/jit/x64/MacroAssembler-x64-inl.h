@@ -410,6 +410,11 @@ void MacroAssembler::lshift64(Imm32 imm, Register64 dest) {
   lshiftPtr(imm, dest.reg);
 }
 
+void MacroAssembler::lshift64(Imm32 imm, Register64 src, Register64 dest) {
+  MOZ_ASSERT(0 <= imm.value && imm.value < 64);
+  lshiftPtr(imm, src.reg, dest.reg);
+}
+
 void MacroAssembler::lshift64(Register shift, Register64 srcDest) {
   if (Assembler::HasBMI2()) {
     shlxq(srcDest.reg, shift, srcDest.reg);
@@ -458,6 +463,11 @@ void MacroAssembler::flexibleRshiftPtr(Register shift, Register srcDest) {
 
 void MacroAssembler::rshift64(Imm32 imm, Register64 dest) {
   rshiftPtr(imm, dest.reg);
+}
+
+void MacroAssembler::rshift64(Imm32 imm, Register64 src, Register64 dest) {
+  MOZ_ASSERT(0 <= imm.value && imm.value < 64);
+  rshiftPtr(imm, src.reg, dest.reg);
 }
 
 void MacroAssembler::rshift64(Register shift, Register64 srcDest) {
@@ -511,6 +521,12 @@ void MacroAssembler::flexibleRshiftPtrArithmetic(Register shift,
 void MacroAssembler::rshift64Arithmetic(Imm32 imm, Register64 dest) {
   MOZ_ASSERT(0 <= imm.value && imm.value < 64);
   rshiftPtrArithmetic(imm, dest.reg);
+}
+
+void MacroAssembler::rshift64Arithmetic(Imm32 imm, Register64 src,
+                                        Register64 dest) {
+  MOZ_ASSERT(0 <= imm.value && imm.value < 64);
+  rshiftPtrArithmetic(imm, src.reg, dest.reg);
 }
 
 void MacroAssembler::rshift64Arithmetic(Register shift, Register64 srcDest) {
@@ -954,6 +970,17 @@ void MacroAssembler::branchTestMagic(Condition cond, const BaseIndex& valaddr,
                                      JSWhyMagic why, Label* label) {
   uint64_t magic = MagicValue(why).asRawBits();
   cmpPtr(Operand(valaddr), ImmWord(magic));
+  j(cond, label);
+}
+
+void MacroAssembler::branchTestNullOrUndefined(Condition cond,
+                                               const ValueOperand& value,
+                                               Label* label) {
+  MOZ_ASSERT(cond == Equal || cond == NotEqual);
+  ScratchRegisterScope scratch(*this);
+  movq(value.valueReg(), scratch);
+  shrq(Imm32(JS::detail::ValueNullOrUndefinedShift), scratch);
+  cmp32(scratch, Imm32(JS::detail::ValueNullOrUndefinedBits));
   j(cond, label);
 }
 

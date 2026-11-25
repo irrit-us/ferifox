@@ -17,6 +17,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.ui.platform.ComposeView
@@ -26,8 +27,11 @@ import androidx.core.os.BundleCompat
 import androidx.core.view.OneShotPreDrawListener
 import androidx.core.view.isVisible
 import androidx.fragment.app.commit
+import androidx.fragment.app.commitNow
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -38,14 +42,13 @@ import mozilla.components.support.base.log.logger.Logger
 import org.mozilla.fenix.BuildConfig
 import org.mozilla.fenix.R
 import org.mozilla.fenix.ext.components
-import java.io.IOException
 
 internal const val LENS_IMAGES_DIR = "lens_images"
 
 /**
- * Activity that hosts [LensCameraFragment] for capturing images for Google Lens.
- * Handles camera permission and gallery picking, returning the selected image URI
- * as the activity result.
+ * Activity that hosts [LensCameraFragment] for capturing images for Google Lens. Handles camera permission and gallery
+ * picking. A captured or photo picker image is uploaded here by [LensUploadOverlay] and returned as the Lens result
+ * URL, so a cancelled or failed upload can fall back to the camera.
  */
 class LensCameraActivity : AppCompatActivity() {
 
@@ -55,12 +58,12 @@ class LensCameraActivity : AppCompatActivity() {
 
     // The camera permission is requested at most once per activity instance: the result is
     // delivered before onResume, so without this onResume would re-request it after a denial.
-    @VisibleForTesting
-    internal var permissionRequested = false
+    @VisibleForTesting internal var permissionRequested = false
 
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission(),
-    ) { isGranted -> handlePermissionResult(isGranted) }
+    private val requestPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            handlePermissionResult(isGranted)
+        }
 
     @VisibleForTesting
     internal fun handlePermissionResult(isGranted: Boolean) {
@@ -72,29 +75,57 @@ class LensCameraActivity : AppCompatActivity() {
         }
     }
 
-    private val galleryLauncher = registerForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri -> handleGalleryResult(uri) }
+    @VisibleForTesting internal var uploadViewModelFactory: ViewModelProvider.Factory? = null
+
+    private val uploadViewModel: LensUploadViewModel by viewModels {
+        uploadViewModelFactory
+            ?: run {
+                // Only the application context is captured: the view model outlives this activity.
+                val appContext = applicationContext
+                LensUploadViewModel.Factory(uploaderProvider = { appContext.components.lensImageUploader })
+            }
+    }
+
+    @VisibleForTesting
+    internal val uploadOverlay by lazy {
+        LensUploadOverlay(
+            activity = this,
+            viewModel = uploadViewModel,
+            overlay = findViewById(R.id.lens_upload_overlay),
+            // Removing LensCameraFragment closes the camera and drops the fragment's back callback, which would
+            // otherwise outrank the loading screen's and close the activity.
+            removeCamera = {
+                supportFragmentManager.findFragmentById(R.id.lens_fragment_container_view)?.let { cameraFragment ->
+                    supportFragmentManager.commitNow { remove(cameraFragment) }
+                }
+            },
+            // Added right away so a failure message is shown over the camera, not over the empty container.
+            restoreCamera = {
+                launchCameraFragment()
+                supportFragmentManager.executePendingTransactions()
+            },
+        )
+    }
+
+    private val galleryLauncher =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> handleGalleryResult(uri) }
 
     @VisibleForTesting
     internal fun handleGalleryResult(uri: Uri?) {
-        if (uri != null) {
-            val resultIntent = Intent().apply {
-                data = uri
-                putExtra(EXTRA_IMAGE_SOURCE, IMAGE_SOURCE_PHOTO_PICKER)
-            }
-            setResult(RESULT_OK, resultIntent)
-            finish()
-        }
+        if (uri == null) return
+        uploadOverlay.start(
+            uri,
+            isPrivate = intent.getBooleanExtra(EXTRA_IS_PRIVATE, false),
+            source = IMAGE_SOURCE_PHOTO_PICKER,
+        )
     }
 
-    private val qrGalleryLauncher = registerForActivityResult(
-        ActivityResultContracts.PickVisualMedia(),
-    ) { uri ->
-        if (uri != null) {
-            decodeQrFromUri(uri)
+    private val qrGalleryLauncher =
+        registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+            if (uri != null) {
+                decodeQrFromUri(uri)
+            }
         }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -112,6 +143,15 @@ class LensCameraActivity : AppCompatActivity() {
         }
 
         supportFragmentManager.setFragmentResultListener(
+            LensCameraFragment.MODE_CHANGED_REQUEST_KEY,
+            this,
+        ) { _, bundle ->
+            CameraMode.fromNameOrNull(bundle.getString(LensCameraFragment.RESULT_CAMERA_MODE))?.let {
+                components.settings.lensCameraLastMode = it
+            }
+        }
+
+        supportFragmentManager.setFragmentResultListener(
             LensCameraFragment.RESULT_REQUEST_KEY,
             this,
         ) { _, bundle ->
@@ -120,9 +160,10 @@ class LensCameraActivity : AppCompatActivity() {
             // gallery/image branch below; downstream callers treat an empty extra as no scan.
             val qrString = bundle.getString(LensCameraFragment.RESULT_QR_STRING)
             if (!qrString.isNullOrEmpty()) {
-                val resultIntent = Intent().apply {
-                    putExtra(QrScanActivity.EXTRA_SCAN_RESULT_DATA, qrString)
-                }
+                val resultIntent =
+                    Intent().apply {
+                        putExtra(EXTRA_SCAN_RESULT_DATA, qrString)
+                    }
                 setResult(RESULT_OK, resultIntent)
                 finish()
                 return@setFragmentResultListener
@@ -138,22 +179,25 @@ class LensCameraActivity : AppCompatActivity() {
                 return@setFragmentResultListener
             }
 
-            val imageUri: Uri? = BundleCompat.getParcelable(
-                bundle,
-                LensCameraFragment.RESULT_IMAGE_URI,
-                Uri::class.java,
-            )
+            val imageUri: Uri? =
+                BundleCompat.getParcelable(
+                    bundle,
+                    LensCameraFragment.RESULT_IMAGE_URI,
+                    Uri::class.java,
+                )
             if (imageUri != null) {
-                val resultIntent = Intent().apply {
-                    data = imageUri
-                    putExtra(EXTRA_IMAGE_SOURCE, IMAGE_SOURCE_CAMERA)
-                }
-                setResult(RESULT_OK, resultIntent)
-            } else {
-                setResult(RESULT_CANCELED)
+                uploadOverlay.start(
+                    imageUri,
+                    isPrivate = intent.getBooleanExtra(EXTRA_IS_PRIVATE, false),
+                    source = IMAGE_SOURCE_CAMERA,
+                )
+                return@setFragmentResultListener
             }
+            setResult(RESULT_CANCELED)
             finish()
         }
+
+        uploadOverlay.observe()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -170,7 +214,9 @@ class LensCameraActivity : AppCompatActivity() {
         // The opt-out sheet gates everything else: while it is up neither the camera permission nor
         // LensCameraFragment - and therefore the camera itself - is touched.
         if (components.settings.hasAcceptedGoogleLensFirstRun) {
-            if (!permissionRequested) {
+            // A granted permission brings the camera back even if it was requested here: an upload removes the camera
+            // fragment, so an upload lost with the process leaves no fragment to restore.
+            if (!permissionRequested || hasCameraPermission()) {
                 checkCameraPermission()
             }
         } else {
@@ -189,8 +235,8 @@ class LensCameraActivity : AppCompatActivity() {
     }
 
     /**
-     * Shows the camera-less backdrop the opt-out sheet sits on. Composed on demand so the common
-     * post-acknowledgement path, which goes straight to the camera, never pays for it.
+     * Shows the camera-less backdrop the opt-out sheet sits on. Composed on demand so the common post-acknowledgement
+     * path, which goes straight to the camera, never pays for it.
      */
     private fun showOptOutBackdrop() {
         val backdrop = findViewById<ComposeView>(R.id.lens_opt_out_backdrop)
@@ -204,8 +250,8 @@ class LensCameraActivity : AppCompatActivity() {
     }
 
     /**
-     * Hides the backdrop once the camera takes over. It is only covered by the fragment container,
-     * so leaving it in place would keep its close button reachable by accessibility services.
+     * Hides the backdrop once the camera takes over. It is only covered by the fragment container, so leaving it in
+     * place would keep its close button reachable by accessibility services.
      */
     private fun hideOptOutBackdrop() {
         val backdrop = findViewById<ComposeView>(R.id.lens_opt_out_backdrop)
@@ -215,29 +261,29 @@ class LensCameraActivity : AppCompatActivity() {
     }
 
     /**
-     * Schedules the opt-out sheet for after the activity's first frame. Showing it any earlier adds
-     * the dialog window while this window still has non-final metrics, which lays the sheet out at
-     * the top of the screen for a frame before its behavior offsets it into place.
+     * Schedules the opt-out sheet for after the activity's first frame. Showing it any earlier adds the dialog window
+     * while this window still has non-final metrics, which lays the sheet out at the top of the screen for a frame
+     * before its behavior offsets it into place.
      */
     @VisibleForTesting
     internal fun requestOptOutBottomSheet() {
-        if (optOutSheetPreDrawListener != null ||
-            supportFragmentManager.findFragmentByTag(GoogleLensOptOutBottomSheetFragment.TAG) != null
+        if (
+            optOutSheetPreDrawListener != null ||
+                supportFragmentManager.findFragmentByTag(GoogleLensOptOutBottomSheetFragment.TAG) != null
         ) {
             return
         }
-        optOutSheetPreDrawListener = OneShotPreDrawListener.add(window.decorView) {
-            // Posted so the sheet is added after the first frame is drawn, not merely after layout.
-            // The listener handle is cleared by onStop rather than here, so a request stays "in
-            // flight" for the rest of this start and cannot be issued twice.
-            window.decorView.post {
-                if (!isFinishing && !isDestroyed &&
-                    lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
-                ) {
-                    showOptOutBottomSheet()
+        optOutSheetPreDrawListener =
+            OneShotPreDrawListener.add(window.decorView) {
+                // Posted so the sheet is added after the first frame is drawn, not merely after layout.
+                // The listener handle is cleared by onStop rather than here, so a request stays "in
+                // flight" for the rest of this start and cannot be issued twice.
+                window.decorView.post {
+                    if (!isFinishing && !isDestroyed && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                        showOptOutBottomSheet()
+                    }
                 }
             }
-        }
     }
 
     @VisibleForTesting
@@ -248,10 +294,11 @@ class LensCameraActivity : AppCompatActivity() {
         if (supportFragmentManager.findFragmentByTag(GoogleLensOptOutBottomSheetFragment.TAG) != null) {
             return
         }
-        GoogleLensOptOutBottomSheetFragment().show(
-            supportFragmentManager,
-            GoogleLensOptOutBottomSheetFragment.TAG,
-        )
+        GoogleLensOptOutBottomSheetFragment()
+            .show(
+                supportFragmentManager,
+                GoogleLensOptOutBottomSheetFragment.TAG,
+            )
     }
 
     @VisibleForTesting
@@ -274,12 +321,13 @@ class LensCameraActivity : AppCompatActivity() {
     internal fun openSearchSettings() {
         startActivity(
             Intent(
-                Intent.ACTION_VIEW,
-                "${BuildConfig.DEEP_LINK_SCHEME}://settings_search_engine".toUri(),
-            ).apply {
-                setPackage(packageName)
-                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
-            },
+                    Intent.ACTION_VIEW,
+                    "${BuildConfig.DEEP_LINK_SCHEME}://settings_search_engine".toUri(),
+                )
+                .apply {
+                    setPackage(packageName)
+                    flags = Intent.FLAG_ACTIVITY_CLEAR_TOP
+                }
         )
     }
 
@@ -291,9 +339,7 @@ class LensCameraActivity : AppCompatActivity() {
 
     @VisibleForTesting
     internal fun checkCameraPermission() {
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
-            == PackageManager.PERMISSION_GRANTED
-        ) {
+        if (hasCameraPermission()) {
             launchCameraFragment()
         } else {
             permissionRequested = true
@@ -301,46 +347,59 @@ class LensCameraActivity : AppCompatActivity() {
         }
     }
 
+    private fun hasCameraPermission() =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+
     private fun launchCameraFragment() {
         hideOptOutBackdrop()
+        // onResume would otherwise bring the camera back underneath the upload after a rotation or a pause.
+        if (uploadViewModel.state.value.coversCamera) {
+            return
+        }
         if (supportFragmentManager.findFragmentById(R.id.lens_fragment_container_view) != null) {
             return
         }
         supportFragmentManager.commit {
-            add(R.id.lens_fragment_container_view, LensCameraFragment::class.java, null)
+            add(
+                R.id.lens_fragment_container_view,
+                LensCameraFragment::class.java,
+                Bundle().apply { putString(LensCameraFragment.ARG_INITIAL_MODE, resolveInitialMode().name) },
+            )
         }
     }
 
+    /** The mode requested through [EXTRA_INITIAL_MODE], falling back to the one the user last selected. */
+    @VisibleForTesting
+    internal fun resolveInitialMode(): CameraMode =
+        CameraMode.fromNameOrNull(intent.getStringExtra(EXTRA_INITIAL_MODE)) ?: components.settings.lensCameraLastMode
+
     private fun launchGalleryPicker() {
-        galleryLauncher.launch(
-            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-        )
+        galleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 
     private fun launchQrGalleryPicker() {
-        qrGalleryLauncher.launch(
-            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
-        )
+        qrGalleryLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
     }
 
     @VisibleForTesting
     internal fun decodeQrFromUri(uri: Uri) {
         lifecycleScope.launch(Dispatchers.IO) {
-            val qrString = try {
-                val bitmap = loadSoftwareBitmap(uri)
-                QrAnalyzer().analyze(bitmap)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: IOException) {
-                logger.error("Failed to decode QR from picked image", e)
-                null
-            } catch (e: IllegalArgumentException) {
-                logger.error("Failed to decode QR from picked image", e)
-                null
-            } catch (e: IllegalStateException) {
-                logger.error("Failed to decode QR from picked image", e)
-                null
-            }
+            val qrString =
+                try {
+                    val bitmap = loadSoftwareBitmap(uri)
+                    QrAnalyzer().analyze(bitmap)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: IOException) {
+                    logger.error("Failed to decode QR from picked image", e)
+                    null
+                } catch (e: IllegalArgumentException) {
+                    logger.error("Failed to decode QR from picked image", e)
+                    null
+                } catch (e: IllegalStateException) {
+                    logger.error("Failed to decode QR from picked image", e)
+                    null
+                }
             withContext(Dispatchers.Main) {
                 if (!isFinishing && !isDestroyed) handleQrDecodeResult(qrString)
             }
@@ -353,9 +412,10 @@ class LensCameraActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.lens_camera_qr_no_code_found, Toast.LENGTH_SHORT).show()
             return
         }
-        val resultIntent = Intent().apply {
-            putExtra(QrScanActivity.EXTRA_SCAN_RESULT_DATA, qrString)
-        }
+        val resultIntent =
+            Intent().apply {
+                putExtra(EXTRA_SCAN_RESULT_DATA, qrString)
+            }
         setResult(RESULT_OK, resultIntent)
         finish()
     }
@@ -381,20 +441,26 @@ class LensCameraActivity : AppCompatActivity() {
         }
     }
 
-    private fun decodeDownsampledStream(uri: Uri): Bitmap {
+    @VisibleForTesting
+    internal fun decodeDownsampledStream(uri: Uri): Bitmap {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         contentResolver.openInputStream(uri)?.use {
             BitmapFactory.decodeStream(it, null, bounds)
-        } ?: throw IOException("Unable to open $uri")
+        }
+        // A bounds pass always returns a null bitmap, so the decoded dimensions are what tell
+        // us whether the image could be read. They are untouched if the stream could not be opened.
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+            throw IOException("Unable to read the bounds of $uri")
+        }
 
         val longEdge = maxOf(bounds.outWidth, bounds.outHeight)
         var sampleSize = 1
         while (longEdge / sampleSize > QR_DECODE_MAX_DIMENSION) sampleSize *= 2
 
         val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
-        return contentResolver.openInputStream(uri)?.use {
-            BitmapFactory.decodeStream(it, null, opts)
-        } ?: throw IOException("Unable to open $uri")
+        val stream = contentResolver.openInputStream(uri)
+        return stream?.use { BitmapFactory.decodeStream(it, null, opts) }
+            ?: throw IOException(if (stream == null) "Unable to open $uri" else "Unable to decode $uri")
     }
 
     @VisibleForTesting
@@ -406,6 +472,14 @@ class LensCameraActivity : AppCompatActivity() {
     }
 
     companion object {
+        /**
+         * Result-intent extra key carrying a decoded QR string produced by the in-camera QR mode. Re-exported from
+         * [QrScanActivity] so Lens consumers don't need to depend on the QR component directly, while keeping the value
+         * identical to the key [org.mozilla.fenix.components.QrScanFenixFeature] expects when the intent is forwarded
+         * to it.
+         */
+        const val EXTRA_SCAN_RESULT_DATA = QrScanActivity.EXTRA_SCAN_RESULT_DATA
+
         // Cap the long edge of decoded gallery images before QR analysis. Modern phone photos
         // are 12 MP+ which would allocate ~50 MB as ARGB_8888 plus another ~50 MB for the
         // IntArray pixel copy inside QrAnalyzer — enough to OOM low-RAM devices. ZXing
@@ -414,21 +488,36 @@ class LensCameraActivity : AppCompatActivity() {
 
         private const val STATE_PERMISSION_REQUESTED = "permission_requested"
 
+        internal const val IMAGE_SOURCE_CAMERA = "camera"
+
+        internal const val IMAGE_SOURCE_PHOTO_PICKER = "photo_picker"
+
         /**
-         * Result intent extra naming the upload method that produced the image, read by
-         * `LensFeature` to attribute the Google Lens search telemetry.
+         * Result intent extra carrying the Lens results URL of the image this activity uploaded. The search telemetry
+         * has already been recorded.
          */
-        internal const val EXTRA_IMAGE_SOURCE = "lens_image_source"
+        internal const val EXTRA_LENS_RESULT_URL = "lens_result_url"
 
-        @VisibleForTesting internal const val IMAGE_SOURCE_CAMERA = "camera"
+        /**
+         * Launch and result intent extra naming the browsing mode an image is uploaded in. The result echoes the launch
+         * value so the result tab always matches the cookie context of the upload.
+         */
+        internal const val EXTRA_IS_PRIVATE = "lens_is_private"
 
-        @VisibleForTesting internal const val IMAGE_SOURCE_PHOTO_PICKER = "photo_picker"
+        @VisibleForTesting internal const val EXTRA_INITIAL_MODE = "lens_initial_mode"
 
         /**
          * Creates an intent to launch [LensCameraActivity].
+         *
+         * @param context The context to launch the activity from.
+         * @param isPrivate Whether an image uploaded by this activity should use the private cookie context.
+         * @param initialMode The [CameraMode] to open in, or null to reopen the mode the user last selected.
          */
-        fun newIntent(context: Context): Intent {
-            return Intent(context, LensCameraActivity::class.java)
+        fun newIntent(context: Context, isPrivate: Boolean, initialMode: CameraMode? = null): Intent {
+            return Intent(context, LensCameraActivity::class.java).apply {
+                putExtra(EXTRA_IS_PRIVATE, isPrivate)
+                initialMode?.let { putExtra(EXTRA_INITIAL_MODE, it.name) }
+            }
         }
     }
 }

@@ -778,6 +778,49 @@ interface CollectedData {
     xpath?: Record<string, CollectedFormDataValue>;
 }
 
+interface CollectorLogEdge {
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogEdge_label) --> */
+    label: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogEdge_other) --> */
+    other: CollectorLogNode;
+}
+
+interface CollectorLogNode {
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogNode_flags) --> */
+    flags: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogNode_index) --> */
+    index: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogNode_label) --> */
+    label: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogNode_ptr) --> */
+    ptr: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogNode_referenceCount) --> */
+    referenceCount: number;
+}
+
+interface CollectorLogNodeAdjacents {
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogNodeAdjacents_fromSelf) --> */
+    fromSelf: CollectorLogEdge[];
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogNodeAdjacents_toSelf) --> */
+    toSelf: CollectorLogEdge[];
+}
+
+interface CollectorLogRootPath {
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogRootPath_kind) --> */
+    kind: CollectorLogRootKind;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogRootPath_path) --> */
+    path: CollectorLogEdge[];
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogRootPath_weakMapPaths) --> */
+    weakMapPaths: CollectorLogWeakMapPath[];
+}
+
+interface CollectorLogWeakMapPath {
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogWeakMapPath_key) --> */
+    key: CollectorLogNode;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogWeakMapPath_path) --> */
+    path: CollectorLogEdge[];
+}
+
 interface CommandEventInit extends EventInit {
     /** <!-- binding_to(idl, attribute, WEBIDL_CommandEventInit_command) --> */
     command?: string;
@@ -1243,6 +1286,20 @@ interface DisplayNameResult {
     values?: string[];
 }
 
+interface DocumentLanguageMetadata {
+    /** <!-- binding_to(idl, attribute, WEBIDL_DocumentLanguageMetadata_htmlLangAttribute) --> */
+    htmlLangAttribute: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_DocumentLanguageMetadata_textSample) --> */
+    textSample: string;
+}
+
+interface DocumentLanguageMetadataRequestOptions {
+    /** <!-- binding_to(idl, attribute, WEBIDL_DocumentLanguageMetadataRequestOptions_textSampleMinCodeUnits) --> */
+    textSampleMinCodeUnits: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_DocumentLanguageMetadataRequestOptions_textSampleTargetCodeUnits) --> */
+    textSampleTargetCodeUnits: number;
+}
+
 interface DocumentPictureInPictureEventInit extends EventInit {
     /** <!-- binding_to(idl, attribute, WEBIDL_DocumentPictureInPictureEventInit_window) --> */
     window: Window;
@@ -1274,6 +1331,13 @@ interface DoubleRange {
 interface DragEventInit extends MouseEventInit {
     /** <!-- binding_to(idl, attribute, WEBIDL_DragEventInit_dataTransfer) --> */
     dataTransfer?: DataTransfer | null;
+}
+
+interface DrawSnapshotOptions {
+    /** <!-- binding_to(idl, attribute, WEBIDL_DrawSnapshotOptions_drawView) --> */
+    drawView?: boolean;
+    /** <!-- binding_to(idl, attribute, WEBIDL_DrawSnapshotOptions_resetScrollPosition) --> */
+    resetScrollPosition?: boolean;
 }
 
 interface DynamicsCompressorOptions extends AudioNodeOptions {
@@ -1338,6 +1402,20 @@ interface ElementDefinitionOptions {
     extends?: string;
 }
 
+interface EncapsulatedBits {
+    /** <!-- binding_to(idl, attribute, WEBIDL_EncapsulatedBits_ciphertext) --> */
+    ciphertext: ArrayBuffer;
+    /** <!-- binding_to(idl, attribute, WEBIDL_EncapsulatedBits_sharedKey) --> */
+    sharedKey: ArrayBuffer;
+}
+
+interface EncapsulatedKey {
+    /** <!-- binding_to(idl, attribute, WEBIDL_EncapsulatedKey_ciphertext) --> */
+    ciphertext: ArrayBuffer;
+    /** <!-- binding_to(idl, attribute, WEBIDL_EncapsulatedKey_sharedKey) --> */
+    sharedKey: CryptoKey;
+}
+
 interface EncodedAudioChunkInit {
     /** <!-- binding_to(idl, attribute, WEBIDL_EncodedAudioChunkInit_data) --> */
     data: AllowSharedBufferSource;
@@ -1372,6 +1450,11 @@ interface EncodedVideoChunkMetadata {
     decoderConfig?: VideoDecoderConfig;
     /** <!-- binding_to(idl, attribute, WEBIDL_EncodedVideoChunkMetadata_svc) --> */
     svc?: SvcOutputMetadata;
+}
+
+interface EncoderDebugInfo {
+    /** <!-- binding_to(idl, attribute, WEBIDL_EncoderDebugInfo_encoderName) --> */
+    encoderName?: string;
 }
 
 interface ErrorEventInit extends EventInit {
@@ -1606,6 +1689,8 @@ interface FontFaceDescriptors {
     variationSettings?: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_FontFaceDescriptors_weight) --> */
     weight?: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_FontFaceDescriptors_width) --> */
+    width?: string;
 }
 
 interface FontFaceSetIteratorResult {
@@ -2304,6 +2389,24 @@ interface HTMLMediaElementDebugInfo {
     decoder?: MediaDecoderDebugInfo;
 }
 
+interface HWInferenceDevice {
+    /** <!-- binding_to(idl, attribute, WEBIDL_HWInferenceDevice_backends) --> */
+    backends: HWInferenceBackend[];
+    /** <!-- binding_to(idl, attribute, WEBIDL_HWInferenceDevice_description) --> */
+    description: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_HWInferenceDevice_id) --> */
+    id: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_HWInferenceDevice_kind) --> */
+    kind: HWInferenceDeviceKind;
+}
+
+interface HWInferencePlacement {
+    /** <!-- binding_to(idl, attribute, WEBIDL_HWInferencePlacement_devices) --> */
+    devices?: string[];
+    /** <!-- binding_to(idl, attribute, WEBIDL_HWInferencePlacement_kinds) --> */
+    kinds?: HWInferenceDeviceKind[];
+}
+
 interface HasChildrenOptions {
     /** <!-- binding_to(idl, attribute, WEBIDL_HasChildrenOptions_ignoreAbsent) --> */
     ignoreAbsent?: boolean;
@@ -2508,6 +2611,13 @@ interface ImageText {
 interface ImportESModuleOptionsDictionary {
     /** <!-- binding_to(idl, attribute, WEBIDL_ImportESModuleOptionsDictionary_global) --> */
     global?: ImportESModuleTargetGlobal;
+}
+
+interface ImportNodeOptions {
+    /** <!-- binding_to(idl, attribute, WEBIDL_ImportNodeOptions_customElementRegistry) --> */
+    customElementRegistry?: CustomElementRegistry;
+    /** <!-- binding_to(idl, attribute, WEBIDL_ImportNodeOptions_selfOnly) --> */
+    selfOnly?: boolean;
 }
 
 interface InferenceSessionRunOptions {
@@ -2904,10 +3014,6 @@ interface LlamaContextOptions {
     nUbatch?: number;
     /** <!-- binding_to(idl, attribute, WEBIDL_LlamaContextOptions_noPerf) --> */
     noPerf?: boolean;
-    /** <!-- binding_to(idl, attribute, WEBIDL_LlamaContextOptions_offloadKqv) --> */
-    offloadKqv?: boolean;
-    /** <!-- binding_to(idl, attribute, WEBIDL_LlamaContextOptions_opOffload) --> */
-    opOffload?: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_LlamaContextOptions_swaFull) --> */
     swaFull?: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_LlamaContextOptions_vCacheDtype) --> */
@@ -2940,8 +3046,8 @@ interface LlamaModelOptions {
     checkTensors?: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_LlamaModelOptions_context) --> */
     context?: LlamaContextOptions;
-    /** <!-- binding_to(idl, attribute, WEBIDL_LlamaModelOptions_nGpuLayers) --> */
-    nGpuLayers?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_LlamaModelOptions_placement) --> */
+    placement?: HWInferencePlacement;
     /** <!-- binding_to(idl, attribute, WEBIDL_LlamaModelOptions_useMlock) --> */
     useMlock?: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_LlamaModelOptions_useMmap) --> */
@@ -3045,8 +3151,6 @@ interface LoadURIOptions {
     triggeringRemoteType?: string | null;
     /** <!-- binding_to(idl, attribute, WEBIDL_LoadURIOptions_triggeringSandboxFlags) --> */
     triggeringSandboxFlags?: number;
-    /** <!-- binding_to(idl, attribute, WEBIDL_LoadURIOptions_triggeringStorageAccess) --> */
-    triggeringStorageAccess?: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_LoadURIOptions_triggeringWindowId) --> */
     triggeringWindowId?: number;
 }
@@ -3994,6 +4098,8 @@ interface NetErrorInfo {
 interface NotificationAction {
     /** <!-- binding_to(idl, attribute, WEBIDL_NotificationAction_action) --> */
     action: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_NotificationAction_navigate) --> */
+    navigate?: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_NotificationAction_title) --> */
     title: string;
 }
@@ -4815,32 +4921,6 @@ interface PredictRemoteTypeOptions {
     window?: Window | null;
 }
 
-interface PrivateAttributionConversionOptions {
-    /** <!-- binding_to(idl, attribute, WEBIDL_PrivateAttributionConversionOptions_ads) --> */
-    ads?: string[];
-    /** <!-- binding_to(idl, attribute, WEBIDL_PrivateAttributionConversionOptions_histogramSize) --> */
-    histogramSize: number;
-    /** <!-- binding_to(idl, attribute, WEBIDL_PrivateAttributionConversionOptions_impression) --> */
-    impression?: PrivateAttributionImpressionType;
-    /** <!-- binding_to(idl, attribute, WEBIDL_PrivateAttributionConversionOptions_lookbackDays) --> */
-    lookbackDays?: number;
-    /** <!-- binding_to(idl, attribute, WEBIDL_PrivateAttributionConversionOptions_sources) --> */
-    sources?: string[];
-    /** <!-- binding_to(idl, attribute, WEBIDL_PrivateAttributionConversionOptions_task) --> */
-    task: string;
-}
-
-interface PrivateAttributionImpressionOptions {
-    /** <!-- binding_to(idl, attribute, WEBIDL_PrivateAttributionImpressionOptions_ad) --> */
-    ad: string;
-    /** <!-- binding_to(idl, attribute, WEBIDL_PrivateAttributionImpressionOptions_index) --> */
-    index: number;
-    /** <!-- binding_to(idl, attribute, WEBIDL_PrivateAttributionImpressionOptions_target) --> */
-    target: string;
-    /** <!-- binding_to(idl, attribute, WEBIDL_PrivateAttributionImpressionOptions_type) --> */
-    type?: PrivateAttributionImpressionType;
-}
-
 interface ProcessActorChildOptions extends JSActorSidedOptions {
     /** <!-- binding_to(idl, attribute, WEBIDL_ProcessActorChildOptions_observers) --> */
     observers?: string[];
@@ -4855,6 +4935,15 @@ interface ProcessActorOptions extends JSActorOptions {
     loadInDevToolsLoader?: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_ProcessActorOptions_parent) --> */
     parent?: JSActorSidedOptions;
+}
+
+interface ProfilerCounterOptions {
+    /** <!-- binding_to(idl, attribute, WEBIDL_ProfilerCounterOptions_category) --> */
+    category: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_ProfilerCounterOptions_description) --> */
+    description?: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_ProfilerCounterOptions_name) --> */
+    name: string;
 }
 
 interface ProfilerMarkerOptions {
@@ -5146,6 +5235,8 @@ interface RTCCodecStats extends RTCStats {
 }
 
 interface RTCConfiguration {
+    /** <!-- binding_to(idl, attribute, WEBIDL_RTCConfiguration_alwaysNegotiateDataChannels) --> */
+    alwaysNegotiateDataChannels?: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_RTCConfiguration_bundlePolicy) --> */
     bundlePolicy?: RTCBundlePolicy;
     /** <!-- binding_to(idl, attribute, WEBIDL_RTCConfiguration_certificates) --> */
@@ -5163,6 +5254,8 @@ interface RTCConfiguration {
 }
 
 interface RTCConfigurationInternal {
+    /** <!-- binding_to(idl, attribute, WEBIDL_RTCConfigurationInternal_alwaysNegotiateDataChannels) --> */
+    alwaysNegotiateDataChannels?: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_RTCConfigurationInternal_bundlePolicy) --> */
     bundlePolicy?: RTCBundlePolicy;
     /** <!-- binding_to(idl, attribute, WEBIDL_RTCConfigurationInternal_certificatesProvided) --> */
@@ -5937,6 +6030,8 @@ interface RTCTransportStats extends RTCStats {
     packetsSent?: number;
     /** <!-- binding_to(idl, attribute, WEBIDL_RTCTransportStats_remoteCertificateId) --> */
     remoteCertificateId?: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_RTCTransportStats_selectedCandidatePairChanges) --> */
+    selectedCandidatePairChanges?: number;
     /** <!-- binding_to(idl, attribute, WEBIDL_RTCTransportStats_selectedCandidatePairId) --> */
     selectedCandidatePairId?: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_RTCTransportStats_srtpCipher) --> */
@@ -6400,14 +6495,16 @@ interface SizeToContentConstraints {
 interface SocketOptions {
     /** <!-- binding_to(idl, attribute, WEBIDL_SocketOptions_binaryType) --> */
     binaryType?: TCPSocketBinaryType;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SocketOptions_connectionFlags) --> */
+    connectionFlags?: number;
     /** <!-- binding_to(idl, attribute, WEBIDL_SocketOptions_useSecureTransport) --> */
     useSecureTransport?: boolean;
 }
 
-interface SpeechRecognitionErrorInit extends EventInit {
-    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionErrorInit_error) --> */
-    error?: SpeechRecognitionErrorCode;
-    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionErrorInit_message) --> */
+interface SpeechRecognitionErrorEventInit extends EventInit {
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionErrorEventInit_error) --> */
+    error: SpeechRecognitionErrorCode;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionErrorEventInit_message) --> */
     message?: string;
 }
 
@@ -6419,7 +6516,29 @@ interface SpeechRecognitionEventInit extends EventInit {
     /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionEventInit_resultIndex) --> */
     resultIndex?: number;
     /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionEventInit_results) --> */
-    results?: SpeechRecognitionResultList | null;
+    results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionOptions {
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionOptions_langs) --> */
+    langs: string[];
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionOptions_processLocally) --> */
+    processLocally?: boolean;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionOptions_quality) --> */
+    quality?: SpeechRecognitionQuality;
+}
+
+interface SpeechRecognitionPerfStats {
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionPerfStats_engineReadyDuration) --> */
+    engineReadyDuration?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionPerfStats_fedAudioDuration) --> */
+    fedAudioDuration?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionPerfStats_finalizationDuration) --> */
+    finalizationDuration?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionPerfStats_firstResultDuration) --> */
+    firstResultDuration?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionPerfStats_inferenceDuration) --> */
+    inferenceDuration?: number;
 }
 
 interface SpeechSynthesisErrorEventInit extends SpeechSynthesisEventInit {
@@ -6720,6 +6839,114 @@ interface TextFormatInit {
 interface TextFormatUpdateEventInit extends EventInit {
     /** <!-- binding_to(idl, attribute, WEBIDL_TextFormatUpdateEventInit_textFormats) --> */
     textFormats?: TextFormat[];
+}
+
+interface TextGenerationLogitBias {
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationLogitBias_bias) --> */
+    bias: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationLogitBias_token) --> */
+    token: number;
+}
+
+interface TextGenerationMessage {
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationMessage_content) --> */
+    content: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationMessage_role) --> */
+    role: TextGenerationRole;
+}
+
+interface TextGenerationRequest {
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationRequest_bufferLength) --> */
+    bufferLength?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationRequest_maxTokens) --> */
+    maxTokens?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationRequest_messages) --> */
+    messages: TextGenerationMessage[];
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationRequest_samplers) --> */
+    samplers?: TextGenerationSampler[];
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationRequest_stopOnEndOfGenerationTokens) --> */
+    stopOnEndOfGenerationTokens?: boolean;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationRequest_stopTokens) --> */
+    stopTokens?: number[];
+}
+
+interface TextGenerationResourceSnapshot {
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationResourceSnapshot_cpuTimeMs) --> */
+    cpuTimeMs: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationResourceSnapshot_memoryBytes) --> */
+    memoryBytes: number;
+}
+
+interface TextGenerationResources {
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationResources_after) --> */
+    after: TextGenerationResourceSnapshot;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationResources_before) --> */
+    before: TextGenerationResourceSnapshot;
+}
+
+interface TextGenerationResult {
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationResult_content) --> */
+    content: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationResult_reason) --> */
+    reason: TextGenerationFinishReason;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationResult_resources) --> */
+    resources: TextGenerationResources;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationResult_usage) --> */
+    usage: TextGenerationUsage;
+}
+
+interface TextGenerationSampler {
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationSampler_logitBias) --> */
+    logitBias?: TextGenerationLogitBias[];
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationSampler_seed) --> */
+    seed?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationSampler_temp) --> */
+    temp?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationSampler_topK) --> */
+    topK?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationSampler_topP) --> */
+    topP?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationSampler_type) --> */
+    type: TextGenerationSamplerType;
+}
+
+interface TextGenerationTimings {
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationTimings_decodeMs) --> */
+    decodeMs: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationTimings_prefillMs) --> */
+    prefillMs: number;
+}
+
+interface TextGenerationUsage {
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationUsage_generatedTokens) --> */
+    generatedTokens: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationUsage_promptCharacters) --> */
+    promptCharacters: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationUsage_promptTokens) --> */
+    promptTokens: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerationUsage_timings) --> */
+    timings: TextGenerationTimings;
+}
+
+interface TextGeneratorCreateOptions {
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGeneratorCreateOptions_batchSize) --> */
+    batchSize?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGeneratorCreateOptions_contextSize) --> */
+    contextSize?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGeneratorCreateOptions_featureId) --> */
+    featureId?: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGeneratorCreateOptions_flashAttn) --> */
+    flashAttn?: boolean;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGeneratorCreateOptions_kvCacheDtype) --> */
+    kvCacheDtype?: TextGenerationKVCacheDtype;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGeneratorCreateOptions_numThreads) --> */
+    numThreads?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGeneratorCreateOptions_numThreadsDecoding) --> */
+    numThreadsDecoding?: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGeneratorCreateOptions_placement) --> */
+    placement?: HWInferencePlacement;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGeneratorCreateOptions_ubatchSize) --> */
+    ubatchSize?: number;
 }
 
 interface TextUpdateEventInit extends EventInit {
@@ -7232,7 +7459,7 @@ interface ViewTimelineOptions {
     /** <!-- binding_to(idl, attribute, WEBIDL_ViewTimelineOptions_inset) --> */
     inset?: string | (CSSKeywordish | CSSNumericValue)[];
     /** <!-- binding_to(idl, attribute, WEBIDL_ViewTimelineOptions_subject) --> */
-    subject?: Element;
+    subject: Element;
 }
 
 interface WaveShaperOptions extends AudioNodeOptions {
@@ -7370,9 +7597,9 @@ interface WebTransportErrorInit {
 
 interface WebTransportHash {
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportHash_algorithm) --> */
-    algorithm?: string;
+    algorithm: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportHash_value) --> */
-    value?: BufferSource;
+    value: BufferSource;
 }
 
 interface WebTransportOptions {
@@ -7380,6 +7607,8 @@ interface WebTransportOptions {
     allowPooling?: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportOptions_congestionControl) --> */
     congestionControl?: WebTransportCongestionControl;
+    /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportOptions_protocols) --> */
+    protocols?: string[];
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportOptions_requireUnreliable) --> */
     requireUnreliable?: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportOptions_serverCertificateHashes) --> */
@@ -7395,9 +7624,14 @@ interface WebTransportReceiveStreamStats {
     timestamp?: DOMHighResTimeStamp;
 }
 
-interface WebTransportSendStreamOptions {
-    /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportSendStreamOptions_sendOrder) --> */
-    sendOrder?: number | null;
+interface WebTransportSendOptions {
+    /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportSendOptions_sendGroup) --> */
+    sendGroup?: WebTransportSendGroup | null;
+    /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportSendOptions_sendOrder) --> */
+    sendOrder?: number;
+}
+
+interface WebTransportSendStreamOptions extends WebTransportSendOptions {
 }
 
 interface WebTransportSendStreamStats {
@@ -8190,6 +8424,10 @@ interface Animation extends EventTarget {
     readonly playState: AnimationPlayState;
     /** <!-- binding_to(idl, attribute, WEBIDL_Animation_playbackRate) --> */
     playbackRate: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_Animation_rangeEnd) --> */
+    rangeEnd: any;
+    /** <!-- binding_to(idl, attribute, WEBIDL_Animation_rangeStart) --> */
+    rangeStart: any;
     /** <!-- binding_to(idl, attribute, WEBIDL_Animation_ready) --> */
     readonly ready: Promise<Animation>;
     /** <!-- binding_to(idl, attribute, WEBIDL_Animation_replaceState) --> */
@@ -8533,6 +8771,8 @@ interface AudioEncoder extends EventTarget {
     encode(data: AudioData): void;
     /** <!-- binding_to(idl, method, WEBIDL_AudioEncoder_flush) --> */
     flush(): Promise<void>;
+    /** <!-- binding_to(idl, method, WEBIDL_AudioEncoder_mozRequestDebugInfo) --> */
+    mozRequestDebugInfo(): Promise<EncoderDebugInfo>;
     /** <!-- binding_to(idl, method, WEBIDL_AudioEncoder_reset) --> */
     reset(): void;
     addEventListener<K extends keyof AudioEncoderEventMap>(type: K, listener: (this: AudioEncoder, ev: AudioEncoderEventMap[K]) => any, options?: boolean | AddEventListenerOptions): void;
@@ -9521,14 +9761,14 @@ interface CSSFontFaceDescriptors extends CSSStyleDeclaration {
     fontFeatureSettings: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSFontFaceDescriptors_fontLanguageOverride) --> */
     fontLanguageOverride: string;
-    /** <!-- binding_to(idl, attribute, WEBIDL_CSSFontFaceDescriptors_fontStretch) --> */
-    fontStretch: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSFontFaceDescriptors_fontStyle) --> */
     fontStyle: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSFontFaceDescriptors_fontVariationSettings) --> */
     fontVariationSettings: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSFontFaceDescriptors_fontWeight) --> */
     fontWeight: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CSSFontFaceDescriptors_fontWidth) --> */
+    fontWidth: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSFontFaceDescriptors_lineGapOverride) --> */
     lineGapOverride: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSFontFaceDescriptors_sizeAdjust) --> */
@@ -10585,6 +10825,8 @@ interface CSSStyleProperties extends CSSStyleDeclaration {
     MozHyphens: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_MozImageDecoding) --> */
     MozImageDecoding: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_MozLineScrollAmount) --> */
+    MozLineScrollAmount: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_MozMarginEnd) --> */
     MozMarginEnd: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_MozMarginStart) --> */
@@ -10601,6 +10843,10 @@ interface CSSStyleProperties extends CSSStyleDeclaration {
     MozPerspective: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_MozPerspectiveOrigin) --> */
     MozPerspectiveOrigin: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_MozScrollbarInsetBlock) --> */
+    MozScrollbarInsetBlock: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_MozScrollbarInsetInline) --> */
+    MozScrollbarInsetInline: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_MozSubtreeHiddenOnlyVisually) --> */
     MozSubtreeHiddenOnlyVisually: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_MozTabSize) --> */
@@ -11059,6 +11305,8 @@ interface CSSStyleProperties extends CSSStyleDeclaration {
     fontVariationSettings: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_fontWeight) --> */
     fontWeight: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_fontWidth) --> */
+    fontWidth: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_forcedColorAdjust) --> */
     forcedColorAdjust: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_CSSStyleProperties_gap) --> */
@@ -12074,6 +12322,8 @@ interface CanonicalBrowsingContext extends BrowsingContext {
     readonly scopedPrefs: nsIScopedPrefs | null;
     /** <!-- binding_to(idl, attribute, WEBIDL_CanonicalBrowsingContext_secureBrowserUI) --> */
     readonly secureBrowserUI: nsISecureBrowserUI | null;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CanonicalBrowsingContext_serviceWorkersDisabledByPolicy) --> */
+    readonly serviceWorkersDisabledByPolicy: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_CanonicalBrowsingContext_sessionHistory) --> */
     readonly sessionHistory: nsISHistory | null;
     /** <!-- binding_to(idl, attribute, WEBIDL_CanonicalBrowsingContext_targetTopLevelLinkClicksToBlank) --> */
@@ -12879,6 +13129,39 @@ declare var CloseWatcher: {
     new(options?: CloseWatcherOptions): CloseWatcher;
     /** <!-- binding_to(idl, attribute, WEBIDL_CloseWatcher_isInstance) --> */
     isInstance: IsInstance<CloseWatcher>;
+};
+
+/** <!-- binding_to(idl, class, WEBIDL_CollectorLogAnalyzer) --> */
+interface CollectorLogAnalyzer {
+    /** <!-- binding_to(idl, method, WEBIDL_CollectorLogAnalyzer_getInitProgress) --> */
+    getInitProgress(): number;
+    /** <!-- binding_to(idl, method, WEBIDL_CollectorLogAnalyzer_getNodeAdjacents) --> */
+    getNodeAdjacents(node: CollectorLogNode): Promise<CollectorLogNodeAdjacents>;
+    /** <!-- binding_to(idl, method, WEBIDL_CollectorLogAnalyzer_getPathToRoot) --> */
+    getPathToRoot(node: CollectorLogNode): Promise<CollectorLogRootPath>;
+    /** <!-- binding_to(idl, method, WEBIDL_CollectorLogAnalyzer_getQueryProgress) --> */
+    getQueryProgress(): number;
+    /** <!-- binding_to(idl, method, WEBIDL_CollectorLogAnalyzer_init) --> */
+    init(): Promise<void>;
+    /** <!-- binding_to(idl, method, WEBIDL_CollectorLogAnalyzer_queryNodes) --> */
+    queryNodes(query: string): Promise<CollectorLogNode[]>;
+    /** <!-- binding_to(idl, method, WEBIDL_CollectorLogAnalyzer_sampleNodes) --> */
+    sampleNodes(): Promise<CollectorLogNode[]>;
+    /** <!-- binding_to(idl, const, WEBIDL_CollectorLogAnalyzer_MAX_QUERY_RESULTS) --> */
+    readonly MAX_QUERY_RESULTS: 500;
+    /** <!-- binding_to(idl, const, WEBIDL_CollectorLogAnalyzer_SAMPLE_COUNT) --> */
+    readonly SAMPLE_COUNT: 20;
+}
+
+declare var CollectorLogAnalyzer: {
+    prototype: CollectorLogAnalyzer;
+    new(ccLogPath: string, gcLogPath: string): CollectorLogAnalyzer;
+    /** <!-- binding_to(idl, const, WEBIDL_CollectorLogAnalyzer_MAX_QUERY_RESULTS) --> */
+    readonly MAX_QUERY_RESULTS: 500;
+    /** <!-- binding_to(idl, const, WEBIDL_CollectorLogAnalyzer_SAMPLE_COUNT) --> */
+    readonly SAMPLE_COUNT: 20;
+    /** <!-- binding_to(idl, attribute, WEBIDL_CollectorLogAnalyzer_isInstance) --> */
+    isInstance: IsInstance<CollectorLogAnalyzer>;
 };
 
 /** <!-- binding_to(idl, class, WEBIDL_CommandEvent) --> */
@@ -14516,6 +14799,7 @@ interface Document extends Node, ARIANotifyMixin, DocumentOrShadowRoot, FontFace
     createEvent(eventInterface: "ScrollAreaEvent"): ScrollAreaEvent;
     createEvent(eventInterface: "SecurityPolicyViolationEvent"): SecurityPolicyViolationEvent;
     createEvent(eventInterface: "SimpleGestureEvent"): SimpleGestureEvent;
+    createEvent(eventInterface: "SpeechRecognitionErrorEvent"): SpeechRecognitionErrorEvent;
     createEvent(eventInterface: "SpeechRecognitionEvent"): SpeechRecognitionEvent;
     createEvent(eventInterface: "SpeechSynthesisErrorEvent"): SpeechSynthesisErrorEvent;
     createEvent(eventInterface: "SpeechSynthesisEvent"): SpeechSynthesisEvent;
@@ -14605,7 +14889,7 @@ interface Document extends Node, ARIANotifyMixin, DocumentOrShadowRoot, FontFace
     /** <!-- binding_to(idl, method, WEBIDL_Document_hasStorageAccess) --> */
     hasStorageAccess(): Promise<boolean>;
     /** <!-- binding_to(idl, method, WEBIDL_Document_importNode) --> */
-    importNode(node: Node, deep?: boolean): Node;
+    importNode(node: Node, options?: boolean | ImportNodeOptions): Node;
     /** <!-- binding_to(idl, method, WEBIDL_Document_insertAnonymousContent) --> */
     insertAnonymousContent(): AnonymousContent;
     /** <!-- binding_to(idl, method, WEBIDL_Document_isActive) --> */
@@ -15751,6 +16035,8 @@ declare var File: {
     createFromFileName(fileName: string, options?: ChromeFilePropertyBag): Promise<File>;
     /** <!-- binding_to(idl, method, WEBIDL_File_createFromNsIFile) --> */
     createFromNsIFile(file: nsIFile, options?: ChromeFilePropertyBag): Promise<File>;
+    /** <!-- binding_to(idl, method, WEBIDL_File_createFromNsIInputStream) --> */
+    createFromNsIInputStream(inputStream: nsIInputStream, size: number, options?: ChromeFilePropertyBag): File;
 };
 
 /** <!-- binding_to(idl, class, WEBIDL_FileList) --> */
@@ -16170,8 +16456,6 @@ interface FontFace {
     sizeAdjust: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_FontFace_status) --> */
     readonly status: FontFaceLoadStatus;
-    /** <!-- binding_to(idl, attribute, WEBIDL_FontFace_stretch) --> */
-    stretch: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_FontFace_style) --> */
     style: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_FontFace_unicodeRange) --> */
@@ -16182,6 +16466,8 @@ interface FontFace {
     variationSettings: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_FontFace_weight) --> */
     weight: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_FontFace_width) --> */
+    width: string;
     /** <!-- binding_to(idl, method, WEBIDL_FontFace_load) --> */
     load(): Promise<FontFace>;
 }
@@ -18866,6 +19152,10 @@ interface HTMLElement extends Element, ElementCSSInlineStyle, ElementOffsetAttri
     autocapitalize: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_HTMLElement_autocorrect) --> */
     autocorrect: boolean;
+    /** <!-- binding_to(idl, attribute, WEBIDL_HTMLElement_containerTiming) --> */
+    containerTiming: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_HTMLElement_containerTimingIgnore) --> */
+    containerTimingIgnore: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_HTMLElement_contentEditable) --> */
     contentEditable: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_HTMLElement_dir) --> */
@@ -20815,6 +21105,8 @@ interface HTMLTemplateElement extends HTMLElement {
     readonly content: DocumentFragment;
     /** <!-- binding_to(idl, attribute, WEBIDL_HTMLTemplateElement_shadowRootClonable) --> */
     shadowRootClonable: boolean;
+    /** <!-- binding_to(idl, attribute, WEBIDL_HTMLTemplateElement_shadowRootCustomElementRegistry) --> */
+    shadowRootCustomElementRegistry: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_HTMLTemplateElement_shadowRootDelegatesFocus) --> */
     shadowRootDelegatesFocus: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_HTMLTemplateElement_shadowRootMode) --> */
@@ -21384,6 +21676,10 @@ interface IDBIndex {
     getAllRecords(options?: IDBGetAllOptions): IDBRequest;
     /** <!-- binding_to(idl, method, WEBIDL_IDBIndex_getKey) --> */
     getKey(query: any): IDBRequest;
+    /** <!-- binding_to(idl, method, WEBIDL_IDBIndex_mozGetAll) --> */
+    mozGetAll(queryOrOptions?: any, count?: number): IDBRequest;
+    /** <!-- binding_to(idl, method, WEBIDL_IDBIndex_mozGetAllKeys) --> */
+    mozGetAllKeys(queryOrOptions?: any, count?: number): IDBRequest;
     /** <!-- binding_to(idl, method, WEBIDL_IDBIndex_openCursor) --> */
     openCursor(query?: any, direction?: IDBCursorDirection): IDBRequest;
     /** <!-- binding_to(idl, method, WEBIDL_IDBIndex_openKeyCursor) --> */
@@ -21462,6 +21758,8 @@ interface IDBObjectStore {
     getKey(key: any): IDBRequest;
     /** <!-- binding_to(idl, method, WEBIDL_IDBObjectStore_index) --> */
     index(name: string): IDBIndex;
+    /** <!-- binding_to(idl, method, WEBIDL_IDBObjectStore_mozGetAll) --> */
+    mozGetAll(queryOrOptions?: any, count?: number): IDBRequest;
     /** <!-- binding_to(idl, method, WEBIDL_IDBObjectStore_openCursor) --> */
     openCursor(range?: any, direction?: IDBCursorDirection): IDBRequest;
     /** <!-- binding_to(idl, method, WEBIDL_IDBObjectStore_openKeyCursor) --> */
@@ -21910,6 +22208,8 @@ declare var InferenceSession: {
     isInstance: IsInstance<InferenceSession>;
     /** <!-- binding_to(idl, method, WEBIDL_InferenceSession_create) --> */
     create(uriOrBuffer: string | Uint8Array, options?: InferenceSessionSessionOptions): Promise<InferenceSession>;
+    /** <!-- binding_to(idl, method, WEBIDL_InferenceSession_isAvailable) --> */
+    isAvailable(): boolean;
 };
 
 /** <!-- binding_to(idl, class, WEBIDL_InputEvent) --> */
@@ -24035,6 +24335,25 @@ declare var MatchPatternSet: {
     isInstance: IsInstance<MatchPatternSet>;
 };
 
+/** <!-- binding_to(idl, class, WEBIDL_MathMLAnchorElement) --> */
+interface MathMLAnchorElement extends MathMLElement, HyperlinkElementUtils {
+    /** <!-- binding_to(idl, attribute, WEBIDL_MathMLAnchorElement_href) --> */
+    href: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_MathMLAnchorElement_target) --> */
+    target: string;
+    addEventListener<K extends keyof MathMLElementEventMap>(type: K, listener: (this: MathMLAnchorElement, ev: MathMLElementEventMap[K]) => any, options?: boolean | AddEventListenerOptions): void;
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void;
+    removeEventListener<K extends keyof MathMLElementEventMap>(type: K, listener: (this: MathMLAnchorElement, ev: MathMLElementEventMap[K]) => any, options?: boolean | EventListenerOptions): void;
+    removeEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions): void;
+}
+
+declare var MathMLAnchorElement: {
+    prototype: MathMLAnchorElement;
+    new(): MathMLAnchorElement;
+    /** <!-- binding_to(idl, attribute, WEBIDL_MathMLAnchorElement_isInstance) --> */
+    isInstance: IsInstance<MathMLAnchorElement>;
+};
+
 interface MathMLElementEventMap extends ElementEventMap, GlobalEventHandlersEventMap, OnErrorEventHandlerForNodesEventMap, TouchEventHandlersEventMap {
 }
 
@@ -25763,8 +26082,6 @@ interface Navigator extends GlobalPrivacyControl, NavigatorAutomationInformation
     readonly permissions: Permissions;
     /** <!-- binding_to(idl, attribute, WEBIDL_Navigator_plugins) --> */
     readonly plugins: PluginArray;
-    /** <!-- binding_to(idl, attribute, WEBIDL_Navigator_privateAttribution) --> */
-    readonly privateAttribution: PrivateAttribution;
     /** <!-- binding_to(idl, attribute, WEBIDL_Navigator_productSub) --> */
     readonly productSub: string;
     /**
@@ -26209,6 +26526,8 @@ interface Notification extends EventTarget {
     readonly icon: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_Notification_lang) --> */
     readonly lang: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_Notification_navigate) --> */
+    readonly navigate: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_Notification_onclick) --> */
     onclick: ((this: Notification, ev: Event) => any) | null;
     /** <!-- binding_to(idl, attribute, WEBIDL_Notification_onclose) --> */
@@ -27033,6 +27352,31 @@ declare var Performance: {
     isInstance: IsInstance<Performance>;
 };
 
+/** <!-- binding_to(idl, class, WEBIDL_PerformanceContainerTiming) --> */
+interface PerformanceContainerTiming extends PerformanceEntry, PaintTimingMixin {
+    /** <!-- binding_to(idl, attribute, WEBIDL_PerformanceContainerTiming_firstRenderTime) --> */
+    readonly firstRenderTime: DOMHighResTimeStamp;
+    /** <!-- binding_to(idl, attribute, WEBIDL_PerformanceContainerTiming_identifier) --> */
+    readonly identifier: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_PerformanceContainerTiming_intersectionRect) --> */
+    readonly intersectionRect: DOMRectReadOnly;
+    /** <!-- binding_to(idl, attribute, WEBIDL_PerformanceContainerTiming_lastPaintedElement) --> */
+    readonly lastPaintedElement: Element | null;
+    /** <!-- binding_to(idl, attribute, WEBIDL_PerformanceContainerTiming_rootElement) --> */
+    readonly rootElement: HTMLElement | null;
+    /** <!-- binding_to(idl, attribute, WEBIDL_PerformanceContainerTiming_size) --> */
+    readonly size: number;
+    /** <!-- binding_to(idl, method, WEBIDL_PerformanceContainerTiming_toJSON) --> */
+    toJSON(): any;
+}
+
+declare var PerformanceContainerTiming: {
+    prototype: PerformanceContainerTiming;
+    new(): PerformanceContainerTiming;
+    /** <!-- binding_to(idl, attribute, WEBIDL_PerformanceContainerTiming_isInstance) --> */
+    isInstance: IsInstance<PerformanceContainerTiming>;
+};
+
 /** <!-- binding_to(idl, class, WEBIDL_PerformanceEntry) --> */
 interface PerformanceEntry {
     /** <!-- binding_to(idl, attribute, WEBIDL_PerformanceEntry_duration) --> */
@@ -27251,6 +27595,8 @@ interface PerformanceResourceTiming extends PerformanceEntry {
     readonly contentType: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_PerformanceResourceTiming_decodedBodySize) --> */
     readonly decodedBodySize: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_PerformanceResourceTiming_deliveryType) --> */
+    readonly deliveryType: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_PerformanceResourceTiming_domainLookupEnd) --> */
     readonly domainLookupEnd: DOMHighResTimeStamp;
     /** <!-- binding_to(idl, attribute, WEBIDL_PerformanceResourceTiming_domainLookupStart) --> */
@@ -27767,6 +28113,8 @@ interface PlacesVisit extends PlacesEvent {
     readonly typedCount: number;
     /** <!-- binding_to(idl, attribute, WEBIDL_PlacesVisit_url) --> */
     readonly url: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_PlacesVisit_userContextId) --> */
+    readonly userContextId: number;
     /** <!-- binding_to(idl, attribute, WEBIDL_PlacesVisit_visitCount) --> */
     readonly visitCount: number;
     /** <!-- binding_to(idl, attribute, WEBIDL_PlacesVisit_visitId) --> */
@@ -28044,30 +28392,14 @@ declare var PrecompiledScript: {
     isInstance: IsInstance<PrecompiledScript>;
 };
 
-/**
- * <!-- binding_to(idl, class, WEBIDL_PrivateAttribution) -->
- * Available only in secure contexts.
- */
-interface PrivateAttribution {
-    /** <!-- binding_to(idl, method, WEBIDL_PrivateAttribution_measureConversion) --> */
-    measureConversion(options: PrivateAttributionConversionOptions): void;
-    /** <!-- binding_to(idl, method, WEBIDL_PrivateAttribution_saveImpression) --> */
-    saveImpression(options: PrivateAttributionImpressionOptions): void;
-}
-
-declare var PrivateAttribution: {
-    prototype: PrivateAttribution;
-    new(): PrivateAttribution;
-    /** <!-- binding_to(idl, attribute, WEBIDL_PrivateAttribution_isInstance) --> */
-    isInstance: IsInstance<PrivateAttribution>;
-};
-
 /** <!-- binding_to(idl, class, WEBIDL_ProcessMessageManager) --> */
 interface ProcessMessageManager extends MessageSender, ProcessScriptLoader {
     /** <!-- binding_to(idl, attribute, WEBIDL_ProcessMessageManager_isInProcess) --> */
     readonly isInProcess: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_ProcessMessageManager_osPid) --> */
     readonly osPid: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_ProcessMessageManager_processParent) --> */
+    readonly processParent: nsIDOMProcessParent;
 }
 
 declare var ProcessMessageManager: {
@@ -28098,6 +28430,19 @@ declare var ProcessingInstruction: {
     new(): ProcessingInstruction;
     /** <!-- binding_to(idl, attribute, WEBIDL_ProcessingInstruction_isInstance) --> */
     isInstance: IsInstance<ProcessingInstruction>;
+};
+
+/** <!-- binding_to(idl, class, WEBIDL_ProfilerCounter) --> */
+interface ProfilerCounter {
+    /** <!-- binding_to(idl, method, WEBIDL_ProfilerCounter_add) --> */
+    add(delta: number): void;
+}
+
+declare var ProfilerCounter: {
+    prototype: ProfilerCounter;
+    new(): ProfilerCounter;
+    /** <!-- binding_to(idl, attribute, WEBIDL_ProfilerCounter_isInstance) --> */
+    isInstance: IsInstance<ProfilerCounter>;
 };
 
 /** <!-- binding_to(idl, class, WEBIDL_ProgressEvent) --> */
@@ -28871,13 +29216,13 @@ interface RTCSctpTransport extends EventTarget {
     /** <!-- binding_to(idl, attribute, WEBIDL_RTCSctpTransport_maxChannels) --> */
     readonly maxChannels: number | null;
     /** <!-- binding_to(idl, attribute, WEBIDL_RTCSctpTransport_maxMessageSize) --> */
-    readonly maxMessageSize: number;
+    readonly maxMessageSize: number | null;
     /** <!-- binding_to(idl, attribute, WEBIDL_RTCSctpTransport_onstatechange) --> */
     onstatechange: ((this: RTCSctpTransport, ev: Event) => any) | null;
     /** <!-- binding_to(idl, attribute, WEBIDL_RTCSctpTransport_state) --> */
     readonly state: RTCSctpTransportState;
     /** <!-- binding_to(idl, attribute, WEBIDL_RTCSctpTransport_transport) --> */
-    readonly transport: RTCDtlsTransport;
+    readonly transport: RTCDtlsTransport | null;
     addEventListener<K extends keyof RTCSctpTransportEventMap>(type: K, listener: (this: RTCSctpTransport, ev: RTCSctpTransportEventMap[K]) => any, options?: boolean | AddEventListenerOptions): void;
     addEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void;
     removeEventListener<K extends keyof RTCSctpTransportEventMap>(type: K, listener: (this: RTCSctpTransport, ev: RTCSctpTransportEventMap[K]) => any, options?: boolean | EventListenerOptions): void;
@@ -29357,11 +29702,9 @@ declare var Response: {
 };
 
 /** <!-- binding_to(idl, class, WEBIDL_SVGAElement) --> */
-interface SVGAElement extends SVGGraphicsElement, SVGURIReference {
+interface SVGAElement extends SVGGraphicsElement, HyperlinkElementUtils, SVGURIReference {
     /** <!-- binding_to(idl, attribute, WEBIDL_SVGAElement_download) --> */
     download: string;
-    /** <!-- binding_to(idl, attribute, WEBIDL_SVGAElement_hreflang) --> */
-    hreflang: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_SVGAElement_ping) --> */
     ping: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_SVGAElement_referrerPolicy) --> */
@@ -29372,10 +29715,6 @@ interface SVGAElement extends SVGGraphicsElement, SVGURIReference {
     readonly relList: DOMTokenList;
     /** <!-- binding_to(idl, attribute, WEBIDL_SVGAElement_target) --> */
     readonly target: SVGAnimatedString;
-    /** <!-- binding_to(idl, attribute, WEBIDL_SVGAElement_text) --> */
-    text: string;
-    /** <!-- binding_to(idl, attribute, WEBIDL_SVGAElement_type) --> */
-    type: string;
     addEventListener<K extends keyof SVGElementEventMap>(type: K, listener: (this: SVGAElement, ev: SVGElementEventMap[K]) => any, options?: boolean | AddEventListenerOptions): void;
     addEventListener(type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void;
     removeEventListener<K extends keyof SVGElementEventMap>(type: K, listener: (this: SVGAElement, ev: SVGElementEventMap[K]) => any, options?: boolean | EventListenerOptions): void;
@@ -32392,7 +32731,7 @@ interface Serial extends EventTarget {
     /** <!-- binding_to(idl, method, WEBIDL_Serial_resetToDefaultMockDevices) --> */
     resetToDefaultMockDevices(): Promise<void>;
     /** <!-- binding_to(idl, method, WEBIDL_Serial_simulateDeviceConnection) --> */
-    simulateDeviceConnection(deviceId: string, devicePath: string, vendorId?: number, productId?: number): Promise<void>;
+    simulateDeviceConnection(deviceId: string, devicePath: string, vendorId?: number, productId?: number, bluetoothServiceClassId?: string): Promise<void>;
     /** <!-- binding_to(idl, method, WEBIDL_Serial_simulateDeviceDisconnection) --> */
     simulateDeviceDisconnection(deviceId: string): Promise<void>;
     addEventListener<K extends keyof SerialEventMap>(type: K, listener: (this: Serial, ev: SerialEventMap[K]) => any, options?: boolean | AddEventListenerOptions): void;
@@ -32830,7 +33169,7 @@ interface SpeechGrammarList {
     /** <!-- binding_to(idl, method, WEBIDL_SpeechGrammarList_addFromURI) --> */
     addFromURI(src: string, weight?: number): void;
     /** <!-- binding_to(idl, method, WEBIDL_SpeechGrammarList_item) --> */
-    item(index: number): SpeechGrammar;
+    item(index: number): SpeechGrammar | null;
     [index: number]: SpeechGrammar;
 }
 
@@ -32855,7 +33194,10 @@ interface SpeechRecognitionEventMap {
     "start": Event;
 }
 
-/** <!-- binding_to(idl, class, WEBIDL_SpeechRecognition) --> */
+/**
+ * <!-- binding_to(idl, class, WEBIDL_SpeechRecognition) -->
+ * Available only in secure contexts.
+ */
 interface SpeechRecognition extends EventTarget {
     /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognition_continuous) --> */
     continuous: boolean;
@@ -32889,12 +33231,19 @@ interface SpeechRecognition extends EventTarget {
     onspeechstart: ((this: SpeechRecognition, ev: Event) => any) | null;
     /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognition_onstart) --> */
     onstart: ((this: SpeechRecognition, ev: Event) => any) | null;
-    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognition_serviceURI) --> */
-    serviceURI: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognition_phrases) --> */
+    phrases: SpeechRecognitionPhrase[];
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognition_processLocally) --> */
+    processLocally: boolean;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognition_unspokenPunctuation) --> */
+    unspokenPunctuation: boolean;
     /** <!-- binding_to(idl, method, WEBIDL_SpeechRecognition_abort) --> */
     abort(): void;
+    /** <!-- binding_to(idl, method, WEBIDL_SpeechRecognition_getPerfStats) --> */
+    getPerfStats(): Promise<SpeechRecognitionPerfStats>;
     /** <!-- binding_to(idl, method, WEBIDL_SpeechRecognition_start) --> */
-    start(stream?: MediaStream): void;
+    start(): void;
+    start(audioTrack: MediaStreamTrack): void;
     /** <!-- binding_to(idl, method, WEBIDL_SpeechRecognition_stop) --> */
     stop(): void;
     addEventListener<K extends keyof SpeechRecognitionEventMap>(type: K, listener: (this: SpeechRecognition, ev: SpeechRecognitionEventMap[K]) => any, options?: boolean | AddEventListenerOptions): void;
@@ -32908,9 +33257,16 @@ declare var SpeechRecognition: {
     new(): SpeechRecognition;
     /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognition_isInstance) --> */
     isInstance: IsInstance<SpeechRecognition>;
+    /** <!-- binding_to(idl, method, WEBIDL_SpeechRecognition_available) --> */
+    available(options: SpeechRecognitionOptions): Promise<AvailabilityStatus>;
+    /** <!-- binding_to(idl, method, WEBIDL_SpeechRecognition_install) --> */
+    install(options: SpeechRecognitionOptions): Promise<boolean>;
 };
 
-/** <!-- binding_to(idl, class, WEBIDL_SpeechRecognitionAlternative) --> */
+/**
+ * <!-- binding_to(idl, class, WEBIDL_SpeechRecognitionAlternative) -->
+ * Available only in secure contexts.
+ */
 interface SpeechRecognitionAlternative {
     /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionAlternative_confidence) --> */
     readonly confidence: number;
@@ -32925,22 +33281,28 @@ declare var SpeechRecognitionAlternative: {
     isInstance: IsInstance<SpeechRecognitionAlternative>;
 };
 
-/** <!-- binding_to(idl, class, WEBIDL_SpeechRecognitionError) --> */
-interface SpeechRecognitionError extends Event {
-    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionError_error) --> */
+/**
+ * <!-- binding_to(idl, class, WEBIDL_SpeechRecognitionErrorEvent) -->
+ * Available only in secure contexts.
+ */
+interface SpeechRecognitionErrorEvent extends Event {
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionErrorEvent_error) --> */
     readonly error: SpeechRecognitionErrorCode;
-    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionError_message) --> */
-    readonly message: string | null;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionErrorEvent_message) --> */
+    readonly message: string;
 }
 
-declare var SpeechRecognitionError: {
-    prototype: SpeechRecognitionError;
-    new(type: string, eventInitDict?: SpeechRecognitionErrorInit): SpeechRecognitionError;
-    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionError_isInstance) --> */
-    isInstance: IsInstance<SpeechRecognitionError>;
+declare var SpeechRecognitionErrorEvent: {
+    prototype: SpeechRecognitionErrorEvent;
+    new(type: string, eventInitDict: SpeechRecognitionErrorEventInit): SpeechRecognitionErrorEvent;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionErrorEvent_isInstance) --> */
+    isInstance: IsInstance<SpeechRecognitionErrorEvent>;
 };
 
-/** <!-- binding_to(idl, class, WEBIDL_SpeechRecognitionEvent) --> */
+/**
+ * <!-- binding_to(idl, class, WEBIDL_SpeechRecognitionEvent) -->
+ * Available only in secure contexts.
+ */
 interface SpeechRecognitionEvent extends Event {
     /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionEvent_emma) --> */
     readonly emma: Document | null;
@@ -32954,19 +33316,40 @@ interface SpeechRecognitionEvent extends Event {
 
 declare var SpeechRecognitionEvent: {
     prototype: SpeechRecognitionEvent;
-    new(type: string, eventInitDict?: SpeechRecognitionEventInit): SpeechRecognitionEvent;
+    new(type: string, eventInitDict: SpeechRecognitionEventInit): SpeechRecognitionEvent;
     /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionEvent_isInstance) --> */
     isInstance: IsInstance<SpeechRecognitionEvent>;
 };
 
-/** <!-- binding_to(idl, class, WEBIDL_SpeechRecognitionResult) --> */
+/**
+ * <!-- binding_to(idl, class, WEBIDL_SpeechRecognitionPhrase) -->
+ * Available only in secure contexts.
+ */
+interface SpeechRecognitionPhrase {
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionPhrase_boost) --> */
+    readonly boost: number;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionPhrase_phrase) --> */
+    readonly phrase: string;
+}
+
+declare var SpeechRecognitionPhrase: {
+    prototype: SpeechRecognitionPhrase;
+    new(phrase: string, boost?: number): SpeechRecognitionPhrase;
+    /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionPhrase_isInstance) --> */
+    isInstance: IsInstance<SpeechRecognitionPhrase>;
+};
+
+/**
+ * <!-- binding_to(idl, class, WEBIDL_SpeechRecognitionResult) -->
+ * Available only in secure contexts.
+ */
 interface SpeechRecognitionResult {
     /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionResult_isFinal) --> */
     readonly isFinal: boolean;
     /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionResult_length) --> */
     readonly length: number;
     /** <!-- binding_to(idl, method, WEBIDL_SpeechRecognitionResult_item) --> */
-    item(index: number): SpeechRecognitionAlternative;
+    item(index: number): SpeechRecognitionAlternative | null;
     [index: number]: SpeechRecognitionAlternative;
 }
 
@@ -32977,12 +33360,15 @@ declare var SpeechRecognitionResult: {
     isInstance: IsInstance<SpeechRecognitionResult>;
 };
 
-/** <!-- binding_to(idl, class, WEBIDL_SpeechRecognitionResultList) --> */
+/**
+ * <!-- binding_to(idl, class, WEBIDL_SpeechRecognitionResultList) -->
+ * Available only in secure contexts.
+ */
 interface SpeechRecognitionResultList {
     /** <!-- binding_to(idl, attribute, WEBIDL_SpeechRecognitionResultList_length) --> */
     readonly length: number;
     /** <!-- binding_to(idl, method, WEBIDL_SpeechRecognitionResultList_item) --> */
-    item(index: number): SpeechRecognitionResult;
+    item(index: number): SpeechRecognitionResult | null;
     [index: number]: SpeechRecognitionResult;
 }
 
@@ -33478,6 +33864,10 @@ declare var SubmitEvent: {
  * Available only in secure contexts.
  */
 interface SubtleCrypto {
+    /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_decapsulateBits) --> */
+    decapsulateBits(decapsulationAlgorithm: AlgorithmIdentifier, decapsulationKey: CryptoKey, ciphertext: BufferSource): Promise<ArrayBuffer>;
+    /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_decapsulateKey) --> */
+    decapsulateKey(decapsulationAlgorithm: AlgorithmIdentifier, decapsulationKey: CryptoKey, ciphertext: BufferSource, sharedKeyAlgorithm: AlgorithmIdentifier, extractable: boolean, keyUsages: KeyUsage[]): Promise<CryptoKey>;
     /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_decrypt) --> */
     decrypt(algorithm: AlgorithmIdentifier, key: CryptoKey, data: BufferSource): Promise<any>;
     /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_deriveBits) --> */
@@ -33486,6 +33876,10 @@ interface SubtleCrypto {
     deriveKey(algorithm: AlgorithmIdentifier, baseKey: CryptoKey, derivedKeyType: AlgorithmIdentifier, extractable: boolean, keyUsages: KeyUsage[]): Promise<any>;
     /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_digest) --> */
     digest(algorithm: AlgorithmIdentifier, data: BufferSource): Promise<any>;
+    /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_encapsulateBits) --> */
+    encapsulateBits(encapsulationAlgorithm: AlgorithmIdentifier, encapsulationKey: CryptoKey): Promise<EncapsulatedBits>;
+    /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_encapsulateKey) --> */
+    encapsulateKey(encapsulationAlgorithm: AlgorithmIdentifier, encapsulationKey: CryptoKey, sharedKeyAlgorithm: AlgorithmIdentifier, extractable: boolean, keyUsages: KeyUsage[]): Promise<EncapsulatedKey>;
     /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_encrypt) --> */
     encrypt(algorithm: AlgorithmIdentifier, key: CryptoKey, data: BufferSource): Promise<any>;
     /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_exportKey) --> */
@@ -34376,6 +34770,31 @@ declare var TextFormatUpdateEvent: {
     new(type: string, options?: TextFormatUpdateEventInit): TextFormatUpdateEvent;
     /** <!-- binding_to(idl, attribute, WEBIDL_TextFormatUpdateEvent_isInstance) --> */
     isInstance: IsInstance<TextFormatUpdateEvent>;
+};
+
+/** <!-- binding_to(idl, class, WEBIDL_TextGenerator) --> */
+interface TextGenerator {
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerator_device) --> */
+    readonly device: string;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerator_deviceKind) --> */
+    readonly deviceKind: HWInferenceDeviceKind;
+    /** <!-- binding_to(idl, method, WEBIDL_TextGenerator_cancel) --> */
+    cancel(): void;
+    /** <!-- binding_to(idl, method, WEBIDL_TextGenerator_clear) --> */
+    clear(): void;
+    /** <!-- binding_to(idl, method, WEBIDL_TextGenerator_generate) --> */
+    generate(request: TextGenerationRequest, onDelta?: TextGenerationDeltaCallback): Promise<TextGenerationResult>;
+    /** <!-- binding_to(idl, method, WEBIDL_TextGenerator_terminate) --> */
+    terminate(): void;
+}
+
+declare var TextGenerator: {
+    prototype: TextGenerator;
+    new(): TextGenerator;
+    /** <!-- binding_to(idl, attribute, WEBIDL_TextGenerator_isInstance) --> */
+    isInstance: IsInstance<TextGenerator>;
+    /** <!-- binding_to(idl, method, WEBIDL_TextGenerator_create) --> */
+    create(model: Blob, options?: TextGeneratorCreateOptions): Promise<TextGenerator>;
 };
 
 /** <!-- binding_to(idl, class, WEBIDL_TextMetrics) --> */
@@ -35864,6 +36283,8 @@ interface VideoEncoder extends EventTarget {
     encode(frame: VideoFrame, options?: VideoEncoderEncodeOptions): void;
     /** <!-- binding_to(idl, method, WEBIDL_VideoEncoder_flush) --> */
     flush(): Promise<void>;
+    /** <!-- binding_to(idl, method, WEBIDL_VideoEncoder_mozRequestDebugInfo) --> */
+    mozRequestDebugInfo(): Promise<EncoderDebugInfo>;
     /** <!-- binding_to(idl, method, WEBIDL_VideoEncoder_reset) --> */
     reset(): void;
     addEventListener<K extends keyof VideoEncoderEventMap>(type: K, listener: (this: VideoEncoder, ev: VideoEncoderEventMap[K]) => any, options?: boolean | AddEventListenerOptions): void;
@@ -36007,12 +36428,12 @@ interface ViewTimeline extends ScrollTimeline {
     /** <!-- binding_to(idl, attribute, WEBIDL_ViewTimeline_startOffset) --> */
     readonly startOffset: CSSNumericValue | null;
     /** <!-- binding_to(idl, attribute, WEBIDL_ViewTimeline_subject) --> */
-    readonly subject: Element | null;
+    readonly subject: Element;
 }
 
 declare var ViewTimeline: {
     prototype: ViewTimeline;
-    new(options?: ViewTimelineOptions): ViewTimeline;
+    new(options: ViewTimelineOptions): ViewTimeline;
     /** <!-- binding_to(idl, attribute, WEBIDL_ViewTimeline_isInstance) --> */
     isInstance: IsInstance<ViewTimeline>;
 };
@@ -40245,10 +40666,14 @@ interface WebTransport {
     readonly congestionControl: WebTransportCongestionControl;
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransport_datagrams) --> */
     readonly datagrams: WebTransportDatagramDuplexStream;
+    /** <!-- binding_to(idl, attribute, WEBIDL_WebTransport_draining) --> */
+    readonly draining: Promise<void>;
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransport_incomingBidirectionalStreams) --> */
     readonly incomingBidirectionalStreams: ReadableStream;
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransport_incomingUnidirectionalStreams) --> */
     readonly incomingUnidirectionalStreams: ReadableStream;
+    /** <!-- binding_to(idl, attribute, WEBIDL_WebTransport_protocol) --> */
+    readonly protocol: string;
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransport_ready) --> */
     readonly ready: Promise<void>;
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransport_reliability) --> */
@@ -40257,8 +40682,12 @@ interface WebTransport {
     close(closeInfo?: WebTransportCloseInfo): void;
     /** <!-- binding_to(idl, method, WEBIDL_WebTransport_createBidirectionalStream) --> */
     createBidirectionalStream(options?: WebTransportSendStreamOptions): Promise<WebTransportBidirectionalStream>;
+    /** <!-- binding_to(idl, method, WEBIDL_WebTransport_createSendGroup) --> */
+    createSendGroup(): WebTransportSendGroup;
     /** <!-- binding_to(idl, method, WEBIDL_WebTransport_createUnidirectionalStream) --> */
     createUnidirectionalStream(options?: WebTransportSendStreamOptions): Promise<WebTransportSendStream>;
+    /** <!-- binding_to(idl, method, WEBIDL_WebTransport_exportKeyingMaterial) --> */
+    exportKeyingMaterial(label: BufferSource, context?: BufferSource): Promise<Uint8Array>;
     /** <!-- binding_to(idl, method, WEBIDL_WebTransport_getStats) --> */
     getStats(): Promise<WebTransportStats>;
 }
@@ -40307,6 +40736,8 @@ interface WebTransportDatagramDuplexStream {
     readonly readable: ReadableStream;
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportDatagramDuplexStream_writable) --> */
     readonly writable: WritableStream;
+    /** <!-- binding_to(idl, method, WEBIDL_WebTransportDatagramDuplexStream_createWritable) --> */
+    createWritable(options?: WebTransportSendOptions): WebTransportDatagramsWritable;
 }
 
 declare var WebTransportDatagramDuplexStream: {
@@ -40314,6 +40745,24 @@ declare var WebTransportDatagramDuplexStream: {
     new(): WebTransportDatagramDuplexStream;
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportDatagramDuplexStream_isInstance) --> */
     isInstance: IsInstance<WebTransportDatagramDuplexStream>;
+};
+
+/**
+ * <!-- binding_to(idl, class, WEBIDL_WebTransportDatagramsWritable) -->
+ * Available only in secure contexts.
+ */
+interface WebTransportDatagramsWritable extends WritableStream {
+    /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportDatagramsWritable_sendGroup) --> */
+    sendGroup: WebTransportSendGroup | null;
+    /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportDatagramsWritable_sendOrder) --> */
+    sendOrder: number;
+}
+
+declare var WebTransportDatagramsWritable: {
+    prototype: WebTransportDatagramsWritable;
+    new(): WebTransportDatagramsWritable;
+    /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportDatagramsWritable_isInstance) --> */
+    isInstance: IsInstance<WebTransportDatagramsWritable>;
 };
 
 /**
@@ -40351,12 +40800,30 @@ declare var WebTransportReceiveStream: {
 };
 
 /**
+ * <!-- binding_to(idl, class, WEBIDL_WebTransportSendGroup) -->
+ * Available only in secure contexts.
+ */
+interface WebTransportSendGroup {
+    /** <!-- binding_to(idl, method, WEBIDL_WebTransportSendGroup_getStats) --> */
+    getStats(): Promise<WebTransportSendStreamStats>;
+}
+
+declare var WebTransportSendGroup: {
+    prototype: WebTransportSendGroup;
+    new(): WebTransportSendGroup;
+    /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportSendGroup_isInstance) --> */
+    isInstance: IsInstance<WebTransportSendGroup>;
+};
+
+/**
  * <!-- binding_to(idl, class, WEBIDL_WebTransportSendStream) -->
  * Available only in secure contexts.
  */
 interface WebTransportSendStream extends WritableStream {
+    /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportSendStream_sendGroup) --> */
+    sendGroup: WebTransportSendGroup | null;
     /** <!-- binding_to(idl, attribute, WEBIDL_WebTransportSendStream_sendOrder) --> */
-    sendOrder: number | null;
+    sendOrder: number;
     /** <!-- binding_to(idl, method, WEBIDL_WebTransportSendStream_getStats) --> */
     getStats(): Promise<WebTransportSendStreamStats>;
 }
@@ -40946,7 +41413,7 @@ interface WindowGlobalParent extends WindowContext {
     /** <!-- binding_to(idl, attribute, WEBIDL_WindowGlobalParent_rootFrameLoader) --> */
     readonly rootFrameLoader: FrameLoader | null;
     /** <!-- binding_to(idl, method, WEBIDL_WindowGlobalParent_drawSnapshot) --> */
-    drawSnapshot(rect: DOMRect | null, scale: number, backgroundColor: string, resetScrollPosition?: boolean): Promise<ImageBitmap>;
+    drawSnapshot(rect: DOMRect | null, scale: number, backgroundColor: string, options?: DrawSnapshotOptions): Promise<ImageBitmap>;
     /** <!-- binding_to(idl, method, WEBIDL_WindowGlobalParent_getActor) --> */
     getActor(name: string): JSWindowActorParent;
     /** <!-- binding_to(idl, method, WEBIDL_WindowGlobalParent_getExistingActor) --> */
@@ -40955,6 +41422,8 @@ interface WindowGlobalParent extends WindowContext {
     hasActivePeerConnections(): boolean;
     /** <!-- binding_to(idl, method, WEBIDL_WindowGlobalParent_permitUnload) --> */
     permitUnload(action?: PermitUnloadAction, timeout?: number): Promise<boolean>;
+    /** <!-- binding_to(idl, method, WEBIDL_WindowGlobalParent_requestDocumentLanguageMetadata) --> */
+    requestDocumentLanguageMetadata(options: DocumentLanguageMetadataRequestOptions): Promise<DocumentLanguageMetadata | null>;
     /** <!-- binding_to(idl, method, WEBIDL_WindowGlobalParent_updateFullscreenKeyboardLockStatus) --> */
     updateFullscreenKeyboardLockStatus(status: FullscreenKeyboardLock): void;
 }
@@ -42356,6 +42825,8 @@ declare namespace ChromeUtils {
     var recentJSDevError: any;
     /** <!-- binding_to(idl, method, WEBIDL_ChromeUtils_CreateOriginAttributesFromOriginSuffix) --> */
     function CreateOriginAttributesFromOriginSuffix(suffix: string): OriginAttributesDictionary;
+    /** <!-- binding_to(idl, method, WEBIDL_ChromeUtils_addProfilerCounter) --> */
+    function addProfilerCounter(options: ProfilerCounterOptions): ProfilerCounter;
     /** <!-- binding_to(idl, method, WEBIDL_ChromeUtils_addProfilerMarker) --> */
     function addProfilerMarker(name: string, options?: ProfilerMarkerOptions | number, data?: any): void;
     /** <!-- binding_to(idl, method, WEBIDL_ChromeUtils_androidMoveTaskToBack) --> */
@@ -42454,6 +42925,8 @@ declare namespace ChromeUtils {
     function importESModule(aResourceURI: string, aOptions?: ImportESModuleOptionsDictionary): any;
     /** <!-- binding_to(idl, method, WEBIDL_ChromeUtils_invalidateResourceCache) --> */
     function invalidateResourceCache(): void;
+    /** <!-- binding_to(idl, method, WEBIDL_ChromeUtils_isBlobURLValid) --> */
+    function isBlobURLValid(principal: Principal, uriString: string): boolean;
     /** <!-- binding_to(idl, method, WEBIDL_ChromeUtils_isClassifierBlockingErrorCode) --> */
     function isClassifierBlockingErrorCode(aError: number): boolean;
     /** <!-- binding_to(idl, method, WEBIDL_ChromeUtils_isDOMObject) --> */
@@ -42521,10 +42994,16 @@ declare namespace ChromeUtils {
     function unregisterWindowActor(aName: string): void;
     /** <!-- binding_to(idl, method, WEBIDL_ChromeUtils_unwaiveXrays) --> */
     function unwaiveXrays(val: any): any;
+    /** <!-- binding_to(idl, method, WEBIDL_ChromeUtils_validateServiceWorkerScope) --> */
+    function validateServiceWorkerScope(principal: Principal, uri: URI): void;
     /** <!-- binding_to(idl, method, WEBIDL_ChromeUtils_vsyncEnabled) --> */
     function vsyncEnabled(): boolean;
     /** <!-- binding_to(idl, method, WEBIDL_ChromeUtils_waiveXrays) --> */
     function waiveXrays(val: any): any;
+}
+
+/** <!-- binding_to(idl, class, WEBIDL_CollectorNodeFlags) --> */
+declare namespace CollectorNodeFlags {
 }
 
 /** <!-- binding_to(idl, class, WEBIDL_FuzzingFunctions) --> */
@@ -42569,6 +43048,12 @@ declare namespace GPUShaderStage {
 
 /** <!-- binding_to(idl, class, WEBIDL_GPUTextureUsage) --> */
 declare namespace GPUTextureUsage {
+}
+
+/** <!-- binding_to(idl, class, WEBIDL_HWInference) --> */
+declare namespace HWInference {
+    /** <!-- binding_to(idl, method, WEBIDL_HWInference_listDevices) --> */
+    function listDevices(): Promise<HWInferenceDevice[]>;
 }
 
 /** <!-- binding_to(idl, class, WEBIDL_IOUtils) --> */
@@ -43276,6 +43761,11 @@ interface SetDeleteObjectCallback {
 interface TestThrowingCallback {
     /** <!-- binding_to(idl, method, WEBIDL_TestThrowingCallback) --> */
     (): void;
+}
+
+interface TextGenerationDeltaCallback {
+    /** <!-- binding_to(idl, method, WEBIDL_TextGenerationDeltaCallback) --> */
+    (text: string): void;
 }
 
 interface ToolExecuteCallback {
@@ -44438,6 +44928,7 @@ type AudioSessionType = "ambient" | "auto" | "play-and-record" | "playback" | "t
 type AutoKeyword = "auto";
 type AutoplayPolicy = "allowed" | "allowed-muted" | "disallowed";
 type AutoplayPolicyMediaType = "audiocontext" | "mediaelement";
+type AvailabilityStatus = "available" | "downloadable" | "downloading" | "unavailable";
 type AvcBitstreamFormat = "annexb" | "avc";
 type Base64URLDecodePadding = "ignore" | "reject" | "require";
 type BinaryType = "arraybuffer" | "blob";
@@ -44465,6 +44956,7 @@ type ChannelCountMode = "clamped-max" | "explicit" | "max";
 type ChannelInterpretation = "discrete" | "speakers";
 type CheckerboardReason = "recent" | "severe";
 type CodecState = "closed" | "configured" | "unconfigured";
+type CollectorLogRootKind = "hard" | "none" | "soft";
 type ColorGamut = "p3" | "rec2020" | "srgb";
 type ColorSpaceConversion = "default" | "none";
 type CompositeOperation = "accumulate" | "add" | "replace";
@@ -44504,7 +44996,7 @@ type ForcedColorsOverride = "active" | "none";
 type FullscreenKeyboardLock = "browser" | "none";
 type GPUAddressMode = "clamp-to-edge" | "mirror-repeat" | "repeat";
 type GPUAutoLayoutMode = "auto";
-type GPUBlendFactor = "constant" | "dst" | "dst-alpha" | "one" | "one-minus-constant" | "one-minus-dst" | "one-minus-dst-alpha" | "one-minus-src" | "one-minus-src-alpha" | "src" | "src-alpha" | "src-alpha-saturated" | "zero";
+type GPUBlendFactor = "constant" | "dst" | "dst-alpha" | "one" | "one-minus-constant" | "one-minus-dst" | "one-minus-dst-alpha" | "one-minus-src" | "one-minus-src-alpha" | "one-minus-src1" | "one-minus-src1-alpha" | "src" | "src-alpha" | "src-alpha-saturated" | "src1" | "src1-alpha" | "zero";
 type GPUBlendOperation = "add" | "max" | "min" | "reverse-subtract" | "subtract";
 type GPUBufferBindingType = "read-only-storage" | "storage" | "uniform";
 type GPUBufferMapState = "mapped" | "pending" | "unmapped";
@@ -44543,6 +45035,8 @@ type GetUserMediaRequestType = "getusermedia" | "recording-device-stopped" | "se
 type GridDeclaration = "explicit" | "implicit";
 type GridTrackState = "removed" | "repeat" | "static";
 type HDCPVersion = "1.0" | "1.1" | "1.2" | "1.3" | "1.4" | "2.0" | "2.1" | "2.2" | "2.3";
+type HWInferenceBackend = "llama.cpp";
+type HWInferenceDeviceKind = "cpu" | "gpu" | "npu";
 type HardwareAcceleration = "no-preference" | "prefer-hardware" | "prefer-software";
 type HashAlgorithm = "sha256" | "sha384" | "sha512";
 type HdrMetadataType = "smpteSt2086" | "smpteSt2094-10" | "smpteSt2094-40";
@@ -44619,7 +45113,6 @@ type PrefersColorSchemeOverride = "dark" | "light" | "none";
 type PrefersReducedMotionOverride = "no-preference" | "none" | "reduce";
 type PremultiplyAlpha = "default" | "none" | "premultiply";
 type PresentationStyle = "attachment" | "inline" | "unspecified";
-type PrivateAttributionImpressionType = "click" | "view";
 type PromiseDebuggingState = "fulfilled" | "pending" | "rejected";
 type PushEncryptionKeyName = "auth" | "p256dh";
 type RTCBundlePolicy = "balanced" | "max-bundle" | "max-compat";
@@ -44682,7 +45175,8 @@ type ShadowRootMode = "closed" | "open";
 type SlotAssignmentMode = "manual" | "named";
 type SocketReadyState = "closed" | "closing" | "halfclosed" | "open" | "opening";
 type SourceBufferAppendMode = "segments" | "sequence";
-type SpeechRecognitionErrorCode = "aborted" | "audio-capture" | "bad-grammar" | "language-not-supported" | "network" | "no-speech" | "not-allowed" | "service-not-allowed";
+type SpeechRecognitionErrorCode = "aborted" | "audio-capture" | "bad-grammar" | "language-not-supported" | "network" | "no-speech" | "not-allowed" | "phrases-not-supported" | "service-not-allowed";
+type SpeechRecognitionQuality = "command" | "conversation" | "dictation";
 type SpeechSynthesisErrorCode = "audio-busy" | "audio-hardware" | "canceled" | "interrupted" | "invalid-argument" | "language-unavailable" | "network" | "synthesis-failed" | "synthesis-unavailable" | "text-too-long" | "voice-unavailable";
 type StreamFilterStatus = "closed" | "disconnected" | "failed" | "finishedtransferringdata" | "suspended" | "transferringdata" | "uninitialized";
 type StringType = "inline" | "literal" | "other" | "stringbuffer";
@@ -44691,6 +45185,10 @@ type TCPReadyState = "closed" | "closing" | "connecting" | "open";
 type TCPSocketBinaryType = "arraybuffer" | "string";
 type TaskPriority = "background" | "user-blocking" | "user-visible";
 type TensorDataLocation = "cpu" | "cpu-pinned" | "gpu-buffer" | "ml-tensor" | "none" | "texture";
+type TextGenerationFinishReason = "cancelled" | "eos" | "length" | "stop-token";
+type TextGenerationKVCacheDtype = "f16" | "f32" | "q4_0" | "q4_1" | "q5_0" | "q5_1" | "q8_0";
+type TextGenerationRole = "assistant" | "system" | "user";
+type TextGenerationSamplerType = "dist" | "logit-bias" | "temperature" | "top-k" | "top-p";
 type TextTrackKind = "captions" | "chapters" | "descriptions" | "metadata" | "subtitles";
 type TextTrackMode = "disabled" | "hidden" | "showing";
 type TouchEventsOverride = "disabled" | "enabled" | "none";
@@ -44709,7 +45207,7 @@ type VisibilityState = "hidden" | "visible";
 type WakeLockType = "screen";
 type WebGLPowerPreference = "default" | "high-performance" | "low-power";
 type WebIDLProcType = "browser" | "extension" | "file" | "forkServer" | "gmpPlugin" | "gpu" | "inference" | "ipdlUnitTest" | "preallocated" | "privilegedabout" | "privilegedmozilla" | "rdd" | "socket" | "unknown" | "utility" | "vr" | "web" | "webIsolated" | "webServiceWorker" | "withCoopCoep";
-type WebIDLUtilityActorName = "audioDecoder_AppleMedia" | "audioDecoder_Generic" | "audioDecoder_WMF" | "jSOracle" | "mfMediaEngineCDM" | "pkcs11Module" | "unknown" | "windowsFileDialog" | "windowsUtils";
+type WebIDLUtilityActorName = "audioDecoder_AppleMedia" | "audioDecoder_Generic" | "audioDecoder_WMF" | "hwInference" | "jSOracle" | "mfMediaEngineCDM" | "pkcs11Module" | "unknown" | "windowsFileDialog" | "windowsUtils";
 type WebTransportCongestionControl = "default" | "low-latency" | "throughput";
 type WebTransportErrorSource = "session" | "stream";
 type WebTransportReliabilityMode = "pending" | "reliable-only" | "supports-unreliable";
@@ -45176,8 +45674,12 @@ interface StyleSheetList {
 }
 
 interface SubtleCrypto {
+    /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_decapsulateKey) --> */
+    decapsulateKey(decapsulationAlgorithm: AlgorithmIdentifier, decapsulationKey: CryptoKey, ciphertext: BufferSource, sharedKeyAlgorithm: AlgorithmIdentifier, extractable: boolean, keyUsages: Iterable<KeyUsage>): Promise<CryptoKey>;
     /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_deriveKey) --> */
     deriveKey(algorithm: AlgorithmIdentifier, baseKey: CryptoKey, derivedKeyType: AlgorithmIdentifier, extractable: boolean, keyUsages: Iterable<KeyUsage>): Promise<any>;
+    /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_encapsulateKey) --> */
+    encapsulateKey(encapsulationAlgorithm: AlgorithmIdentifier, encapsulationKey: CryptoKey, sharedKeyAlgorithm: AlgorithmIdentifier, extractable: boolean, keyUsages: Iterable<KeyUsage>): Promise<EncapsulatedKey>;
     /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_generateKey) --> */
     generateKey(algorithm: AlgorithmIdentifier, extractable: boolean, keyUsages: Iterable<KeyUsage>): Promise<any>;
     /** <!-- binding_to(idl, method, WEBIDL_SubtleCrypto_importKey) --> */

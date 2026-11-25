@@ -5,16 +5,22 @@
 package org.mozilla.fenix.tabgroups
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import junit.framework.TestCase.assertEquals
 import junit.framework.TestCase.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mozilla.fenix.R
 import org.mozilla.fenix.tabstray.TabsTrayTestTag
 import org.mozilla.fenix.tabstray.data.TabsTrayItem
 import org.mozilla.fenix.tabstray.data.createTabGroup
@@ -25,8 +31,9 @@ import org.mozilla.fenix.theme.FirefoxTheme
 @RunWith(AndroidJUnit4::class)
 class TabGroupsPageTest {
 
-    @get:Rule
-    val composeTestRule = createComposeRule()
+    @get:Rule val composeTestRule = createComposeRule()
+
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
     @Test
     fun verifyEmptyState() {
@@ -38,12 +45,12 @@ class TabGroupsPageTest {
                     onEditTabGroupClick = {},
                     onShareTabGroupClick = {},
                     onDeleteTabGroupClick = {},
+                    onCollectionsMigrationCardDismiss = {},
                 )
             }
         }
 
-        composeTestRule.onNodeWithTag(TabsTrayTestTag.EMPTY_TAB_GROUPS_LIST)
-            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(TabsTrayTestTag.EMPTY_TAB_GROUPS_LIST).assertIsDisplayed()
     }
 
     @Test
@@ -55,9 +62,7 @@ class TabGroupsPageTest {
         composeTestRule.setContent {
             FirefoxTheme {
                 TabGroupsPage(
-                    state = TabsTrayState.TabGroupState(
-                        groups = listOf(group),
-                    ),
+                    state = TabsTrayState.TabGroupState(groups = listOf(group)),
                     onTabGroupClick = {
                         groupClicked = true
                         clickedGroup = it
@@ -65,12 +70,12 @@ class TabGroupsPageTest {
                     onEditTabGroupClick = {},
                     onShareTabGroupClick = {},
                     onDeleteTabGroupClick = {},
+                    onCollectionsMigrationCardDismiss = {},
                 )
             }
         }
 
-        composeTestRule.onNodeWithTag("${TabsTrayTestTag.TAB_GROUP_ROOT}.${group.id}")
-            .performClick()
+        composeTestRule.onNodeWithTag("${TabsTrayTestTag.TAB_GROUP_ROOT}.${group.id}").performClick()
 
         assertTrue(groupClicked)
         assertEquals(group, clickedGroup)
@@ -85,9 +90,7 @@ class TabGroupsPageTest {
         composeTestRule.setContent {
             FirefoxTheme {
                 TabGroupsPage(
-                    state = TabsTrayState.TabGroupState(
-                        groups = listOf(group),
-                    ),
+                    state = TabsTrayState.TabGroupState(groups = listOf(group)),
                     onTabGroupClick = {},
                     onDeleteTabGroupClick = {
                         deleteClicked = true
@@ -95,14 +98,13 @@ class TabGroupsPageTest {
                     },
                     onEditTabGroupClick = {},
                     onShareTabGroupClick = {},
+                    onCollectionsMigrationCardDismiss = {},
                 )
             }
         }
 
-        composeTestRule.onAllNodesWithTag(TabsTrayTestTag.TAB_GROUP_THREE_DOT_BUTTON)[0]
-            .performClick()
-        composeTestRule.onNodeWithTag(TabsTrayTestTag.DELETE_TAB_GROUP)
-            .performClick()
+        composeTestRule.onAllNodesWithTag(TabsTrayTestTag.TAB_GROUP_THREE_DOT_BUTTON)[0].performClick()
+        composeTestRule.onNodeWithTag(TabsTrayTestTag.DELETE_TAB_GROUP).performClick()
 
         assertTrue(deleteClicked)
         assertEquals(group, clickedGroup)
@@ -117,9 +119,7 @@ class TabGroupsPageTest {
         composeTestRule.setContent {
             FirefoxTheme {
                 TabGroupsPage(
-                    state = TabsTrayState.TabGroupState(
-                        groups = listOf(group),
-                    ),
+                    state = TabsTrayState.TabGroupState(groups = listOf(group)),
                     onTabGroupClick = {},
                     onDeleteTabGroupClick = {},
                     onEditTabGroupClick = {
@@ -127,16 +127,92 @@ class TabGroupsPageTest {
                         clickedGroup = it
                     },
                     onShareTabGroupClick = {},
+                    onCollectionsMigrationCardDismiss = {},
                 )
             }
         }
 
-        composeTestRule.onAllNodesWithTag(TabsTrayTestTag.TAB_GROUP_THREE_DOT_BUTTON)[0]
-            .performClick()
-        composeTestRule.onNodeWithTag(TabsTrayTestTag.EDIT_TAB_GROUP)
-            .performClick()
+        composeTestRule.onAllNodesWithTag(TabsTrayTestTag.TAB_GROUP_THREE_DOT_BUTTON)[0].performClick()
+        composeTestRule.onNodeWithTag(TabsTrayTestTag.EDIT_TAB_GROUP).performClick()
 
         assertTrue(editClicked)
         assertEquals(group, clickedGroup)
+    }
+
+    @Test
+    fun verifyCollectionsMigrationCardHiddenByDefault() {
+        val group = createTabGroup(title = "Group 1")
+
+        composeTestRule.setContent {
+            FirefoxTheme {
+                TabGroupsPage(
+                    state = TabsTrayState.TabGroupState(groups = listOf(group)),
+                    onTabGroupClick = {},
+                    onEditTabGroupClick = {},
+                    onShareTabGroupClick = {},
+                    onDeleteTabGroupClick = {},
+                    onCollectionsMigrationCardDismiss = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(TabsTrayTestTag.COLLECTIONS_MIGRATION_CARD).assertDoesNotExist()
+    }
+
+    @Test
+    fun verifyCollectionsMigrationCardDisplayed() {
+        val group = createTabGroup(title = "Group 1")
+        val title = context.getString(R.string.collections_migration_homepage_banner_title)
+        val message = context.getString(R.string.collections_migration_homepage_card_message)
+
+        composeTestRule.setContent {
+            FirefoxTheme {
+                TabGroupsPage(
+                    state =
+                        TabsTrayState.TabGroupState(
+                            groups = listOf(group),
+                            showCollectionsMigrationCard = true,
+                        ),
+                    onTabGroupClick = {},
+                    onEditTabGroupClick = {},
+                    onShareTabGroupClick = {},
+                    onDeleteTabGroupClick = {},
+                    onCollectionsMigrationCardDismiss = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(TabsTrayTestTag.COLLECTIONS_MIGRATION_CARD).assertIsDisplayed()
+        composeTestRule.onNodeWithText(title).assertIsDisplayed()
+        composeTestRule.onNodeWithText(message).assertIsDisplayed()
+    }
+
+    @Test
+    fun verifyCollectionsMigrationCardDismiss() {
+        val group = createTabGroup(title = "Group 1")
+        var dismissed = false
+
+        composeTestRule.setContent {
+            FirefoxTheme {
+                TabGroupsPage(
+                    state =
+                        TabsTrayState.TabGroupState(
+                            groups = listOf(group),
+                            showCollectionsMigrationCard = true,
+                        ),
+                    onTabGroupClick = {},
+                    onEditTabGroupClick = {},
+                    onShareTabGroupClick = {},
+                    onDeleteTabGroupClick = {},
+                    onCollectionsMigrationCardDismiss = { dismissed = true },
+                )
+            }
+        }
+
+        composeTestRule
+            .onNode(hasClickAction() and hasAnyAncestor(hasTestTag(TabsTrayTestTag.COLLECTIONS_MIGRATION_CARD)))
+            .performClick()
+
+        assertTrue(dismissed)
     }
 }

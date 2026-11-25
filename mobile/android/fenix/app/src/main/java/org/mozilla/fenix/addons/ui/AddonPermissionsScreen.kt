@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
@@ -23,17 +24,16 @@ import mozilla.components.compose.base.LinkTextState
 import mozilla.components.feature.addons.Addon
 import mozilla.components.feature.addons.Addon.Companion.isAllURLsPermission
 import mozilla.components.feature.addons.Addon.Permission
+import mozilla.components.feature.addons.R as addonsR
+import mozilla.components.feature.addons.ui.PendingExtensionUpdateBanner
 import org.mozilla.fenix.R
 import org.mozilla.fenix.addons.AddonPermissionsUpdateRequest
 import org.mozilla.fenix.compose.list.SwitchListItem
 import org.mozilla.fenix.compose.list.TextListItem
 import org.mozilla.fenix.compose.settings.SettingsSectionHeader
 import org.mozilla.fenix.theme.FirefoxTheme
-import mozilla.components.feature.addons.R as addonsR
 
-/**
- * The permissions screen for an addon which allows a user to edit the optional permissions.
- */
+/** The permissions screen for an addon which allows a user to edit the optional permissions. */
 @Composable
 @Suppress("LongParameterList", "LongMethod", "CognitiveComplexMethod")
 fun AddonPermissionsScreen(
@@ -52,18 +52,25 @@ fun AddonPermissionsScreen(
     requiredDataCollectionPermissions: List<String> = emptyList(),
     hasNoneDataCollection: Boolean = false,
     optionalDataCollectionPermissions: List<Addon.LocalizedPermission> = emptyList(),
+    hasPendingUpdate: Boolean = false,
+    onReviewUpdateClick: () -> Unit = {},
+    onCancelUpdateClick: () -> Unit = {},
 ) {
     Surface {
-        val hasNoPermission = permissions.isEmpty() &&
+        val hasNoPermission =
+            permissions.isEmpty() &&
                 optionalPermissions.isEmpty() &&
                 originPermissions.isEmpty() &&
                 requiredDataCollectionPermissions.isEmpty() &&
-                optionalDataCollectionPermissions.isEmpty() && !hasNoneDataCollection
+                optionalDataCollectionPermissions.isEmpty() &&
+                !hasNoneDataCollection
 
         // Early return with a "no permissions required" message when the add-on doesn't have any permission that we can
         // list in this screen.
         if (hasNoPermission) {
             return@Surface LazyColumn(modifier = Modifier.padding(vertical = 8.dp)) {
+                pendingUpdateItem(hasPendingUpdate, onReviewUpdateClick, onCancelUpdateClick)
+
                 item {
                     TextListItem(
                         label = stringResource(R.string.addons_does_not_require_permissions),
@@ -82,12 +89,12 @@ fun AddonPermissionsScreen(
         }
 
         LazyColumn(modifier = modifier.padding(vertical = 8.dp)) {
+            pendingUpdateItem(hasPendingUpdate, onReviewUpdateClick, onCancelUpdateClick)
+
             if (permissions.isNotEmpty()) {
                 // Required Permissions Header
                 item {
-                    SectionHeader(
-                        label = stringResource(R.string.addons_permissions_heading_required_permissions),
-                    )
+                    SectionHeader(label = stringResource(R.string.addons_permissions_heading_required_permissions))
                 }
 
                 // Required Permissions
@@ -107,9 +114,7 @@ fun AddonPermissionsScreen(
             if (optionalPermissions.isNotEmpty() || originPermissions.isNotEmpty()) {
                 // Optional Section Header
                 item {
-                    SectionHeader(
-                        label = stringResource(id = R.string.addons_permissions_heading_optional_permissions),
-                    )
+                    SectionHeader(label = stringResource(id = R.string.addons_permissions_heading_optional_permissions))
                 }
 
                 // All Sites Toggle if needed
@@ -134,8 +139,7 @@ fun AddonPermissionsScreen(
                     // Hide <all_urls> permission and use the all_urls toggle instead
                     if (!optionalPermission.permission.isAllURLsPermission()) {
                         OptionalPermissionSwitch(
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                             localizedPermission = optionalPermission,
                             type = OptionalPermissionType.PERMISSION,
                             addOptionalPermission = onAddOptionalPermissions,
@@ -174,7 +178,7 @@ fun AddonPermissionsScreen(
                 // Optional Section Header
                 item {
                     SectionHeader(
-                        label = stringResource(id = R.string.addons_permissions_heading_required_data_collection),
+                        label = stringResource(id = R.string.addons_permissions_heading_required_data_collection)
                     )
                 }
 
@@ -193,7 +197,7 @@ fun AddonPermissionsScreen(
             if (optionalDataCollectionPermissions.isNotEmpty()) {
                 item {
                     SectionHeader(
-                        label = stringResource(id = R.string.addons_permissions_heading_optional_data_collection),
+                        label = stringResource(id = R.string.addons_permissions_heading_optional_data_collection)
                     )
                 }
 
@@ -222,29 +226,47 @@ fun AddonPermissionsScreen(
     }
 }
 
+private fun LazyListScope.pendingUpdateItem(
+    hasPendingUpdate: Boolean,
+    onReviewUpdateClick: () -> Unit,
+    onCancelUpdateClick: () -> Unit,
+) {
+    if (hasPendingUpdate) {
+        item {
+            PendingExtensionUpdateBanner(
+                message =
+                    stringResource(addonsR.string.mozac_feature_addons_update_requires_new_settings_this_extension),
+                onReviewClick = onReviewUpdateClick,
+                onCancelClick = onCancelUpdateClick,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+    }
+}
+
 @Composable
 private fun DataCollectionPermission(
     hasNoneDataCollection: Boolean,
     requiredDataCollectionPermissions: List<String>,
 ) {
     TextListItem(
-        label = if (hasNoneDataCollection) {
-            stringResource(id = R.string.addons_permissions_none_required_data_collection_description)
-        } else {
-            stringResource(
-                id = R.string.addons_permissions_required_data_collection_description_2,
-                Addon.formatLocalizedDataCollectionPermissions(requiredDataCollectionPermissions),
-            )
-        },
+        label =
+            if (hasNoneDataCollection) {
+                stringResource(id = R.string.addons_permissions_none_required_data_collection_description)
+            } else {
+                stringResource(
+                    id = R.string.addons_permissions_required_data_collection_description_2,
+                    Addon.formatLocalizedDataCollectionPermissions(requiredDataCollectionPermissions),
+                )
+            },
         maxLabelLines = Int.MAX_VALUE,
         modifier = Modifier.padding(vertical = 8.dp),
     )
 }
 
 /**
- * Toggle that handles requesting adding or removing any all_urls permissions.
- * This includes wildcard urls that are considered all_urls permissions such as
- * http://&#42;/, https:///&#42;/, and file:///&#42;//&#42;
+ * Toggle that handles requesting adding or removing any all_urls permissions. This includes wildcard urls that are
+ * considered all_urls permissions such as http://&#42;/, https:///&#42;/, and file:///&#42;//&#42;
  */
 @Composable
 private fun AllSitesToggle(
@@ -255,8 +277,7 @@ private fun AllSitesToggle(
     SwitchListItem(
         label = stringResource(R.string.addons_permissions_allow_for_all_sites),
         checked = enabledAllowForAll,
-        modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 6.dp),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
         maxLabelLines = Int.MAX_VALUE,
         description = stringResource(R.string.addons_permissions_allow_for_all_sites_subtitle),
         maxDescriptionLines = Int.MAX_VALUE,
@@ -272,11 +293,7 @@ private fun AllSitesToggle(
 
 @Composable
 private fun SectionHeader(label: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         SettingsSectionHeader(text = label)
     }
 }
@@ -284,19 +301,16 @@ private fun SectionHeader(label: String) {
 @Composable
 private fun LearnMoreItem(learnMoreUrl: String, onLearnMoreClick: (String) -> Unit) {
     val learnMoreText = stringResource(addonsR.string.mozac_feature_addons_learn_more)
-    val learnMoreState = LinkTextState(
-        text = learnMoreText,
-        url = learnMoreUrl,
-        onClick = {
-            onLearnMoreClick.invoke(it)
-        },
-    )
+    val learnMoreState =
+        LinkTextState(
+            text = learnMoreText,
+            url = learnMoreUrl,
+            onClick = {
+                onLearnMoreClick.invoke(it)
+            },
+        )
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-    ) {
+    Row(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
         LinkText(
             text = learnMoreText,
             linkTextStates = listOf(learnMoreState),
@@ -304,9 +318,7 @@ private fun LearnMoreItem(learnMoreUrl: String, onLearnMoreClick: (String) -> Un
     }
 }
 
-/**
- * The type of optional permission to render in `OptionalPermissionSwitch`.
- */
+/** The type of optional permission to render in `OptionalPermissionSwitch`. */
 enum class OptionalPermissionType {
     PERMISSION,
     ORIGIN,
@@ -329,20 +341,24 @@ private fun OptionalPermissionSwitch(
         enabled = isEnabled,
         showSwitchAfter = true,
     ) { enabled ->
-        val request = AddonPermissionsUpdateRequest(
-            optionalPermissions = when (type) {
-                OptionalPermissionType.PERMISSION -> listOf(localizedPermission.permission.name)
-                else -> emptyList()
-            },
-            originPermissions = when (type) {
-                OptionalPermissionType.ORIGIN -> listOf(localizedPermission.permission.name)
-                else -> emptyList()
-            },
-            dataCollectionPermissions = when (type) {
-                OptionalPermissionType.DATA_COLLECTION -> listOf(localizedPermission.permission.name)
-                else -> emptyList()
-            },
-        )
+        val request =
+            AddonPermissionsUpdateRequest(
+                optionalPermissions =
+                    when (type) {
+                        OptionalPermissionType.PERMISSION -> listOf(localizedPermission.permission.name)
+                        else -> emptyList()
+                    },
+                originPermissions =
+                    when (type) {
+                        OptionalPermissionType.ORIGIN -> listOf(localizedPermission.permission.name)
+                        else -> emptyList()
+                    },
+                dataCollectionPermissions =
+                    when (type) {
+                        OptionalPermissionType.DATA_COLLECTION -> listOf(localizedPermission.permission.name)
+                        else -> emptyList()
+                    },
+            )
 
         if (enabled) {
             addOptionalPermission(request)
@@ -354,9 +370,7 @@ private fun OptionalPermissionSwitch(
     if (localizedPermission.permission.name == "userScripts") {
         InfoCard(
             type = InfoType.Warning,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
             description = stringResource(addonsR.string.mozac_feature_addons_permissions_user_scripts_extra_warning),
         )
     }
@@ -366,37 +380,40 @@ private fun OptionalPermissionSwitch(
 @PreviewLightDark
 private fun AddonPermissionsScreenPreview() {
     val permissions: List<String> = listOf("Permission required 1", "Permission required 2")
-    val optionalPermissions: List<Addon.LocalizedPermission> = listOf(
-        Addon.LocalizedPermission(
-            "Optional Permission 1",
-            Permission("Optional permission 1", false),
-        ),
-    )
-    val originPermissions: List<Addon.LocalizedPermission> = listOf(
-        Addon.LocalizedPermission(
-            "https://required.website",
-            Permission("https://required.website", true),
-        ),
-        Addon.LocalizedPermission(
-            "https://optional-suggested.website...",
-            Permission("https://optional-suggested.website...", false),
-        ),
-        Addon.LocalizedPermission(
-            "https://user-added.website.com",
-            Permission("https://user-added.website.com", false),
-        ),
-    )
+    val optionalPermissions: List<Addon.LocalizedPermission> =
+        listOf(
+            Addon.LocalizedPermission(
+                "Optional Permission 1",
+                Permission("Optional permission 1", false),
+            )
+        )
+    val originPermissions: List<Addon.LocalizedPermission> =
+        listOf(
+            Addon.LocalizedPermission(
+                "https://required.website",
+                Permission("https://required.website", true),
+            ),
+            Addon.LocalizedPermission(
+                "https://optional-suggested.website...",
+                Permission("https://optional-suggested.website...", false),
+            ),
+            Addon.LocalizedPermission(
+                "https://user-added.website.com",
+                Permission("https://user-added.website.com", false),
+            ),
+        )
     val requiredDataCollectionPermissions: List<String> = listOf("location", "browsing activity")
-    val optionalDataCollectionPermissions: List<Addon.LocalizedPermission> = listOf(
-        Addon.LocalizedPermission(
-            "Share location with extension developer",
-            Permission("location", false),
-        ),
-        Addon.LocalizedPermission(
-            "Share technical and interaction data with extension developer",
-            Permission("technicalAndInteraction", false),
-        ),
-    )
+    val optionalDataCollectionPermissions: List<Addon.LocalizedPermission> =
+        listOf(
+            Addon.LocalizedPermission(
+                "Share location with extension developer",
+                Permission("location", false),
+            ),
+            Addon.LocalizedPermission(
+                "Share technical and interaction data with extension developer",
+                Permission("technicalAndInteraction", false),
+            ),
+        )
 
     FirefoxTheme {
         AddonPermissionsScreen(
@@ -440,12 +457,13 @@ private fun AddonPermissionsScreenWithPermissionsPreview() {
 @Composable
 @PreviewLightDark
 private fun AddonPermissionsScreenWithUserScriptsPermissionsPreview() {
-    val optionalPermissions: List<Addon.LocalizedPermission> = listOf(
-        Addon.LocalizedPermission(
-            "Allow unverified third-party scripts to access your data",
-            Permission("userScripts", false),
-        ),
-    )
+    val optionalPermissions: List<Addon.LocalizedPermission> =
+        listOf(
+            Addon.LocalizedPermission(
+                "Allow unverified third-party scripts to access your data",
+                Permission("userScripts", false),
+            )
+        )
 
     FirefoxTheme {
         AddonPermissionsScreen(

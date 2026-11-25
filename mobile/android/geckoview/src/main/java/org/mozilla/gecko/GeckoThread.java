@@ -4,6 +4,7 @@
 
 package org.mozilla.gecko;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -26,6 +27,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.StringTokenizer;
+import java.util.concurrent.atomic.AtomicLong;
 import org.mozilla.gecko.annotation.WrapForJNI;
 import org.mozilla.gecko.mozglue.GeckoLoader;
 import org.mozilla.gecko.process.MemoryController;
@@ -115,14 +117,20 @@ public class GeckoThread extends Thread {
   public static final State MIN_STATE = State.INITIAL;
   public static final State MAX_STATE = State.EXITED;
 
+  private static final AtomicLong sUiThreadCallbackTime = new AtomicLong(Long.MAX_VALUE);
+
   private static final Runnable UI_THREAD_CALLBACK =
       new Runnable() {
         @Override
         public void run() {
           ThreadUtils.assertOnUiThread();
+
+          // Reset the callback time so that we can schedule another callback if needed.
+          sUiThreadCallbackTime.set(Long.MAX_VALUE);
+
           final long nextDelay = runUiThreadCallback();
           if (nextDelay >= 0) {
-            ThreadUtils.getUiHandler().postDelayed(this, nextDelay);
+            scheduleAndroidUiThreadCallback(nextDelay);
           }
         }
       };
@@ -308,6 +316,7 @@ public class GeckoThread extends Thread {
     setState(State.LIBS_READY);
   }
 
+  @SuppressLint("AppBundleLocaleChanges")
   private static void initGeckoEnvironment() {
     final Context context = GeckoAppShell.getApplicationContext();
     final Locale locale = Locale.getDefault();
@@ -380,7 +389,11 @@ public class GeckoThread extends Thread {
     }
   }
 
-  private static ArrayList<String> getEnvFromExtras(final Bundle extras) {
+  /**
+   * Extract environment variable from extras. The environment variables are stored in the extras as
+   * "env0", "env1", etc.
+   */
+  public static ArrayList<String> getEnvFromExtras(final Bundle extras) {
     if (extras == null) {
       return new ArrayList<>();
     }
@@ -668,6 +681,19 @@ public class GeckoThread extends Thread {
     return true;
   }
 
+  private static void scheduleAndroidUiThreadCallback(final long delay) {
+    final long runTimeMillis = SystemClock.uptimeMillis() + delay;
+
+    final long prevRunTimeMillis = sUiThreadCallbackTime.getAndAccumulate(runTimeMillis, Math::min);
+    if (runTimeMillis >= prevRunTimeMillis) {
+      // We already have a callback scheduled sooner than this one, so we don't need to schedule
+      // it again.
+      return;
+    }
+
+    ThreadUtils.getUiHandler().postDelayed(UI_THREAD_CALLBACK, delay);
+  }
+
   /**
    * Check that the current Gecko thread state matches the given state.
    *
@@ -819,7 +845,7 @@ public class GeckoThread extends Thread {
 
   @WrapForJNI
   private static void requestUiThreadCallback(final long delay) {
-    ThreadUtils.getUiHandler().postDelayed(UI_THREAD_CALLBACK, delay);
+    scheduleAndroidUiThreadCallback(delay);
   }
 
   /** Queue a call to the given static method until Gecko is in the RUNNING state. */

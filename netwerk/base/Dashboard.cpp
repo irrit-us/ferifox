@@ -9,12 +9,16 @@
 #include "SSLTokensCache.h"
 #include "mozilla/Components.h"
 #include "mozilla/ErrorNames.h"
+#include "mozilla/ErrorResult.h"
 #include "mozilla/Logging.h"
+#include "mozilla/Maybe.h"
+#include "mozilla/Span.h"
 #include "mozilla/dom/NetDashboardBinding.h"
+#include "mozilla/dom/RootedDictionary.h"
 #include "mozilla/dom/ToJSValue.h"
+#include "mozilla/dom/TypedArray.h"
 #include "mozilla/net/HTTPSSVC.h"
 #include "mozilla/net/HttpInfo.h"
-#include "mozilla/net/SocketProcessParent.h"
 #include "nsHttp.h"
 #include "nsHttpHandler.h"
 #include "nsICancelable.h"
@@ -155,14 +159,14 @@ class ConnectionData : public nsITransportEventSink,
   void StartTimer(uint32_t aTimeout);
   void StopTimer();
 
-  explicit ConnectionData(Dashboard* target) { mDashboard = target; }
+  explicit ConnectionData(Dashboard* target) : mDashboard(target) {}
 
   nsCOMPtr<nsISocketTransport> mSocket;
   nsCOMPtr<nsIInputStream> mStreamIn;
   nsCOMPtr<nsITimer> mTimer;
   nsMainThreadPtrHandle<nsINetDashboardCallback> mCallback;
   nsIEventTarget* mEventTarget{nullptr};
-  Dashboard* mDashboard;
+  RefPtr<Dashboard> mDashboard;
 
   nsCString mHost;
   uint32_t mPort{0};
@@ -512,31 +516,6 @@ Dashboard::RequestSockets(nsINetDashboardCallback* aCallback) {
       "nsINetDashboardCallback", aCallback, true);
   socketData->mEventTarget = GetCurrentSerialEventTarget();
 
-  if (nsIOService::UseSocketProcess()) {
-    if (!gIOService->SocketProcessReady()) {
-      return NS_ERROR_NOT_AVAILABLE;
-    }
-
-    RefPtr<Dashboard> self(this);
-    RefPtr<SocketProcessParent> socketParent =
-        SocketProcessParent::GetSingleton();
-    socketParent->SendGetSocketData()->Then(
-        GetMainThreadSerialEventTarget(), __func__,
-        [self{std::move(self)},
-         socketData{std::move(socketData)}](SocketDataArgs&& args) {
-          socketData->mData.Assign(args.info());
-          socketData->mTotalSent = args.totalSent();
-          socketData->mTotalRecv = args.totalRecv();
-          socketData->mEventTarget->Dispatch(
-              NewRunnableMethod<RefPtr<SocketData>>(
-                  "net::Dashboard::GetSockets", self, &Dashboard::GetSockets,
-                  socketData),
-              NS_DISPATCH_NORMAL);
-        },
-        [](const mozilla::ipc::ResponseRejectReason) {});
-    return NS_OK;
-  }
-
   gSocketTransportService->Dispatch(
       NewRunnableMethod<RefPtr<SocketData>>(
           "net::Dashboard::GetSocketsDispatch", this,
@@ -605,29 +584,6 @@ Dashboard::RequestHttpConnections(nsINetDashboardCallback* aCallback) {
   httpData->mCallback = new nsMainThreadPtrHolder<nsINetDashboardCallback>(
       "nsINetDashboardCallback", aCallback, true);
   httpData->mEventTarget = GetCurrentSerialEventTarget();
-
-  if (nsIOService::UseSocketProcess()) {
-    if (!gIOService->SocketProcessReady()) {
-      return NS_ERROR_NOT_AVAILABLE;
-    }
-
-    RefPtr<Dashboard> self(this);
-    RefPtr<SocketProcessParent> socketParent =
-        SocketProcessParent::GetSingleton();
-    socketParent->SendGetHttpConnectionData()->Then(
-        GetMainThreadSerialEventTarget(), __func__,
-        [self{std::move(self)}, httpData](nsTArray<HttpRetParams>&& params) {
-          httpData->mData.Assign(std::move(params));
-          self->GetHttpConnections(httpData);
-          httpData->mEventTarget->Dispatch(
-              NewRunnableMethod<RefPtr<HttpData>>(
-                  "net::Dashboard::GetHttpConnections", self,
-                  &Dashboard::GetHttpConnections, httpData),
-              NS_DISPATCH_NORMAL);
-        },
-        [](const mozilla::ipc::ResponseRejectReason) {});
-    return NS_OK;
-  }
 
   nsCOMPtr<nsIEventTarget> target;
   nsresult rv = gHttpHandler->GetSocketThreadTarget(getter_AddRefs(target));
@@ -732,30 +688,6 @@ Dashboard::RequestHttp3ConnectionStats(nsINetDashboardCallback* aCallback) {
   data->mCallback = new nsMainThreadPtrHolder<nsINetDashboardCallback>(
       "nsINetDashboardCallback", aCallback, true);
   data->mEventTarget = GetCurrentSerialEventTarget();
-
-  if (nsIOService::UseSocketProcess()) {
-    if (!gIOService->SocketProcessReady()) {
-      return NS_ERROR_NOT_AVAILABLE;
-    }
-
-    RefPtr<Dashboard> self(this);
-    RefPtr<SocketProcessParent> socketParent =
-        SocketProcessParent::GetSingleton();
-    socketParent->SendGetHttp3ConnectionStatsData()->Then(
-        GetMainThreadSerialEventTarget(), __func__,
-        [self{std::move(self)},
-         data](nsTArray<Http3ConnectionStatsParams>&& params) {
-          data->mData.Assign(std::move(params));
-          self->GetHttp3ConnectionStats(data);
-          data->mEventTarget->Dispatch(
-              NewRunnableMethod<RefPtr<Http3ConnectionStatsData>>(
-                  "net::Dashboard::GetHttp3ConnectionStats", self,
-                  &Dashboard::GetHttp3ConnectionStats, data),
-              NS_DISPATCH_NORMAL);
-        },
-        [](const mozilla::ipc::ResponseRejectReason) {});
-    return NS_OK;
-  }
 
   nsCOMPtr<nsIEventTarget> target;
   nsresult rv = gHttpHandler->GetSocketThreadTarget(getter_AddRefs(target));
@@ -984,29 +916,6 @@ Dashboard::RequestDNSInfo(nsINetDashboardCallback* aCallback) {
     if (NS_FAILED(rv)) {
       return rv;
     }
-  }
-
-  if (nsIOService::UseSocketProcess()) {
-    if (!gIOService->SocketProcessReady()) {
-      return NS_ERROR_NOT_AVAILABLE;
-    }
-
-    RefPtr<Dashboard> self(this);
-    RefPtr<SocketProcessParent> socketParent =
-        SocketProcessParent::GetSingleton();
-    socketParent->SendGetDNSCacheEntries()->Then(
-        GetMainThreadSerialEventTarget(), __func__,
-        [self{std::move(self)},
-         dnsData{std::move(dnsData)}](nsTArray<DNSCacheEntries>&& entries) {
-          dnsData->mData.Assign(std::move(entries));
-          dnsData->mEventTarget->Dispatch(
-              NewRunnableMethod<RefPtr<DnsData>>(
-                  "net::Dashboard::GetDNSCacheEntries", self,
-                  &Dashboard::GetDNSCacheEntries, dnsData),
-              NS_DISPATCH_NORMAL);
-        },
-        [](const mozilla::ipc::ResponseRejectReason) {});
-    return NS_OK;
   }
 
   gSocketTransportService->Dispatch(
@@ -1354,38 +1263,57 @@ Dashboard::RequestSSLTokensCache(nsINetDashboardCallback* aCallback) {
       "nsINetDashboardCallback", aCallback, true);
   data->mEventTarget = GetCurrentSerialEventTarget();
 
-  if (nsIOService::UseSocketProcess()) {
-    if (!gIOService->SocketProcessReady()) {
-      return NS_ERROR_NOT_AVAILABLE;
-    }
-
-    RefPtr<Dashboard> self(this);
-    RefPtr<SocketProcessParent> socketParent =
-        SocketProcessParent::GetSingleton();
-    socketParent->SendGetSSLTokensCacheData()->Then(
-        GetMainThreadSerialEventTarget(), __func__,
-        [self{std::move(self)},
-         data](nsTArray<SSLTokensCacheRecordInfo>&& records) {
-          data->mData.Assign(std::move(records));
-          data->mEventTarget->Dispatch(
-              NewRunnableMethod<RefPtr<SSLTokensCacheData>>(
-                  "net::Dashboard::GetSSLTokensCache", self,
-                  &Dashboard::GetSSLTokensCache, data),
-              NS_DISPATCH_NORMAL);
-        },
-        [](const mozilla::ipc::ResponseRejectReason) {});
-    return NS_OK;
-  }
-
   SSLTokensCache::GetAllRecords(data->mData);
   return GetSSLTokensCache(data);
+}
+
+static nsresult CreateUint8Array(JSContext* aCx, Span<const uint8_t> aData,
+                                 JS::MutableHandle<JSObject*> aOut) {
+  ErrorResult error;
+  aOut.set(dom::Uint8Array::Create(aCx, aData, error));
+  RETURN_NSRESULT_ON_FAILURE(error);
+  return NS_OK;
+}
+
+static nsresult InitCertDER(JSContext* aCx, Span<const uint8_t> aDER,
+                            dom::Uint8Array& aOut) {
+  JS::Rooted<JSObject*> obj(aCx);
+  nsresult rv = CreateUint8Array(aCx, aDER, &obj);
+  NS_ENSURE_SUCCESS(rv, rv);
+
+  return aOut.Init(obj) ? NS_OK : NS_ERROR_FAILURE;
+}
+
+static nsresult SetCertDERChain(
+    JSContext* aCx, const Maybe<nsTArray<nsTArray<uint8_t>>>& aChainBytes,
+    dom::Optional<Sequence<dom::Uint8Array>>& aOut) {
+  Sequence<dom::Uint8Array>& chain = aOut.Construct();
+  if (!aChainBytes) {
+    return NS_OK;
+  }
+  if (!chain.SetCapacity(aChainBytes->Length(), fallible)) {
+    JS_ReportOutOfMemory(aCx);
+    return NS_ERROR_OUT_OF_MEMORY;
+  }
+
+  for (const auto& der : *aChainBytes) {
+    dom::Uint8Array* elem = chain.AppendElement(fallible);
+    if (!elem) {
+      JS_ReportOutOfMemory(aCx);
+      return NS_ERROR_OUT_OF_MEMORY;
+    }
+    nsresult rv = InitCertDER(aCx, der, *elem);
+    NS_ENSURE_SUCCESS(rv, rv);
+  }
+  return NS_OK;
 }
 
 nsresult Dashboard::GetSSLTokensCache(SSLTokensCacheData* aData) {
   RefPtr<SSLTokensCacheData> data = aData;
   AutoSafeJSContext cx;
 
-  mozilla::dom::SSLTokensCacheDict dict;
+  using mozilla::dom::RootedDictionary;
+  RootedDictionary<mozilla::dom::SSLTokensCacheDict> dict(cx);
   dict.mEntries.Construct();
   Sequence<mozilla::dom::SSLTokensCacheElement>& entries =
       dict.mEntries.Value();
@@ -1426,40 +1354,17 @@ nsresult Dashboard::GetSSLTokensCache(SSLTokensCacheData* aData) {
         info.mIsBuiltCertChainRootBuiltInRoot.isNothing()
             ? -1
             : (*info.mIsBuiltCertChainRootBuiltInRoot ? 1 : 0);
-    entry->mServerCertDER.Construct();
-    if (!entry->mServerCertDER.Value().AppendElements(
-            info.mServerCertBytes.Elements(), info.mServerCertBytes.Length(),
-            fallible)) {
-      JS_ReportOutOfMemory(cx);
-      return NS_ERROR_OUT_OF_MEMORY;
-    }
+    nsresult rv = InitCertDER(cx, info.mServerCertBytes,
+                              entry->mServerCertDER.Construct());
+    NS_ENSURE_SUCCESS(rv, rv);
 
-    entry->mSucceededCertChainDER.Construct();
-    if (info.mSucceededCertChainBytes) {
-      Sequence<Sequence<uint8_t>>& chain =
-          entry->mSucceededCertChainDER.Value();
-      for (const auto& der : *info.mSucceededCertChainBytes) {
-        Sequence<uint8_t>* certDER = chain.AppendElement(fallible);
-        if (!certDER ||
-            !certDER->AppendElements(der.Elements(), der.Length(), fallible)) {
-          JS_ReportOutOfMemory(cx);
-          return NS_ERROR_OUT_OF_MEMORY;
-        }
-      }
-    }
+    rv = SetCertDERChain(cx, info.mSucceededCertChainBytes,
+                         entry->mSucceededCertChainDER);
+    NS_ENSURE_SUCCESS(rv, rv);
 
-    entry->mHandshakeCertDER.Construct();
-    if (info.mHandshakeCertificatesBytes) {
-      Sequence<Sequence<uint8_t>>& chain = entry->mHandshakeCertDER.Value();
-      for (const auto& der : *info.mHandshakeCertificatesBytes) {
-        Sequence<uint8_t>* certDER = chain.AppendElement(fallible);
-        if (!certDER ||
-            !certDER->AppendElements(der.Elements(), der.Length(), fallible)) {
-          JS_ReportOutOfMemory(cx);
-          return NS_ERROR_OUT_OF_MEMORY;
-        }
-      }
-    }
+    rv = SetCertDERChain(cx, info.mHandshakeCertificatesBytes,
+                         entry->mHandshakeCertDER);
+    NS_ENSURE_SUCCESS(rv, rv);
   }
 
   JS::Rooted<JS::Value> val(cx);

@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import mozilla.components.browser.state.state.createTab
 import org.mozilla.fenix.tabgroups.TabGroupRow
 import org.mozilla.fenix.tabstray.data.TabGroupTheme
@@ -36,6 +37,7 @@ import org.mozilla.fenix.theme.FirefoxTheme
  *
  * @param groups The list of tab groups to display.
  * @param modifier: The Modifier applied to the tab group list.
+ * @param topPadding The padding applied above the first tab group.
  * @param onTabGroupClick Invoked when the user clicks on a tab group.
  * @param onEditTabGroupClick Invoked when the user clicks to edit the tab group.
  * @param onShareTabGroupClick Invoked when the user clicks to share the tab group.
@@ -45,54 +47,54 @@ import org.mozilla.fenix.theme.FirefoxTheme
 fun TabGroupList(
     groups: List<TabsTrayItem.TabGroup>,
     modifier: Modifier = Modifier,
+    topPadding: Dp = FirefoxTheme.layout.space.dynamic200,
     onTabGroupClick: (TabsTrayItem.TabGroup) -> Unit,
     onEditTabGroupClick: (TabsTrayItem.TabGroup) -> Unit,
     onShareTabGroupClick: (TabsTrayItem.TabGroup) -> Unit,
     onDeleteTabGroupClick: (TabsTrayItem.TabGroup) -> Unit,
 ) {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.surface),
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
         contentAlignment = Alignment.TopCenter,
     ) {
         LazyColumn(
-            modifier = modifier
-                .width(FirefoxTheme.layout.size.containerMaxWidth)
-                .padding(
-                    start = FirefoxTheme.layout.space.dynamic200,
-                    top = FirefoxTheme.layout.space.dynamic200,
-                    end = FirefoxTheme.layout.space.dynamic200,
-                ),
+            modifier =
+                modifier
+                    .width(FirefoxTheme.layout.size.containerMaxWidth)
+                    .padding(
+                        start = FirefoxTheme.layout.space.dynamic200,
+                        top = topPadding,
+                        end = FirefoxTheme.layout.space.dynamic200,
+                    ),
             verticalArrangement = Arrangement.spacedBy(FirefoxTheme.layout.space.static25),
         ) {
             itemsIndexed(
                 items = groups,
                 key = { _, group -> group.id },
             ) { index, group ->
-                val selectionState = TabsTrayItemSelectionState(
-                    isFocused = group.isFocused,
-                )
-                val tabShapeInfo = when {
-                    groups.size == 1 -> TabListShapeInfo(TabListSingleItemShape, true)
-                    index == 0 -> TabListShapeInfo(TabListFirstItemShape, true)
-                    index == groups.lastIndex -> TabListShapeInfo(TabListLastItemShape, true)
-                    else -> TabListShapeInfo(TabListBorderMiddleItemShape, false)
-                }
+                val selectionState = TabsTrayItemSelectionState(isFocused = group.isFocused)
+                val tabShapeInfo =
+                    when {
+                        groups.size == 1 -> TabListShapeInfo(TabListSingleItemShape, true)
+                        index == 0 -> TabListShapeInfo(TabListFirstItemShape, true)
+                        index == groups.lastIndex -> TabListShapeInfo(TabListLastItemShape, true)
+                        else -> TabListShapeInfo(TabListBorderMiddleItemShape, false)
+                    }
 
                 TabGroupRow(
                     tabGroup = group,
                     onClick = { onTabGroupClick(group) },
-                    modifier = Modifier
-                        .tabListItemShapeStyling(
-                            tabShapeInfo = tabShapeInfo,
-                            selectionState = TabsTrayItemSelectionState(
-                                isFocused = group.isFocused,
-                                multiSelectEnabled = false,
-                                focusEnabled = true,
-                            ),
-                        )
-                        .background(MaterialTheme.colorScheme.surfaceBright),
+                    modifier =
+                        Modifier.tabListItemShapeStyling(
+                                tabShapeInfo = tabShapeInfo,
+                                selectionState =
+                                    TabsTrayItemSelectionState(
+                                        isFocused = group.isFocused,
+                                        multiSelectEnabled = false,
+                                        focusEnabled = true,
+                                    ),
+                            )
+                            .background(MaterialTheme.colorScheme.surfaceBright),
                     selectionState = selectionState,
                     trailingContent = {
                         TabGroupMenuButton(
@@ -113,29 +115,29 @@ fun TabGroupList(
 @Preview(showBackground = true)
 @Composable
 private fun TabGroupListPreview() {
-    val firstGroupTabs = mutableListOf(
-        TabsTrayItem.Tab(createTab(url = "https://www.mozilla.org")),
-        TabsTrayItem.Tab(createTab(url = "https://www.mozilla.org/en-US")),
-        TabsTrayItem.Tab(createTab(url = "https://www.firefox.com")),
-    )
-    val secondGroupTabs = mutableListOf(
-        TabsTrayItem.Tab(createTab(url = "https://www.google.com")),
-    )
+    val firstGroupTabs =
+        mutableListOf(
+            TabsTrayItem.Tab(createTab(url = "https://www.mozilla.org")),
+            TabsTrayItem.Tab(createTab(url = "https://www.mozilla.org/en-US")),
+            TabsTrayItem.Tab(createTab(url = "https://www.firefox.com")),
+        )
+    val secondGroupTabs = mutableListOf(TabsTrayItem.Tab(createTab(url = "https://www.google.com")))
 
     FirefoxTheme {
         TabGroupList(
-            groups = listOf(
-                TabsTrayItem.TabGroup(
-                    title = "Work",
-                    theme = TabGroupTheme.Blue,
-                    tabs = firstGroupTabs,
+            groups =
+                listOf(
+                    TabsTrayItem.TabGroup(
+                        title = "Work",
+                        theme = TabGroupTheme.Blue,
+                        tabs = firstGroupTabs,
+                    ),
+                    TabsTrayItem.TabGroup(
+                        title = "Search",
+                        theme = TabGroupTheme.Purple,
+                        tabs = secondGroupTabs,
+                    ),
                 ),
-                TabsTrayItem.TabGroup(
-                    title = "Search",
-                    theme = TabGroupTheme.Purple,
-                    tabs = secondGroupTabs,
-                ),
-            ),
             onTabGroupClick = {},
             onEditTabGroupClick = {},
             onShareTabGroupClick = {},

@@ -12,6 +12,9 @@ import android.os.Environment
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
 import mozilla.components.browser.engine.gecko.util.EngineDownloadDelegate
 import mozilla.components.browser.icons.BrowserIcons
 import mozilla.components.browser.state.engine.EngineMiddleware
@@ -41,6 +44,7 @@ import mozilla.components.feature.search.middleware.AdsTelemetryMiddleware
 import mozilla.components.feature.search.middleware.SearchMiddleware
 import mozilla.components.feature.search.region.RegionMiddleware
 import mozilla.components.feature.search.storage.SearchEngineSelectorConfig
+import mozilla.components.feature.search.telemetry.SerpTelemetryRepository
 import mozilla.components.feature.search.telemetry.ads.AdsTelemetry
 import mozilla.components.feature.search.telemetry.incontent.InContentTelemetry
 import mozilla.components.feature.session.SessionUseCases
@@ -69,6 +73,7 @@ import mozilla.components.support.remotesettings.DefaultRemoteSettingsSyncSchedu
 import mozilla.components.support.remotesettings.RemoteSettingsServer
 import mozilla.components.support.remotesettings.RemoteSettingsService
 import mozilla.components.support.remotesettings.into
+import mozilla.components.support.utils.BuildMetadata
 import mozilla.components.support.utils.DateTimeProvider
 import mozilla.components.support.utils.DefaultDateTimeProvider
 import mozilla.components.support.utils.DefaultDownloadFileUtils
@@ -100,16 +105,19 @@ import org.mozilla.focus.telemetry.startuptelemetry.StartupActivityLog
 import org.mozilla.focus.telemetry.startuptelemetry.StartupStateProvider
 import org.mozilla.focus.topsites.DefaultTopSitesStorage
 import org.mozilla.focus.utils.Settings
-import java.util.Locale
-import java.util.concurrent.TimeUnit
 
-/**
- * Helper object for lazily initializing components.
- */
+/** Helper object for lazily initializing components. */
 class Components(
     context: Context,
     private val engineOverride: Engine? = null,
     private val clientOverride: Client? = null,
+    /**
+     * A [CoroutineScope] tied to the lifetime of the application process.
+     *
+     * Note: Tasks should be scoped to the container which holds their UI. If necessary, applicationScope can be used
+     * for top-level background work that must remain active for the whole duration of the application.
+     */
+    @Suppress("UnusedPrivateProperty") val applicationScope: CoroutineScope,
 ) {
     val appStore: AppStore by lazy {
         AppStore(
@@ -117,7 +125,7 @@ class Components(
                 screen = if (context.settings.isFirstRun) Screen.FirstRun else Screen.Home,
                 topSites = emptyList(),
                 isPinningSupported = null,
-            ),
+            )
         )
     }
 
@@ -136,7 +144,19 @@ class Components(
     val settings by lazy { Settings(context) }
 
     val fileUploadsDirCleaner: FileUploadsDirCleaner by lazy {
-        FileUploadsDirCleaner { context.cacheDir }
+        FileUploadsDirCleaner(applicationScope) { context.cacheDir }
+    }
+
+    /**
+     * Retained so that its [mozilla.appservices.remotesettings.RemoteSettingsClient] stays reachable for the lifetime
+     * of the process. application-services only holds a weak reference to each client and skips collections whose
+     * client has been collected, so a short-lived repository would opt `search-telemetry-v2` out of syncing entirely.
+     */
+    val serpTelemetryRepository by lazy {
+        SerpTelemetryRepository(
+            collectionName = GleanMetricsService.COLLECTION_NAME,
+            remoteSettingsService = remoteSettingsService,
+        )
     }
 
     val remoteSettingsSyncScheduler by lazy {
@@ -156,23 +176,23 @@ class Components(
             httpsOnlyMode = settings.getHttpsOnlyMode(),
             preferredColorScheme = settings.getPreferredColorScheme(),
             certificateTransparencyMode = FocusNimbus.features.pki.value().certificateTransparencyMode,
-            downloadDelegate = EngineDownloadDelegate(
-                context = context,
-                downloadLocation = {
-                    Environment.getExternalStoragePublicDirectory(
-                        Environment.DIRECTORY_DOWNLOADS,
-                    ).absolutePath
-                },
-            ),
+            downloadDelegate =
+                EngineDownloadDelegate(
+                    context = context,
+                    downloadLocation = {
+                        Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).absolutePath
+                    },
+                ),
         )
     }
 
     val engine: Engine by lazy {
-        engineOverride ?: EngineProvider.createEngine(context, engineDefaultSettings).apply {
-            EngineProvider.setupSafeBrowsing(this, this@Components.settings.shouldUseSafeBrowsing())
-            WebCompatFeature.install(this)
-            WebCompatReporterFeature.install(this, "focus-geckoview")
-        }
+        engineOverride
+            ?: EngineProvider.createEngine(context, engineDefaultSettings).apply {
+                EngineProvider.setupSafeBrowsing(this, this@Components.settings.shouldUseSafeBrowsing())
+                WebCompatFeature.install(this)
+                WebCompatReporterFeature.install(this, "focus-geckoview")
+            }
     }
 
     val client: ClientWrapper by lazy {
@@ -194,52 +214,51 @@ class Components(
 
     val store by lazy {
         BrowserStore(
-            middleware = listOf(
-                TelemetryMiddleware(),
-                DownloadMiddleware(
-                    applicationContext = context,
-                    downloadServiceClass = DownloadService::class.java,
-                    deleteFileFromStorage = { false },
-                    downloadFileUtils = DefaultDownloadFileUtils(
-                        context = context,
-                    ),
-                ),
-                SanityCheckMiddleware(),
-                // We are currently using the default location service. We should consider using
-                // an actual implementation:
-                // https://github.com/mozilla-mobile/focus-android/issues/4781
-                RegionMiddleware(context, locationService),
-                SearchMiddleware(
-                    context,
-                    migration = SearchMigration(context),
-                    searchEngineSelectorConfig = getSearchEngineSelectorConfig(context),
-                ),
-                SearchFilterMiddleware(),
-                PromptMiddleware(),
-                AdsTelemetryMiddleware(adsTelemetry),
-                BlockedTrackersMiddleware(context),
-                RecordingDevicesMiddleware(context, notificationsDelegate),
-                CfrMiddleware(appStore, settings),
-                FileUploadsDirCleanerMiddleware(fileUploadsDirCleaner),
-            ) + EngineMiddleware.create(
-                engine,
-                // We are disabling automatic suspending of engine sessions under memory pressure.
-                // Instead we solely rely on GeckoView and the Android system to reclaim memory
-                // when needed. For details, see:
-                // https://bugzilla.mozilla.org/show_bug.cgi?id=1752594
-                // https://github.com/mozilla-mobile/fenix/issues/12731
-                // https://github.com/mozilla-mobile/android-components/issues/11300
-                // https://github.com/mozilla-mobile/android-components/issues/11653
-                trimMemoryAutomatically = false,
-            ),
-        ).apply {
-            MediaSessionFeature(context, MediaSessionService::class.java, this).start()
-        }
+                middleware =
+                    listOf(
+                        TelemetryMiddleware(),
+                        DownloadMiddleware(
+                            applicationContext = context,
+                            downloadServiceClass = DownloadService::class.java,
+                            deleteFileFromStorage = { false },
+                            downloadFileUtils = DefaultDownloadFileUtils(context = context),
+                        ),
+                        SanityCheckMiddleware(),
+                        // We are currently using the default location service. We should consider using
+                        // an actual implementation:
+                        // https://github.com/mozilla-mobile/focus-android/issues/4781
+                        RegionMiddleware(context, locationService, applicationScope = applicationScope),
+                        SearchMiddleware(
+                            context,
+                            migration = SearchMigration(context),
+                            searchEngineSelectorConfig = getSearchEngineSelectorConfig(context),
+                        ),
+                        SearchFilterMiddleware(),
+                        PromptMiddleware(),
+                        AdsTelemetryMiddleware(adsTelemetry),
+                        BlockedTrackersMiddleware(context),
+                        RecordingDevicesMiddleware(context, notificationsDelegate),
+                        CfrMiddleware(appStore, settings),
+                        FileUploadsDirCleanerMiddleware(fileUploadsDirCleaner),
+                    ) +
+                        EngineMiddleware.create(
+                            engine,
+                            // We are disabling automatic suspending of engine sessions under memory pressure.
+                            // Instead we solely rely on GeckoView and the Android system to reclaim memory
+                            // when needed. For details, see:
+                            // https://bugzilla.mozilla.org/show_bug.cgi?id=1752594
+                            // https://github.com/mozilla-mobile/fenix/issues/12731
+                            // https://github.com/mozilla-mobile/android-components/issues/11300
+                            // https://github.com/mozilla-mobile/android-components/issues/11653
+                            trimMemoryAutomatically = false,
+                        )
+            )
+            .apply {
+                MediaSessionFeature(context, MediaSessionService::class.java, this).start()
+            }
     }
 
-    /**
-     * The [CustomTabsServiceStore] holds global custom tabs related data.
-     */
+    /** The [CustomTabsServiceStore] holds global custom tabs related data. */
     val customTabsStore by lazy { CustomTabsServiceStore() }
 
     val sessionUseCases: SessionUseCases by lazy { SessionUseCases(store) }
@@ -257,9 +276,7 @@ class Components(
     val downloadsUseCases: DownloadsUseCases by lazy {
         DownloadsUseCases(
             store = store,
-            downloadFileUtils = DefaultDownloadFileUtils(
-                context = context.applicationContext,
-            ),
+            downloadFileUtils = DefaultDownloadFileUtils(context = context.applicationContext),
         )
     }
 
@@ -267,16 +284,14 @@ class Components(
 
     val customTabsUseCases: CustomTabsUseCases by lazy { CustomTabsUseCases(store, sessionUseCases.loadUrl) }
 
+    val buildMetadata: BuildMetadata by lazy { BuildMetadata.fromAssets(context.assets) }
+
     val crashReporter: CrashReporter by lazy { createCrashReporter(context) }
 
     val metrics: GleanMetricsService by lazy { GleanMetricsService(context) }
 
     val usageReportingMetricsService: GleanUsageReportingMetricsService by lazy {
-        GleanUsageReportingMetricsService(
-            gleanProfileIdStore = GleanProfileIdPreferenceStore(
-                context,
-            ),
-        )
+        GleanUsageReportingMetricsService(gleanProfileIdStore = GleanProfileIdPreferenceStore(context))
     }
 
     val remoteSettingsService by lazy {
@@ -308,7 +323,7 @@ class Components(
     val appLinksInterceptor by lazy {
         AppLinksInterceptor(
             context,
-            launchInApp = {
+            launchInApp = { _ ->
                 context.settings.openLinksInExternalApp
             },
         )
@@ -325,65 +340,72 @@ private fun createCrashReporter(context: Context): CrashReporter {
     val services = mutableListOf<CrashReporterService>()
 
     if (BuildConfig.SENTRY_TOKEN.isNotEmpty()) {
-        val sentryService = SentryService(
-            context,
-            BuildConfig.SENTRY_TOKEN,
-            tags = mapOf(
-                "build_flavor" to BuildConfig.FLAVOR,
-                "build_type" to BuildConfig.BUILD_TYPE,
-                "locale_lang_tag" to getLocaleTag(context),
-            ),
-            environment = BuildConfig.BUILD_TYPE,
-            sendEventForNativeCrashes = false, // Do not send native crashes to Sentry
-        )
+        val sentryService =
+            SentryService(
+                context,
+                BuildConfig.SENTRY_TOKEN,
+                tags =
+                    mapOf(
+                        "build_flavor" to BuildConfig.FLAVOR,
+                        "build_type" to BuildConfig.BUILD_TYPE,
+                        "locale_lang_tag" to getLocaleTag(context),
+                    ),
+                environment = BuildConfig.BUILD_TYPE,
+                sendEventForNativeCrashes = false, // Do not send native crashes to Sentry
+                sendCaughtExceptions = false, // Do not send diagnostic logs
+            )
 
         services.add(sentryService)
     }
 
-    val socorroService = MozillaSocorroService(
-        context,
-        appName = "Focus",
-        version = org.mozilla.geckoview.BuildConfig.MOZ_APP_VERSION,
-        buildId = org.mozilla.geckoview.BuildConfig.MOZ_APP_BUILDID,
-        vendor = org.mozilla.geckoview.BuildConfig.MOZ_APP_VENDOR,
-        releaseChannel = org.mozilla.geckoview.BuildConfig.MOZ_UPDATE_CHANNEL,
-    )
+    val socorroService =
+        MozillaSocorroService(
+            context,
+            appName = "Focus",
+            version = org.mozilla.geckoview.BuildConfig.MOZ_APP_VERSION,
+            buildId = org.mozilla.geckoview.BuildConfig.MOZ_APP_BUILDID,
+            vendor = org.mozilla.geckoview.BuildConfig.MOZ_APP_VENDOR,
+            releaseChannel = org.mozilla.geckoview.BuildConfig.MOZ_UPDATE_CHANNEL,
+        )
     services.add(socorroService)
 
-    val intent = Intent(context, MainActivity::class.java).apply {
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-    }
+    val intent =
+        Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
 
-    val crashReportingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        PendingIntent.FLAG_MUTABLE
-    } else {
-        0 // No flags. Default behavior.
-    }
+    val crashReportingIntentFlags =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_MUTABLE
+        } else {
+            0 // No flags. Default behavior.
+        }
 
-    val pendingIntent = PendingIntent.getActivity(
-        context,
-        0,
-        intent,
-        crashReportingIntentFlags,
-    )
+    val pendingIntent =
+        PendingIntent.getActivity(
+            context,
+            0,
+            intent,
+            crashReportingIntentFlags,
+        )
 
     return CrashReporter(
         context = context,
         services = services,
-        telemetryServices = listOf(
-            GleanCrashReporterService(
-                context,
-                appChannel = org.mozilla.geckoview.BuildConfig.MOZ_UPDATE_CHANNEL,
-                appVersion = org.mozilla.geckoview.BuildConfig.MOZ_APP_VERSION,
-                appBuildId = org.mozilla.geckoview.BuildConfig.MOZ_APP_BUILDID,
-                // There's no need to call `CrashReporter.setTelemetryEnabled`: there's no path for the telemetry
-                // setting to change (it is always false).
-                isUploadEnabled = GleanMetricsService.isTelemetryEnabled(context),
+        telemetryServices =
+            listOf(
+                GleanCrashReporterService(
+                    context,
+                    appChannel = org.mozilla.geckoview.BuildConfig.MOZ_UPDATE_CHANNEL,
+                    appVersion = org.mozilla.geckoview.BuildConfig.MOZ_APP_VERSION,
+                    appBuildId = org.mozilla.geckoview.BuildConfig.MOZ_APP_BUILDID,
+                    // There's no need to call `CrashReporter.setTelemetryEnabled`: there's no path for the telemetry
+                    // setting to change (it is always false).
+                    isUploadEnabled = GleanMetricsService.isTelemetryEnabled(context),
+                )
             ),
-        ),
-        promptConfiguration = CrashReporter.PromptConfiguration(
-            appName = context.resources.getString(R.string.app_name),
-        ),
+        promptConfiguration =
+            CrashReporter.PromptConfiguration(appName = context.resources.getString(R.string.app_name)),
         shouldPrompt = CrashReporter.Prompt.ALWAYS,
         enabled = true,
         nonFatalCrashIntent = pendingIntent,
@@ -399,29 +421,30 @@ private fun getLocaleTag(context: Context): String {
     }
 }
 
-/**
- * Gets a [SearchEngineSelectorConfig] for the app and device.
- */
+/** Gets a [SearchEngineSelectorConfig] for the app and device. */
 private fun getSearchEngineSelectorConfig(context: Context): SearchEngineSelectorConfig? {
-    if (!context.settings.useRemoteSearchConfiguration) {
+    if (!context.settings.useRemoteSearchConfiguration && !context.settings.useSearchConfigV3) {
         return null
     }
 
-    val updateChannel = when (BuildConfig.BUILD_TYPE) {
-        "debug" -> SearchUpdateChannel.DEFAULT
-        "nightly", "benchmark" -> SearchUpdateChannel.NIGHTLY
-        "beta" -> SearchUpdateChannel.BETA
-        "release" -> SearchUpdateChannel.RELEASE
-        else -> {
-            throw IllegalStateException("Unknown build type: ${BuildConfig.BUILD_TYPE}")
+    val updateChannel =
+        when (BuildConfig.BUILD_TYPE) {
+            "debug" -> SearchUpdateChannel.DEFAULT
+            "nightly",
+            "benchmark" -> SearchUpdateChannel.NIGHTLY
+            "beta" -> SearchUpdateChannel.BETA
+            "release" -> SearchUpdateChannel.RELEASE
+            else -> {
+                throw IllegalStateException("Unknown build type: ${BuildConfig.BUILD_TYPE}")
+            }
         }
-    }
 
-    val deviceType = if (context.isTablet()) {
-        SearchDeviceType.TABLET
-    } else {
-        SearchDeviceType.SMARTPHONE
-    }
+    val deviceType =
+        if (context.isTablet()) {
+            SearchDeviceType.TABLET
+        } else {
+            SearchDeviceType.SMARTPHONE
+        }
 
     return SearchEngineSelectorConfig(
         appName = SearchApplicationName.FOCUS_ANDROID,
@@ -430,12 +453,10 @@ private fun getSearchEngineSelectorConfig(context: Context): SearchEngineSelecto
         experiment = "",
         updateChannel = updateChannel,
         service = context.components.remoteSettingsService,
+        useSearchConfigV3 = context.settings.useSearchConfigV3,
     )
 }
 
-/**
- * Returns the [Components] object from within a [Composable].
- */
+/** Returns the [Components] object from within a [Composable]. */
 val components: Components
-    @Composable
-    get() = LocalContext.current.components
+    @Composable get() = LocalContext.current.components

@@ -25,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import kotlin.time.Instant
 import mozilla.components.ExperimentalAndroidComponentsApi
 import mozilla.components.compose.base.annotation.FlexibleWindowLightDarkPreview
 import mozilla.components.compose.base.theme.AcornTheme
@@ -34,14 +35,17 @@ import mozilla.components.feature.ipprotection.store.IPProtectionStore
 import mozilla.components.feature.ipprotection.store.state.AccountState
 import mozilla.components.feature.ipprotection.store.state.AccountStatus
 import mozilla.components.feature.ipprotection.store.state.Authorized
+import mozilla.components.feature.ipprotection.store.state.DataVolume
 import mozilla.components.feature.ipprotection.store.state.EligibilityStatus
 import mozilla.components.feature.ipprotection.store.state.IPProtectionState
-import mozilla.components.feature.ipprotection.store.state.usedDataGb
+import mozilla.components.feature.ipprotection.store.state.PendingActivationRequest
+import mozilla.components.feature.ipprotection.store.state.UsageQuota
+import mozilla.components.feature.ipprotection.store.state.gigabytes
+import mozilla.components.feature.ipprotection.store.state.used
 import mozilla.components.lib.state.ext.observeAsComposableState
 
 /**
- * A debug view to monitor [IPProtectionState] and renders useful data in
- * it to aid in developer and QA testing.
+ * A debug view to monitor [IPProtectionState] and renders useful data in it to aid in developer and QA testing.
  *
  * @param store The [IPProtectionStore] to observe and render.
  * @param modifier The [Modifier] applied to the root container.
@@ -59,8 +63,7 @@ fun IPProtectionStateDebug(
 }
 
 /**
- * Debug Composable that renders useful data in
- * [IPProtectionState] to aid in developer and QA testing.
+ * Debug Composable that renders useful data in [IPProtectionState] to aid in developer and QA testing.
  *
  * @param state The [IPProtectionState] to render.
  * @param modifier The [Modifier] applied to the root container.
@@ -75,10 +78,8 @@ fun IPProtectionStateDebugContent(
         color = MaterialTheme.colorScheme.background,
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(AcornTheme.layout.space.static200),
+            modifier =
+                Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(AcornTheme.layout.space.static200),
             verticalArrangement = Arrangement.spacedBy(AcornTheme.layout.space.static150),
         ) {
             Text(
@@ -115,8 +116,13 @@ fun IPProtectionStateDebugContent(
 
             DebugSection(title = stringResource(R.string.mozac_feature_ipprotection_vpn_ui)) {
                 DebugRow(
-                    stringResource(R.string.mozac_feature_ipprotection_activate),
-                    state.activate?.toString() ?: "null",
+                    stringResource(R.string.mozac_feature_ipprotection_activation_state),
+                    state.pendingActivationRequest?.javaClass?.simpleName ?: "null",
+                )
+                DebugRow(
+                    stringResource(R.string.mozac_feature_ipprotection_selected_location_code),
+                    (state.pendingActivationRequest as? PendingActivationRequest.Activate)?.selectedLocationCode
+                        ?: "null",
                 )
             }
         }
@@ -125,30 +131,42 @@ fun IPProtectionStateDebugContent(
 
 @Composable
 private fun DataUsageSection(state: IPProtectionState) {
+    val quota = state.usageQuota
+    val unlimited = stringResource(R.string.mozac_feature_ipprotection_unlimited)
     DebugSection(title = stringResource(R.string.mozac_feature_ipprotection_data_usage)) {
         DebugRow(
             stringResource(R.string.mozac_feature_ipprotection_remainingdatabytes),
-            state.remainingDataBytes.toString(),
+            when (quota) {
+                is UsageQuota.Metered -> quota.remaining.bytes.toString()
+                is UsageQuota.Unmetered -> unlimited
+                null -> "null"
+            },
         )
         DebugRow(
             stringResource(R.string.mozac_feature_ipprotection_maxdatabytes),
-            state.maxDataBytes.toString(),
+            when (quota) {
+                is UsageQuota.Metered -> quota.max.bytes.toString()
+                is UsageQuota.Unmetered -> unlimited
+                null -> "null"
+            },
         )
         DebugRow(
             stringResource(R.string.mozac_feature_ipprotection_useddatagb),
-            "%.2fGB".format(state.usedDataGb),
+            when (quota) {
+                is UsageQuota.Metered -> "%.2fGB".format(quota.used.gigabytes)
+                is UsageQuota.Unmetered -> unlimited
+                null -> "null"
+            },
         )
         DebugRow(
             stringResource(R.string.mozac_feature_ipprotection_resetdate),
-            state.resetDate ?: "null",
+            quota?.resetTime?.toString() ?: "null",
         )
     }
 }
 
 @Composable
-private fun AccountSection(
-    state: IPProtectionState,
-) {
+private fun AccountSection(state: IPProtectionState) {
     DebugSection(title = stringResource(R.string.mozac_feature_ipprotection_account)) {
         DebugRow(
             stringResource(R.string.mozac_feature_ipprotection_account_status),
@@ -163,11 +181,11 @@ private fun DebugSection(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(AcornTheme.layout.space.static150),
+        modifier =
+            Modifier.fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .padding(AcornTheme.layout.space.static150),
         verticalArrangement = Arrangement.spacedBy(AcornTheme.layout.space.static100),
     ) {
         Text(
@@ -205,19 +223,21 @@ private fun DebugRow(label: String, value: String) {
 private fun IPProtectionStateDebugPreview() {
     AcornTheme {
         IPProtectionStateDebugContent(
-            state = IPProtectionState(
-                eligibilityStatus = EligibilityStatus.Eligible,
-                proxyStatus = Authorized.Active,
-                serviceStatus = ServiceState.Ready,
-                remainingDataBytes = 2_000_000_000L,
-                maxDataBytes = 5_000_000_000L,
-                resetDate = "2026-06-01",
-                accountState = AccountState(
-                    status = AccountStatus.EnrolledAndEntitled,
-                ),
-                lastError = "invalid_response",
-                activate = true,
-            ),
+            state =
+                IPProtectionState(
+                    eligibilityStatus = EligibilityStatus.Eligible,
+                    proxyStatus = Authorized.Active,
+                    serviceStatus = ServiceState.Ready,
+                    usageQuota =
+                        UsageQuota.Metered(
+                            resetTime = Instant.parse("2026-06-01T00:00:00Z"),
+                            remaining = DataVolume(bytes = 2_000_000_000L),
+                            max = DataVolume(bytes = 5_000_000_000L),
+                        ),
+                    accountState = AccountState(status = AccountStatus.EnrolledAndEntitled),
+                    lastError = "invalid_response",
+                    pendingActivationRequest = PendingActivationRequest.Activate(null),
+                )
         )
     }
 }

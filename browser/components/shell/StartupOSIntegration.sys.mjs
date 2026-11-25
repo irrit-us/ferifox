@@ -29,7 +29,6 @@ ChromeUtils.defineESModuleGetters(lazy, {
     "resource:///modules/FirefoxBridgeExtensionUtils.sys.mjs",
   PrivateBrowsingUtils: "resource://gre/modules/PrivateBrowsingUtils.sys.mjs",
   ShellService: "moz-src:///browser/components/shell/ShellService.sys.mjs",
-  WindowsLaunchOnLogin: "resource://gre/modules/WindowsLaunchOnLogin.sys.mjs",
   WindowsGPOParser: "resource://gre/modules/policies/WindowsGPOParser.sys.mjs",
 });
 
@@ -140,32 +139,6 @@ export let StartupOSIntegration = {
       lazy.CustomIconManager.applyRuntimeOverrideForStartup();
     } catch (ex) {
       console.error(ex);
-    }
-  },
-
-  checkForLaunchOnLogin() {
-    // We only support launch on login on Windows at the moment.
-    if (AppConstants.platform != "win") {
-      return;
-    }
-    let launchOnLoginPref = "browser.startup.windowsLaunchOnLogin.enabled";
-    if (!lazy.profileService.startWithLastProfile) {
-      // If we don't start with last profile, the user
-      // likely sees the profile selector on launch.
-      if (Services.prefs.getBoolPref(launchOnLoginPref)) {
-        Glean.launchOnLogin.lastProfileDisableStartup.record();
-        // Disable launch on login messaging if we are disabling the
-        // feature.
-        Services.prefs.setBoolPref(
-          "browser.startup.windowsLaunchOnLogin.disableLaunchOnLoginPrompt",
-          true
-        );
-      }
-      // To reduce confusion when running multiple Gecko profiles,
-      // delete launch on login shortcuts and registry keys so that
-      // users are not presented with the outdated profile selector
-      // dialog.
-      lazy.WindowsLaunchOnLogin.removeLaunchOnLogin();
     }
   },
 

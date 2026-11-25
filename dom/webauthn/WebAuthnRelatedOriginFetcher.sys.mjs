@@ -7,7 +7,8 @@ import { AppConstants } from "resource://gre/modules/AppConstants.sys.mjs";
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  GeckoViewPrompter: "resource://gre/modules/GeckoViewPrompter.sys.mjs",
+  GeckoViewPrompter:
+    "moz-src:///mobile/shared/components/geckoview/GeckoViewPrompter.sys.mjs",
 });
 
 let l10n;
@@ -87,6 +88,9 @@ async function fetchAndValidateRelatedOrigin(aRpId, aCallerOrigin, aSignal) {
     req = await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open("GET", `https://${aRpId}/.well-known/webauthn`);
+      xhr.setRequestHeader("Sec-Fetch-Site", "none");
+      xhr.setRequestHeader("Sec-Fetch-Mode", "no-cors");
+      xhr.setRequestHeader("Sec-Fetch-Dest", "empty");
       xhr.timeout = 10000;
       aSignal?.addEventListener("abort", () => xhr.abort(), { once: true });
       xhr.addEventListener("load", () => resolve(xhr), { once: true });

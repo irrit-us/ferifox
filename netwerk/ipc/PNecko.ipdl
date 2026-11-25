@@ -19,7 +19,6 @@ include protocol PDNSRequest;
 include protocol PTransportProvider;
 include protocol PStunAddrsRequest;
 include protocol PWebrtcTCPSocket;
-include protocol PSocketProcessBridge;
 include protocol PDocumentChannel;
 
 include IPCStream;
@@ -142,10 +141,6 @@ parent:
   async GetExtensionStream(nullable nsIURI uri) returns (nullable nsIInputStream stream);
   async GetExtensionFD(nullable nsIURI uri) returns (FileDescriptor fd);
 
-  async InitSocketProcessBridge()
-    returns (Endpoint<PSocketProcessBridgeChild> endpoint);
-  async ResetSocketProcessBridge();
-
   async EnsureHSTSData()
     returns (bool result);
 
@@ -159,6 +154,10 @@ parent:
    * New Tab wallpaper remote resource loading
    */
   async GetMozNewTabWallpaperStream(nullable nsIURI uri, LoadInfoArgs loadInfo) returns (RemoteStreamInfo? info);
+
+#ifdef MOZ_THUNDERBIRD
+  async GetMailMessageStream(nullable nsIURI uri, LoadInfoArgs loadInfo) returns (RemoteStreamInfo? info);
+#endif
 
 child:
   async SpeculativeConnectRequest();

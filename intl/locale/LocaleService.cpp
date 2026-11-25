@@ -25,6 +25,7 @@
 #include "nsRFPService.h"
 #include "nsXULAppAPI.h"
 #include "nsZipArchive.h"
+#include "nsCharSeparatedTokenizer.h"
 #ifdef XP_WIN
 #  include "WinUtils.h"
 #endif

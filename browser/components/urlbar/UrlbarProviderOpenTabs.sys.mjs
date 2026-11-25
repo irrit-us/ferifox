@@ -7,21 +7,20 @@
  * It is also used to register and unregister open tabs.
  */
 
-import { UrlbarProvider } from "moz-src:///browser/components/urlbar/UrlbarUtils.sys.mjs";
+import {
+  UrlbarProvider,
+  UrlbarUtils,
+} from "moz-src:///browser/components/urlbar/UrlbarUtils.sys.mjs";
+import { XPCOMUtils } from "resource://gre/modules/XPCOMUtils.sys.mjs";
 
-const lazy = {};
-
-ChromeUtils.defineESModuleGetters(lazy, {
+const lazy = XPCOMUtils.declareLazy({
   PlacesUtils: "resource://gre/modules/PlacesUtils.sys.mjs",
   ProvidersManager:
     "moz-src:///browser/components/urlbar/UrlbarProvidersManager.sys.mjs",
   UrlbarResult: "chrome://browser/content/urlbar/UrlbarResult.mjs",
   UrlbarShared: "chrome://browser/content/urlbar/UrlbarShared.mjs",
+  logger: () => lazy.UrlbarShared.getLogger({ prefix: "Provider.OpenTabs" }),
 });
-
-ChromeUtils.defineLazyGetter(lazy, "logger", () =>
-  lazy.UrlbarShared.getLogger({ prefix: "Provider.OpenTabs" })
-);
 
 /**
  * Maps the open tabs by userContextId, then by groupId.
@@ -316,7 +315,9 @@ export class UrlbarProviderOpenTabs extends UrlbarProvider {
             source: lazy.UrlbarShared.RESULT_SOURCE.TABS,
             payload: {
               url: row.getResultByName("url"),
-              userContextId: row.getResultByName("userContextId"),
+              userContext: UrlbarUtils.getUserContextData(
+                row.getResultByName("userContextId")
+              ),
               tabGroup: row.getResultByName("groupId"),
             },
           })

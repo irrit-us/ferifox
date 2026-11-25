@@ -8,6 +8,7 @@
 #include <array>
 #include <bitset>
 #include <cctype>
+#include <memory>
 
 #include "AccessCheck.h"
 #include "CompositableHost.h"
@@ -68,7 +69,6 @@
 #include "WebGLBuffer.h"
 #include "WebGLChild.h"
 #include "WebGLContextLossHandler.h"
-#include "WebGLContextUtils.h"
 #include "WebGLExtensions.h"
 #include "WebGLFormats.h"
 #include "WebGLFramebuffer.h"
@@ -243,14 +243,7 @@ void ClientWebGLContext::MarkCanvasDirty() {
 }
 
 void WebGLContext::OnMemoryPressure() {
-  bool shouldLoseContext = mLoseContextOnMemoryPressure;
-
-  if (!mCanLoseContextInForeground &&
-      ProcessPriorityManager::CurrentProcessIsForeground()) {
-    shouldLoseContext = false;
-  }
-
-  if (shouldLoseContext) LoseContext();
+  if (mLoseContextOnMemoryPressure) LoseContext();
 }
 
 // --
@@ -447,7 +440,7 @@ bool WebGLContext::CreateAndInitGL(
 
   const auto val = StaticPrefs::webgl_debug_incomplete_tex_color();
   if (val) {
-    mIncompleteTexOverride.reset(new gl::Texture(*gl));
+    mIncompleteTexOverride = std::make_unique<gl::Texture>(*gl);
     const gl::ScopedBindTexture autoBind(gl, mIncompleteTexOverride->name);
     const auto heapVal = std::make_unique<uint32_t>(val);
     gl->fTexImage2D(LOCAL_GL_TEXTURE_2D, 0, LOCAL_GL_RGBA, 1, 1, 0,
@@ -817,6 +810,7 @@ void WebGLContext::InitUploadableSdTypes() {
     types[layers::SurfaceDescriptor::TSurfaceDescriptorMacIOSurface] = true;
   }
   if (kIsAndroid) {
+    types[layers::SurfaceDescriptor::TAndroidImageReaderImageDescriptor] = true;
     types[layers::SurfaceDescriptor::TSurfaceTextureDescriptor] = true;
   }
   if (kIsLinux) {
@@ -1227,7 +1221,7 @@ void InitSwapChain(gl::GLContext& gl, gl::SwapChain& swapChain,
   }
   if (!swapChain.mFactory) {
     NS_WARNING("Failed to make an ideal SurfaceFactory.");
-    swapChain.mFactory = MakeUnique<gl::SurfaceFactory_Basic>(gl);
+    swapChain.mFactory = std::make_unique<gl::SurfaceFactory_Basic>(gl);
   }
   MOZ_ASSERT(swapChain.mFactory);
   if (useAsync) {
@@ -1404,15 +1398,6 @@ bool WebGLContext::PushRemoteTexture(
   Maybe<layers::SurfaceDescriptor> desc;
   if (surf) {
     desc = surf->ToSurfaceDescriptor();
-    // Move surface's GpuFence to the SurfaceDescriptor. Done here rather than
-    // in SharedSurface_MacIOSurface::ToSurfaceDescriptor() as we know this
-    // surface will not be sent cross process, but that's not true for all
-    // callers of SharedSurface::ToSurfaceDescriptor().
-    if (desc && desc->type() ==
-                    layers::SurfaceDescriptor::TSurfaceDescriptorMacIOSurface) {
-      auto& ioDesc = desc->get_SurfaceDescriptorMacIOSurface();
-      ioDesc.gpuFence() = surf->TakeGpuFence();
-    }
   }
   if (!desc) {
     if (surf && surf->mDesc.type != gl::SharedSurfaceType::Basic) {
@@ -2566,7 +2551,7 @@ webgl::LinkActiveInfo GetLinkActiveInfo(
         const auto userName = fnUnmapName(mappedName);
 
         auto loc = gl.fGetAttribLocation(prog, mappedName.c_str());
-        if (mappedName.find("gl_") == 0) {
+        if (mappedName.starts_with("gl_")) {
           // Bug 1328559: Appears problematic on ANGLE and OSX, but not Linux or
           // Win+GL.
           loc = -1;
@@ -2840,7 +2825,7 @@ GLint WebGLContext::GetFragDataLocation(const WebGLProgram& prog,
 
   if (gl->WorkAroundDriverBugs() && gl->IsMesa()) {
     // Mesa incorrectly generates INVALID_OPERATION for gl_ prefixes here.
-    if (mappedName.find("gl_") == 0) {
+    if (mappedName.starts_with("gl_")) {
       return -1;
     }
   }

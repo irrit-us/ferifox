@@ -6,18 +6,22 @@ package org.mozilla.fenix.ui.efficiency.tests
 
 import org.junit.Ignore
 import org.junit.Test
+import org.mozilla.fenix.customannotations.Critical
 import org.mozilla.fenix.customannotations.SmokeTest
+import org.mozilla.fenix.helpers.TestAssetHelper.downloadPageAsset
 import org.mozilla.fenix.helpers.TestAssetHelper.getGenericAsset
 import org.mozilla.fenix.helpers.TestAssetHelper.storageCheckPageAsset
 import org.mozilla.fenix.helpers.TestAssetHelper.storageWritePageAsset
 import org.mozilla.fenix.ui.efficiency.helpers.BaseTest
 import org.mozilla.fenix.ui.efficiency.selectors.BrowserPageSelectors
+import org.mozilla.fenix.ui.efficiency.selectors.DownloadsSelectors
+import org.mozilla.fenix.ui.efficiency.selectors.HistorySelectors
 
 class SettingsDeleteBrowsingDataTest : BaseTest() {
 
-    private val mockWebServer get() = fenixTestRule.mockWebServer
-
-    @Ignore("Covered by verifyNavigationReachability[1: SettingsDeleteBrowsingDataPage (TBD) — Navigation Reachability]")
+    @Ignore(
+        "Covered by verifyNavigationReachability[1: SettingsDeleteBrowsingDataPage (TBD) — Navigation Reachability]"
+    )
     @Test
     fun verifyTheDeleteBrowsingDataSectionTest() {
         on.settingsDeleteBrowsingData.navigateToPage()
@@ -31,7 +35,8 @@ class SettingsDeleteBrowsingDataTest : BaseTest() {
 
         on.browserPage.navigateToPage(defaultWebPage.url.toString())
 
-        on.settingsDeleteBrowsingData.navigateToPage()
+        on.settingsDeleteBrowsingData
+            .navigateToPage()
             .verifyAllCheckBoxesAreChecked()
             .selectOnlyOpenTabsCheckBox()
             .clickDeleteBrowsingDataButton()
@@ -43,8 +48,7 @@ class SettingsDeleteBrowsingDataTest : BaseTest() {
             .confirmDeletionAndAssertSnackbar()
             .verifyOpenTabsDetails("0")
 
-        on.tabDrawer.navigateToPage()
-            .verifyNoOpenTabsInNormalBrowsing()
+        on.tabDrawer.navigateToPage().verifyNoOpenTabsInNormalBrowsing()
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/378864
@@ -55,7 +59,8 @@ class SettingsDeleteBrowsingDataTest : BaseTest() {
 
         on.browserPage.navigateToPage(genericPage.url.toString())
 
-        on.settingsDeleteBrowsingData.navigateToPage()
+        on.settingsDeleteBrowsingData
+            .navigateToPage()
             .verifyBrowsingHistoryDetails("1")
             .selectOnlyBrowsingHistoryCheckBox()
             .clickDeleteBrowsingDataButton()
@@ -67,8 +72,7 @@ class SettingsDeleteBrowsingDataTest : BaseTest() {
             .confirmDeletionAndAssertSnackbar()
             .verifyBrowsingHistoryDetails("0")
 
-        on.history.navigateToPage()
-            .mozVerifyElementsByGroup("emptyHistoryMenuView")
+        on.history.navigateToPage().mozVerifyElementsByGroup(HistorySelectors.Group.EMPTY_HISTORY_MENU_VIEW)
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/416041
@@ -82,7 +86,8 @@ class SettingsDeleteBrowsingDataTest : BaseTest() {
         // Browse a generic page first so GeckoView is loaded on a fresh run.
         on.browserPage.navigateToPage(genericPage.url.toString())
 
-        on.browserPage.navigateToPage(storageWritePage, forceNavigation = true)
+        on.browserPage
+            .navigateToPage(storageWritePage, forceNavigation = true)
             .verifyPageContent("No cookies set")
             .clickPageObjectUntilContent(
                 BrowserPageSelectors.SET_COOKIES_WEB_BUTTON,
@@ -90,11 +95,13 @@ class SettingsDeleteBrowsingDataTest : BaseTest() {
                 "user=android",
             )
 
-        on.browserPage.navigateToPage(storageCheckPage, forceNavigation = true)
+        on.browserPage
+            .navigateToPage(storageCheckPage, forceNavigation = true)
             .verifyPageContent("Session storage has value")
             .verifyPageContent("Local storage has value")
 
-        on.settingsDeleteBrowsingData.navigateToPage()
+        on.settingsDeleteBrowsingData
+            .navigateToPage()
             .selectOnlyCookiesCheckBox()
             .clickDeleteBrowsingDataButton()
             .verifyDeleteBrowsingDataDialog()
@@ -104,11 +111,41 @@ class SettingsDeleteBrowsingDataTest : BaseTest() {
             .verifyDeleteBrowsingDataDialog()
             .confirmDeletionAndAssertSnackbar()
 
-        on.browserPage.navigateToPage(storageCheckPage, forceNavigation = true)
+        on.browserPage
+            .navigateToPage(storageCheckPage, forceNavigation = true)
             .verifyPageContent("Session storage empty")
             .verifyPageContent("Local storage empty")
 
-        on.browserPage.navigateToPage(storageWritePage, forceNavigation = true)
-            .verifyPageContent("No cookies set")
+        on.browserPage.navigateToPage(storageWritePage, forceNavigation = true).verifyPageContent("No cookies set")
+    }
+
+    // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/1243095
+    @Critical
+    @Test
+    fun deleteDownloadsDataTest() {
+        val downloadTestPage = mockWebServer.downloadPageAsset.url.toString()
+        val downloadFile = "zip_small.zip"
+
+        on.browserPage
+            .navigateToPage(downloadTestPage)
+            .clickDownloadLink(downloadFile, downloadTestPage)
+            .verifyDownloadPrompt()
+            .clickDownloadPromptConfirmButton()
+
+        on.downloads.navigateToPage().verifyDownloadedFileExistsInDownloadsList(downloadFile)
+
+        on.settingsDeleteBrowsingData
+            .navigateToPage()
+            .verifyAllCheckBoxesAreChecked()
+            .selectOnlyDownloadsCheckBox()
+            .clickDeleteBrowsingDataButton()
+            .verifyDeleteBrowsingDataDialog()
+            .clickDialogCancelButton()
+            .verifyDownloadsCheckBox(true)
+            .clickDeleteBrowsingDataButton()
+            .verifyDeleteBrowsingDataDialog()
+            .confirmDeletionAndAssertSnackbar()
+
+        on.downloads.navigateToPage().mozVerifyElementsByGroup(DownloadsSelectors.Group.EMPTY_DOWNLOADS)
     }
 }

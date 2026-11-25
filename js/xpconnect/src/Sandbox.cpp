@@ -53,6 +53,7 @@
 #include "Crypto.h"
 #include "ExpandedPrincipal.h"
 #include "FerifoxConfig.h"
+#include "jsapi.h"
 #include "jsfriendapi.h"
 #include "nsContentUtils.h"
 #include "nsGlobalWindowInner.h"
@@ -263,10 +264,8 @@ static bool SandboxImport(JSContext* cx, unsigned argc, Value* vp) {
       return false;
     }
   }
-  JS_MarkCrossZoneIdValue(cx, StringValue(funname));
-
   RootedId id(cx);
-  if (!JS_StringToId(cx, funname, &id)) {
+  if (!JS_StringToId(cx, funname, &id) || !JS_WrapId(cx, &id)) {
     return false;
   }
 
@@ -1313,6 +1312,16 @@ nsresult xpc::CreateSandboxObject(JSContext* cx, MutableHandleValue vp,
     }
   }
 
+  RefPtr<nsGlobalWindowInner> associatedWindow;
+  if (options.associatedWindow) {
+    associatedWindow = WindowOrNull(js::UncheckedUnwrap(
+        options.associatedWindow, /* stopAtWindowProxy = */ false));
+    if (!associatedWindow) {
+      JS_ReportErrorASCII(cx, "associatedWindow must be a Window");
+      return NS_ERROR_INVALID_ARG;
+    }
+  }
+
   JS::RealmOptions realmOptions;
 
   auto& creationOptions = realmOptions.creationOptions();
@@ -1452,6 +1461,11 @@ nsresult xpc::CreateSandboxObject(JSContext* cx, MutableHandleValue vp,
 
     // This creates a SandboxPrivate and passes ownership of it to |sandbox|.
     SandboxPrivate::Create(principal, sandbox);
+
+    if (associatedWindow) {
+      SandboxPrivate::GetPrivate(sandbox)->SetAssociatedWindow(
+          associatedWindow);
+    }
 
     // Ensure |Object.prototype| is instantiated before prototype-
     // splicing below.
@@ -2041,6 +2055,7 @@ bool SandboxOptions::ParseGlobalProperties() {
 bool SandboxOptions::Parse() {
   /* All option names must be ASCII-only. */
   bool ok = ParseObject("sandboxPrototype", &proto) &&
+            ParseObject("associatedWindow", &associatedWindow) &&
             ParseBoolean("wantXrays", &wantXrays) &&
             ParseBoolean("allowWaivers", &allowWaivers) &&
             ParseBoolean("wantComponents", &wantComponents) &&
@@ -2371,6 +2386,15 @@ SandboxPrivate::SandboxPrivate(nsIPrincipal* principal)
       mCookieJarSettings(mozilla::net::CookieJarSettings::Create(mPrincipal)) {}
 
 SandboxPrivate::~SandboxPrivate() = default;
+
+void SandboxPrivate::SetAssociatedWindow(nsPIDOMWindowInner* aWindow) {
+  mAssociatedWindow = do_GetWeakReference(aWindow);
+}
+
+already_AddRefed<nsPIDOMWindowInner> SandboxPrivate::GetAssociatedWindow() {
+  nsCOMPtr<nsPIDOMWindowInner> window = do_QueryReferent(mAssociatedWindow);
+  return window.forget();
+}
 
 ModuleLoaderBase* SandboxPrivate::GetModuleLoader(JSContext* aCx) {
   if (mModuleLoader) {

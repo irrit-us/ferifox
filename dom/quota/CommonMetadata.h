@@ -18,12 +18,18 @@ class mozIStorageStatement;
 
 namespace mozilla::dom::quota {
 
+#if defined(NIGHTLY_BUILD) || defined(DEBUG)
+bool CheckClientUsagesConsistency(const ClientUsageArray& aClientUsages,
+                                  int64_t aUsage, const nsACString& aContext);
+#endif  // defined(NIGHTLY_BUILD) || defined(DEBUG)
+
 struct PrincipalMetadata {
   nsCString mSuffix;
   nsCString mGroup;
   nsCString mOrigin;
   nsCString mStorageOrigin;
   bool mIsPrivate = false;
+  bool mIsEncrypted = false;
 
   // These explicit constructors exist to prevent accidental aggregate
   // initialization which could for example initialize mSuffix as group and
@@ -31,14 +37,18 @@ struct PrincipalMetadata {
   PrincipalMetadata() = default;
 
   PrincipalMetadata(nsCString aSuffix, nsCString aGroup, nsCString aOrigin,
-                    nsCString aStorageOrigin, bool aIsPrivate)
+                    nsCString aStorageOrigin, bool aIsPrivate,
+                    bool aIsEncrypted = false)
       : mSuffix{std::move(aSuffix)},
         mGroup{std::move(aGroup)},
         mOrigin{std::move(aOrigin)},
         mStorageOrigin{std::move(aStorageOrigin)},
-        mIsPrivate{aIsPrivate} {
+        mIsPrivate{aIsPrivate},
+        mIsEncrypted{aIsEncrypted} {
     AssertInvariants();
   }
+
+  bool ShouldEncrypt() const { return mIsPrivate || mIsEncrypted; }
 
   void AssertInvariants() const {
     MOZ_ASSERT(!StringBeginsWith(mOrigin, kUUIDOriginScheme));
@@ -55,7 +65,8 @@ struct PrincipalMetadata {
     return mSuffix == aOther.mSuffix && mGroup == aOther.mGroup &&
            mOrigin == aOther.mOrigin &&
            mStorageOrigin == aOther.mStorageOrigin &&
-           mIsPrivate == aOther.mIsPrivate;
+           mIsPrivate == aOther.mIsPrivate &&
+           mIsEncrypted == aOther.mIsEncrypted;
   }
 };
 
@@ -66,10 +77,10 @@ struct OriginMetadata : public PrincipalMetadata {
 
   OriginMetadata(nsCString aSuffix, nsCString aGroup, nsCString aOrigin,
                  nsCString aStorageOrigin, bool aIsPrivate,
-                 PersistenceType aPersistenceType)
+                 PersistenceType aPersistenceType, bool aIsEncrypted = false)
       : PrincipalMetadata(std::move(aSuffix), std::move(aGroup),
                           std::move(aOrigin), std::move(aStorageOrigin),
-                          aIsPrivate),
+                          aIsPrivate, aIsEncrypted),
         mPersistenceType(aPersistenceType) {}
 
   OriginMetadata(PrincipalMetadata aPrincipalMetadata,
@@ -120,11 +131,12 @@ struct OriginStateMetadata {
         mPersisted(aPersisted),
         mDirty(aDirty) {}
 
-  uint32_t ToMetadataFlags() const {
+  uint32_t ToMetadataFlags(bool aIsEncrypted) const {
     return DirectoryMetadataFlags::Initialized |
            (mAccessed ? DirectoryMetadataFlags::Accessed : 0u) |
            (mDirty ? DirectoryMetadataFlags::Dirty : 0u) |
-           (mPersisted ? DirectoryMetadataFlags::Persisted : 0u);
+           (mPersisted ? DirectoryMetadataFlags::Persisted : 0u) |
+           (aIsEncrypted ? DirectoryMetadataFlags::Encrypted : 0u);
   }
 
   void FromMetadataFlags(uint32_t aFlags) {
@@ -148,14 +160,19 @@ struct OriginStateMetadata {
 
 struct FullOriginMetadata : OriginMetadata, OriginStateMetadata {
   ClientUsageArray mClientUsages;
-  uint64_t mOriginUsage;
+
+  // Signed for the same reason as OriginInfo::mUsage, which this is normally
+  // populated from: it can transiently (or due to a bug elsewhere) go
+  // negative, and an unsigned type would turn that into a huge value that
+  // corrupts every quota check that reads it (see bug 2066923, bug 1585978).
+  int64_t mOriginUsage;
   uint32_t mQuotaVersion;
 
   FullOriginMetadata() = default;
 
   FullOriginMetadata(OriginMetadata aOriginMetadata,
                      OriginStateMetadata aOriginStateMetadata,
-                     const ClientUsageArray& aClientUsages, uint64_t aUsage,
+                     const ClientUsageArray& aClientUsages, int64_t aUsage,
                      uint32_t aQuotaVersion)
       : OriginMetadata(std::move(aOriginMetadata)),
         OriginStateMetadata(aOriginStateMetadata),
@@ -190,12 +207,30 @@ struct FullOriginMetadata : OriginMetadata, OriginStateMetadata {
            mQuotaVersion == aOther.mQuotaVersion;
   }
 
-  // Copies mStorageOrigin, mIsPrivate, and mQuotaVersion from aOther; call
-  // before Equals() when *this was loaded from an L1 row that omits these.
-  void CopyIntrinsicFieldsFrom(const FullOriginMetadata& aOther) {
-    mStorageOrigin = aOther.mStorageOrigin;
-    mIsPrivate = aOther.mIsPrivate;
-    mQuotaVersion = aOther.mQuotaVersion;
+  // Compares all fields except mStorageOrigin, mIsPrivate, and mQuotaVersion.
+  // Used when comparing scanned metadata against a DB row that omits these.
+  template <typename T,
+            typename = std::enable_if_t<std::is_same_v<T, FullOriginMetadata>>>
+  bool EqualsIgnoringIntrinsicFields(const T& aOther) const {
+    return mSuffix == aOther.mSuffix && mGroup == aOther.mGroup &&
+           mOrigin == aOther.mOrigin &&
+           mPersistenceType == aOther.mPersistenceType &&
+           static_cast<const OriginStateMetadata&>(*this).Equals(
+               static_cast<const OriginStateMetadata&>(aOther)) &&
+           mClientUsages == aOther.mClientUsages &&
+           mOriginUsage == aOther.mOriginUsage;
+  }
+
+  // The Encrypted bit lives next to the origin state flags on disk, but the
+  // value belongs to PrincipalMetadata, so these hide the OriginStateMetadata
+  // versions to keep the two in sync.
+  uint32_t ToMetadataFlags() const {
+    return OriginStateMetadata::ToMetadataFlags(mIsEncrypted);
+  }
+
+  void FromMetadataFlags(uint32_t aFlags) {
+    OriginStateMetadata::FromMetadataFlags(aFlags);
+    mIsEncrypted = (aFlags & DirectoryMetadataFlags::Encrypted) != 0;
   }
 
   // Convenient method for duplicating a FullOriginMetadata instance. Creates
@@ -208,6 +243,10 @@ struct FullOriginMetadata : OriginMetadata, OriginStateMetadata {
   }
 
   nsresult BindToStatement(mozIStorageStatement* aStatement) const;
+
+#if defined(NIGHTLY_BUILD) || defined(DEBUG)
+  bool CheckIfUsageIsConsistent(const nsACString& aContext) const;
+#endif  // defined(NIGHTLY_BUILD) || defined(DEBUG)
 };
 
 struct OriginUsageMetadata : FullOriginMetadata {

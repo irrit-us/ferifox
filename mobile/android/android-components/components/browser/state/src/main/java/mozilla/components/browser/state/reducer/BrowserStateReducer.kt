@@ -20,6 +20,7 @@ import mozilla.components.browser.state.action.ExtensionsProcessAction
 import mozilla.components.browser.state.action.HistoryMetadataAction
 import mozilla.components.browser.state.action.InitAction
 import mozilla.components.browser.state.action.LastAccessAction
+import mozilla.components.browser.state.action.ListenToPageAction
 import mozilla.components.browser.state.action.LocaleAction
 import mozilla.components.browser.state.action.MediaSessionAction
 import mozilla.components.browser.state.action.ReaderAction
@@ -29,7 +30,6 @@ import mozilla.components.browser.state.action.SearchAction
 import mozilla.components.browser.state.action.ShareResourceAction
 import mozilla.components.browser.state.action.SystemAction
 import mozilla.components.browser.state.action.SystemPermissionRequestAction
-import mozilla.components.browser.state.action.TabGroupAction
 import mozilla.components.browser.state.action.TabListAction
 import mozilla.components.browser.state.action.TrackingProtectionAction
 import mozilla.components.browser.state.action.TranslationsAction
@@ -63,7 +63,6 @@ internal object BrowserStateReducer {
             is ReaderAction -> ReaderStateReducer.reduce(state, action)
             is SystemAction -> SystemReducer.reduce(state, action)
             is TabListAction -> TabListReducer.reduce(state, action)
-            is TabGroupAction -> TabGroupReducer.reduce(state, action)
             is TrackingProtectionAction -> TrackingProtectionStateReducer.reduce(state, action)
             is TranslationsAction -> TranslationsStateReducer.reduce(state, action)
             is WebExtensionAction -> WebExtensionReducer.reduce(state, action)
@@ -83,6 +82,7 @@ internal object BrowserStateReducer {
             is UpdateDistribution -> state.copy(distributionId = action.distributionId)
             is DefaultDesktopModeAction -> DesktopModeReducer.reduce(state = state, action = action)
             is SystemPermissionRequestAction -> SystemPermissionReducer.reduce(state, action)
+            is ListenToPageAction -> ListenToPageReducer.reduce(state, action)
         }
     }
 }
@@ -90,12 +90,12 @@ internal object BrowserStateReducer {
 /**
  * Finds the corresponding tab or custom tab in the [BrowserState] and updates it using [update].
  *
- * Consider using the specialized [updateTabState] or [updateCustomTabState] to limit the tabs to be updated
- * if the properties you want changed are not common to both [SessionState] implementations.
+ * Consider using the specialized [updateTabState] or [updateCustomTabState] to limit the tabs to be updated if the
+ * properties you want changed are not common to both [SessionState] implementations.
  *
  * @param tabId ID of the tab to change.
- * @param update Returns a new version of the tab state. Must be the same class,
- * preferably using [SessionState.createCopy].
+ * @param update Returns a new version of the tab state. Must be the same class, preferably using
+ *   [SessionState.createCopy].
  */
 @Suppress("Unchecked_Cast")
 internal fun BrowserState.updateTabOrCustomTabState(
@@ -114,9 +114,9 @@ internal fun BrowserState.updateTabOrCustomTabState(
 /**
  * Finds the corresponding tab in the [BrowserState] and replaces it using [update].
  *
- * This will only update a [TabSessionState] if such exists with the given [tabId].
- * Consider using the other specialized [updateCustomTabState] method for updating only [CustomTabSessionState]
- * or the general [updateTabOrCustomTabState] to update any tab or custom tab with a given [tabId].
+ * This will only update a [TabSessionState] if such exists with the given [tabId]. Consider using the other specialized
+ * [updateCustomTabState] method for updating only [CustomTabSessionState] or the general [updateTabOrCustomTabState] to
+ * update any tab or custom tab with a given [tabId].
  *
  * @param tabId ID of the tab to change.
  * @param update Returns a new version of [TabSessionState].
@@ -133,9 +133,9 @@ internal fun BrowserState.updateTabState(
 /**
  * Finds the corresponding custom tab in the [BrowserState] and replaces it using [update].
  *
- * This will only update a [CustomTabSessionState] if such exists with the given [tabId].
- * Consider using the other specialized [updateTabState] method for updating only [TabSessionState]
- * or the general [updateTabOrCustomTabState] to update any tab or custom tab with a given [tabId].
+ * This will only update a [CustomTabSessionState] if such exists with the given [tabId]. Consider using the other
+ * specialized [updateTabState] method for updating only [TabSessionState] or the general [updateTabOrCustomTabState] to
+ * update any tab or custom tab with a given [tabId].
  *
  * @param tabId ID of the tab to change.
  * @param update Returns a new version of [CustomTabSessionState].
@@ -151,6 +151,7 @@ internal fun BrowserState.updateCustomTabState(
 
 /**
  * Finds the corresponding tab in the list and replaces it using [update].
+ *
  * @param tabId ID of the tab to change.
  * @param update Returns a new version of the tab state.
  */

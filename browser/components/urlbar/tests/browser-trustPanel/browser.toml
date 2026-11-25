@@ -3,6 +3,8 @@ tags = "urlbar"
 support-files = [
   "../browser/head-common.js",
   "head.js",
+  "load_mixed_content_after_load.html",
+  "silence.ogg",
 ]
 prefs = [
   "browser.urlbar.trending.featureGate=false",
@@ -14,21 +16,29 @@ prefs = [
 
 ["browser_trust_panel.js"]
 https_first_disabled = true
-support-files = ["!/browser/base/content/test/protectionsUI/trackingPage.html"]
+support-files = ["!/browser/base/content/test/browser-protectionsUI/trackingPage.html"]
 
 ["browser_trust_panel_cert_exception.js"]
-skip-if = [
-  "os == 'mac' && os_version == '15.30' && arch == 'aarch64' && opt", # Bug 2062455
-]
 
 ["browser_trust_panel_focus.js"]
 
 ["browser_trust_panel_icon.js"]
 https_first_disabled = true
-support-files = ["!/browser/base/content/test/protectionsUI/trackingPage.html"]
+support-files = [
+  "!/browser/base/content/test/browser-protectionsUI/trackingPage.html",
+  "navigation.sjs",
+]
 
 ["browser_trust_panel_pages.js"]
 https_first_disabled = true
 
+["browser_trust_panel_privacy_metrics_alignment.js"]
+https_first_disabled = true
+support-files = ["!/browser/base/content/test/browser-protectionsUI/trackingPage.html"]
+
 ["browser_trust_panel_security_view.js"]
 https_first_disabled = true
+
+["browser_trust_panel_telemetry.js"]
+https_first_disabled = true
+support-files = ["!/browser/base/content/test/browser-protectionsUI/trackingPage.html"]

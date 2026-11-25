@@ -7,6 +7,11 @@ let mockCA = makeMockContentAnalysis();
 
 add_setup(async function test_setup() {
   mockCA = await mockContentAnalysisService(mockCA);
+  // This test isn't about the downloads panel, and starting downloads would
+  // otherwise leave it open.
+  await SpecialPowers.pushPrefEnv({
+    set: [["browser.download.alwaysOpenPanel", false]],
+  });
 });
 
 const DOWNLOAD_URL =
@@ -82,6 +87,11 @@ function assertContentAnalysisDownloadRequest(request, expectedFilePath) {
     "request has correct operationTypeForDisplay"
   );
   is(request.filePath, expectedFilePath, "request filePath should match");
+  is(
+    request.sha256Digest,
+    "95548f7a8fba647809a41bb53f47b7b8553380553af901c4b7c353602c98fe2a",
+    "request sha256Digest should be the hex SHA-256 of the file"
+  );
   ok(!request.textContent?.length, "request textContent should be empty");
   is(
     request.userActionRequestsCount,

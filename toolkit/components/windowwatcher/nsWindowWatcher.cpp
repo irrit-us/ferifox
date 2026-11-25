@@ -275,8 +275,7 @@ static already_AddRefed<nsIArray> ConvertArgsToArray(nsISupports* aArguments) {
 
 NS_IMETHODIMP
 nsWindowWatcher::OpenWindow(mozIDOMWindowProxy* aParent, const nsACString& aUrl,
-                            const nsACString& aName,
-                            const nsACString& aFeatures,
+                            const nsAString& aName, const nsACString& aFeatures,
                             nsISupports* aArguments,
                             mozIDOMWindowProxy** aResult) {
   nsCOMPtr<nsIArray> argv = ConvertArgsToArray(aArguments);
@@ -359,7 +358,7 @@ static SizeSpec CalcSizeSpec(const WindowFeatures&, bool aHasChromeParent,
 
 NS_IMETHODIMP
 nsWindowWatcher::OpenWindow2(
-    mozIDOMWindowProxy* aParent, nsIURI* aUri, const nsACString& aName,
+    mozIDOMWindowProxy* aParent, nsIURI* aUri, const nsAString& aName,
     const nsACString& aFeatures, const UserActivation::Modifiers& aModifiers,
     bool aCalledFromScript, bool aDialog, bool aNavigate, nsIArray* aArguments,
     bool aIsPopupSpam, bool aForceNoOpener, bool aForceNoReferrer,
@@ -435,7 +434,8 @@ nsresult nsWindowWatcher::CreateChromeWindow(nsIWebBrowserChrome* aParentChrome,
     }
   }
   nsCOMPtr<nsIWebBrowserChrome> newWindowChrome;
-  nsresult rv = mWindowCreator->CreateChromeWindow(
+  nsCOMPtr windowCreator = mWindowCreator;
+  nsresult rv = windowCreator->CreateChromeWindow(
       aParentChrome, aChromeFlags, aOpenWindowInfo, &cancel,
       getter_AddRefs(newWindowChrome));
 
@@ -601,8 +601,8 @@ nsWindowWatcher::OpenWindowWithRemoteTab(nsIRemoteTab* aRemoteTab,
 }
 
 nsresult nsWindowWatcher::OpenWindowInternal(
-    mozIDOMWindowProxy* aParent, const nsACString& aUrl,
-    const nsACString& aName, const nsACString& aFeatures,
+    mozIDOMWindowProxy* aParent, const nsACString& aUrl, const nsAString& aName,
+    const nsACString& aFeatures,
     const mozilla::dom::UserActivation::Modifiers& aModifiers,
     bool aCalledFromJS, bool aDialog, bool aNavigate, nsIArray* aArgv,
     bool aIsPopupSpam, bool aForceNoOpener, bool aForceNoReferrer,
@@ -632,7 +632,7 @@ nsresult nsWindowWatcher::OpenWindowInternal(
 }
 
 nsresult nsWindowWatcher::OpenWindowInternal(
-    mozIDOMWindowProxy* aParent, nsIURI* aUri, const nsACString& aName,
+    mozIDOMWindowProxy* aParent, nsIURI* aUri, const nsAString& aName,
     const nsACString& aFeatures,
     const mozilla::dom::UserActivation::Modifiers& aModifiers,
     bool aCalledFromJS, bool aDialog, bool aNavigate, nsIArray* aArgv,
@@ -652,7 +652,7 @@ nsresult nsWindowWatcher::OpenWindowInternal(
   bool uriToLoadIsChrome = false;
 
   uint32_t chromeFlags;
-  nsAutoString name;  // string version of aName
+  nsAutoString name;  // local copy of aName, voided if unspecified
   nsCOMPtr<nsIDocShellTreeOwner>
       parentTreeOwner;               // from the parent window, if any
   RefPtr<BrowsingContext> targetBC;  // from the new window
@@ -686,7 +686,7 @@ nsresult nsWindowWatcher::OpenWindowInternal(
 
   bool nameSpecified = false;
   if (!aName.IsEmpty()) {
-    CopyUTF8toUTF16(aName, name);
+    name.Assign(aName);
     nameSpecified = true;
   } else {
     name.SetIsVoid(true);
@@ -1949,29 +1949,14 @@ uint32_t nsWindowWatcher::CalculateChromeFlagsForSystem(
   if (aFeatures.GetBoolWithDefault("titlebar", false, &presenceFlag)) {
     chromeFlags |= nsIWebBrowserChrome::CHROME_TITLEBAR;
   }
-  if (aFeatures.GetBoolWithDefault("close", false, &presenceFlag)) {
-    chromeFlags |= nsIWebBrowserChrome::CHROME_WINDOW_CLOSE;
-  }
   if (aFeatures.GetBoolWithDefault("toolbar", false, &presenceFlag)) {
     chromeFlags |= nsIWebBrowserChrome::CHROME_TOOLBAR;
-  }
-  if (aFeatures.GetBoolWithDefault("location", false, &presenceFlag)) {
-    chromeFlags |= nsIWebBrowserChrome::CHROME_LOCATIONBAR;
-  }
-  if (aFeatures.GetBoolWithDefault("personalbar", false, &presenceFlag)) {
-    chromeFlags |= nsIWebBrowserChrome::CHROME_PERSONAL_TOOLBAR;
-  }
-  if (aFeatures.GetBoolWithDefault("menubar", false, &presenceFlag)) {
-    chromeFlags |= nsIWebBrowserChrome::CHROME_MENUBAR;
   }
   if (aFeatures.GetBoolWithDefault("resizable", false, &presenceFlag)) {
     chromeFlags |= nsIWebBrowserChrome::CHROME_WINDOW_RESIZE;
   }
   if (aFeatures.GetBoolWithDefault("minimizable", false, &presenceFlag)) {
     chromeFlags |= nsIWebBrowserChrome::CHROME_WINDOW_MINIMIZE;
-  }
-  if (aFeatures.GetBoolWithDefault("scrollbars", true, &presenceFlag)) {
-    chromeFlags |= nsIWebBrowserChrome::CHROME_SCROLLBARS;
   }
 
   // Determine whether the window is a private browsing window
@@ -2020,10 +2005,6 @@ uint32_t nsWindowWatcher::CalculateChromeFlagsForSystem(
   if (!aFeatures.Exists("titlebar")) {
     chromeFlags |= nsIWebBrowserChrome::CHROME_TITLEBAR;
   }
-  if (!aFeatures.Exists("close")) {
-    chromeFlags |= nsIWebBrowserChrome::CHROME_WINDOW_CLOSE;
-  }
-
   if (aDialog && !aFeatures.IsEmpty() && !presenceFlag) {
     chromeFlags = nsIWebBrowserChrome::CHROME_DEFAULT;
   }
@@ -2040,11 +2021,11 @@ uint32_t nsWindowWatcher::CalculateChromeFlagsForSystem(
   if (aFeatures.GetBoolWithDefault("alwaysontop", false)) {
     chromeFlags |= nsIWebBrowserChrome::CHROME_ALWAYS_ON_TOP;
   }
+  if (aFeatures.GetBoolWithDefault("mediapip", false)) {
+    chromeFlags |= nsIWebBrowserChrome::CHROME_MEDIA_PIP;
+  }
   if (aFeatures.GetBoolWithDefault("chrome", false)) {
     chromeFlags |= nsIWebBrowserChrome::CHROME_OPENAS_CHROME;
-  }
-  if (aFeatures.GetBoolWithDefault("extrachrome", false)) {
-    chromeFlags |= nsIWebBrowserChrome::CHROME_EXTRA;
   }
   if (aFeatures.GetBoolWithDefault("centerscreen", false)) {
     chromeFlags |= nsIWebBrowserChrome::CHROME_CENTER_SCREEN;
@@ -2094,8 +2075,6 @@ already_AddRefed<nsDocShellLoadState> nsWindowWatcher::CreateLoadState(
     if (nsCOMPtr<nsPIDOMWindowInner> parentInnerWin =
             aParent->GetCurrentInnerWindow()) {
       loadState->SetTriggeringWindowId(parentInnerWin->WindowID());
-      loadState->SetTriggeringStorageAccess(
-          parentInnerWin->UsingStorageAccess());
     }
 
     if (RefPtr<BrowsingContext> parentBC = aParent->GetBrowsingContext()) {

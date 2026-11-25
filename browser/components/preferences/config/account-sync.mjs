@@ -18,6 +18,7 @@
 
 import { Preferences } from "chrome://global/content/preferences/Preferences.mjs";
 import { SettingGroupManager } from "chrome://browser/content/preferences/config/SettingGroupManager.mjs";
+import { createDefaultBrowserConfig } from "chrome://browser/content/preferences/config/default-browser.mjs";
 
 const { SCOPE_APP_SYNC } = ChromeUtils.importESModule(
   "resource://gre/modules/FxAccountsCommon.sys.mjs"
@@ -26,10 +27,10 @@ const XPCOMUtils = ChromeUtils.importESModule(
   "resource://gre/modules/XPCOMUtils.sys.mjs"
 ).XPCOMUtils;
 const { Referrals } = ChromeUtils.importESModule(
-  "resource:///modules/referrals/Referrals.sys.mjs"
+  "moz-src:///browser/components/referrals/Referrals.sys.mjs"
 );
 const lazy = XPCOMUtils.declareLazy({
-  BackupService: "resource:///modules/backup/BackupService.sys.mjs",
+  BackupService: "moz-src:///browser/components/backup/BackupService.sys.mjs",
   Weave: "resource://services-sync/main.sys.mjs",
 
   SelectableProfileService:
@@ -211,6 +212,7 @@ export var SyncHelpers = new (class SyncHelpers {
           return;
         }
         const url = await window.FxAccounts.config.promiseConnectAccountURI(
+          "sync",
           this.getEntryPoint()
         );
         this.replaceTabWithUrl(url);
@@ -227,6 +229,7 @@ export var SyncHelpers = new (class SyncHelpers {
       return;
     }
     const url = await window.FxAccounts.config.promiseConnectAccountURI(
+      "sync",
       this.getEntryPoint()
     );
     this.replaceTabWithUrl(url);
@@ -241,8 +244,10 @@ export var SyncHelpers = new (class SyncHelpers {
    *        different entrypoints to accounts
    */
   async reSignIn(entrypoint) {
-    const url =
-      await window.FxAccounts.config.promiseConnectAccountURI(entrypoint);
+    const url = await window.FxAccounts.config.promiseConnectAccountURI(
+      "sync",
+      entrypoint
+    );
     this.replaceTabWithUrl(url);
   }
 
@@ -663,7 +668,7 @@ Preferences.addSetting({
   },
   setup(emitChange) {
     window.FxAccounts.config
-      .promiseConnectDeviceURI(SyncHelpers.getEntryPoint())
+      .promiseConnectDeviceURI("sync", SyncHelpers.getEntryPoint())
       .then(connectURI => {
         SyncHelpers.connectAnotherDeviceHref = connectURI;
         emitChange();
@@ -830,9 +835,13 @@ Preferences.addSetting({
 });
 
 let accountsEnabled = Services.prefs.getBoolPref("identity.fxaccounts.enabled");
+let perDeviceSyncEnabled = Services.prefs.getBoolPref(
+  "services.sync.perDeviceEngineChoices",
+  false
+);
 
 SettingGroupManager.registerGroups({
-  defaultBrowserSync: window.createDefaultBrowserConfig({
+  defaultBrowserSync: createDefaultBrowserConfig({
     includeIsDefaultPane: false,
     inProgress: true,
     hiddenFromSearch: true,
@@ -847,9 +856,7 @@ SettingGroupManager.registerGroups({
         l10nId: "account-disabled-group",
         iconSrc: "chrome://browser/skin/preferences/mozilla-logo.svg",
         supportPage: "managed-browser-firefox",
-        controlAttrs: {
-          headinglevel: 2,
-        },
+        headingLevel: 2,
       },
     ],
   },
@@ -957,6 +964,7 @@ SettingGroupManager.registerGroups({
     headingLevel: 2,
     iconSrc: "chrome://browser/skin/sync.svg",
     hidden: !accountsEnabled,
+    subcategory: "sync",
     items: [
       {
         id: "syncNoFxaSignIn",
@@ -1009,7 +1017,9 @@ SettingGroupManager.registerGroups({
       },
       {
         id: "syncNotConfigured",
-        l10nId: "prefs-syncing-off-2",
+        l10nId: perDeviceSyncEnabled
+          ? "prefs-syncing-off-3"
+          : "prefs-syncing-off-2",
         control: "moz-box-item",
         iconSrc: "chrome://global/skin/icons/warning.svg",
         items: [
@@ -1025,9 +1035,7 @@ SettingGroupManager.registerGroups({
         id: "fxaDeviceNameSection",
         l10nId: "sync-device-name-header-2",
         control: "moz-fieldset",
-        controlAttrs: {
-          ".headingLevel": 3,
-        },
+        headingLevel: 3,
         items: [
           {
             id: "fxaDeviceNameGroup",
@@ -1057,6 +1065,7 @@ SettingGroupManager.registerGroups({
     l10nId: "preferences-data-migration-group",
     headingLevel: 2,
     iconSrc: "chrome://browser/skin/import.svg",
+    subcategory: "importBrowserData",
     items: [
       {
         id: "data-migration",
@@ -1136,14 +1145,15 @@ SettingGroupManager.registerGroups({
     ],
   },
   referrals: {
-    l10nId: "referrals-section-header",
+    l10nId: "referrals-section-header2",
     headingLevel: 2,
+    iconSrc: "chrome://browser/content/logos/share-firefox.svg",
     hidden: !Referrals.isEnabled,
     items: [
       {
         id: "referrals-link",
         control: "moz-box-button",
-        l10nId: "referrals-link",
+        l10nId: "referrals-link2",
       },
     ],
   },
@@ -1159,10 +1169,16 @@ document.addEventListener(
       return;
     }
     let { subcategory } = event.detail;
+    let entrypoint = window.gMainPane.getMigrationEntrypoint();
     if (subcategory == "migrate") {
-      window.gMainPane.showMigrationWizardDialog();
+      window.gMainPane.showMigrationWizardDialog({
+        entrypoint,
+      });
     } else if (subcategory == "migrate-autoclose") {
-      window.gMainPane.showMigrationWizardDialog({ closeTabWhenDone: true });
+      window.gMainPane.showMigrationWizardDialog({
+        closeTabWhenDone: true,
+        entrypoint,
+      });
     }
   }
 );

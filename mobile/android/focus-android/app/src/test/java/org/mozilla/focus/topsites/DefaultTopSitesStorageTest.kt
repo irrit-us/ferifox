@@ -24,23 +24,25 @@ class DefaultTopSitesStorageTest {
 
         defaultTopSitesStorage.addTopSite("Mozilla", "https://mozilla.com", isDefault = false)
 
-        verify(pinnedSitesStorage).addPinnedSite(
-            "Mozilla",
-            "https://mozilla.com",
-            isDefault = false,
-        )
+        verify(pinnedSitesStorage)
+            .addPinnedSite(
+                "Mozilla",
+                "https://mozilla.com",
+                isDefault = false,
+            )
     }
 
     @Test
     fun `WHEN a top site is removed THEN the pinned sites storage is called`() = runTest {
         val defaultTopSitesStorage = DefaultTopSitesStorage(pinnedSitesStorage)
 
-        val pinnedSite = TopSite.Pinned(
-            id = 2,
-            title = "Firefox",
-            url = "https://firefox.com",
-            createdAt = 2,
-        )
+        val pinnedSite =
+            TopSite.Pinned(
+                id = 2,
+                title = "Firefox",
+                url = "https://firefox.com",
+                createdAt = 2,
+            )
 
         defaultTopSitesStorage.removeTopSite(pinnedSite)
 
@@ -51,68 +53,74 @@ class DefaultTopSitesStorageTest {
     fun `WHEN a top site is updated THEN the pinned sites storage is called`() = runTest {
         val defaultTopSitesStorage = DefaultTopSitesStorage(pinnedSitesStorage)
 
-        val pinnedSite = TopSite.Pinned(
-            id = 2,
-            title = "Wikipedia",
-            url = "https://wikipedia.com",
-            createdAt = 2,
-        )
+        val pinnedSite =
+            TopSite.Pinned(
+                id = 2,
+                title = "Wikipedia",
+                url = "https://wikipedia.com",
+                createdAt = 2,
+            )
         defaultTopSitesStorage.updateTopSite(
             pinnedSite,
             "Wiki",
             "https://en.wikipedia.org/wiki/Wiki",
         )
 
-        verify(pinnedSitesStorage).updatePinnedSite(
-            pinnedSite,
-            "Wiki",
-            "https://en.wikipedia.org/wiki/Wiki",
-        )
+        verify(pinnedSitesStorage)
+            .updatePinnedSite(
+                pinnedSite,
+                "Wiki",
+                "https://en.wikipedia.org/wiki/Wiki",
+            )
     }
 
     @Test
     fun `WHEN getTopSites is called THEN the appropriate top sites are returned`() = runTest {
         val defaultTopSitesStorage = DefaultTopSitesStorage(pinnedSitesStorage)
 
-        val pinnedSite1 = TopSite.Pinned(
-            id = 2,
-            title = "Wikipedia",
-            url = "https://wikipedia.com",
-            createdAt = 2,
-        )
-        val pinnedSite2 = TopSite.Pinned(
-            id = 3,
-            title = "Example",
-            url = "https://example.com",
-            createdAt = 3,
-        )
+        val pinnedSite1 =
+            TopSite.Pinned(
+                id = 2,
+                title = "Wikipedia",
+                url = "https://wikipedia.com",
+                createdAt = 2,
+            )
+        val pinnedSite2 =
+            TopSite.Pinned(
+                id = 3,
+                title = "Example",
+                url = "https://example.com",
+                createdAt = 3,
+            )
 
-        whenever(pinnedSitesStorage.getPinnedSites()).thenReturn(
-            listOf(
-                pinnedSite1,
-                pinnedSite2,
-            ),
-        )
+        whenever(pinnedSitesStorage.getPinnedSites())
+            .thenReturn(
+                listOf(
+                    pinnedSite1,
+                    pinnedSite2,
+                )
+            )
 
-        var topSites = defaultTopSitesStorage.getTopSites(
-            totalSites = 0,
-            frecencyConfig = null,
-        )
+        var topSites =
+            defaultTopSitesStorage.getTopSites(
+                targetSitesCount = 0,
+                frecencyConfig = null,
+            )
 
         assertTrue(topSites.isEmpty())
 
-        topSites = defaultTopSitesStorage.getTopSites(totalSites = 1)
+        topSites = defaultTopSitesStorage.getTopSites(targetSitesCount = 1)
 
         assertEquals(1, topSites.size)
         assertEquals(pinnedSite1, topSites[0])
 
-        topSites = defaultTopSitesStorage.getTopSites(totalSites = 2)
+        topSites = defaultTopSitesStorage.getTopSites(targetSitesCount = 2)
 
         assertEquals(2, topSites.size)
         assertEquals(pinnedSite1, topSites[0])
         assertEquals(pinnedSite2, topSites[1])
 
-        topSites = defaultTopSitesStorage.getTopSites(totalSites = 5)
+        topSites = defaultTopSitesStorage.getTopSites(targetSitesCount = 5)
 
         assertEquals(2, topSites.size)
         assertEquals(pinnedSite1, topSites[0])

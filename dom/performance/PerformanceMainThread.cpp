@@ -4,7 +4,10 @@
 
 #include "PerformanceMainThread.h"
 
+#include <memory>
+
 #include "LargestContentfulPaint.h"
+#include "PerformanceContainerTiming.h"
 #include "PerformanceEventTiming.h"
 #include "PerformanceInteractionMetrics.h"
 #include "PerformanceNavigation.h"
@@ -62,6 +65,13 @@ void GetURLSpecFromChannel(nsITimedChannel* aChannel, nsAString& aSpec) {
   CopyUTF8toUTF16(spec, aSpec);
 }
 
+bool MatchesNameAndType(PerformanceEntry* aEntry, const nsAString& aName,
+                        const Optional<nsAString>& aEntryType) {
+  return aEntry && aEntry->GetName()->Equals(aName) &&
+         (!aEntryType.WasPassed() ||
+          aEntry->GetEntryType()->Equals(aEntryType.Value()));
+}
+
 }  // namespace
 
 NS_IMPL_CYCLE_COLLECTION_CLASS(PerformanceMainThread)
@@ -70,10 +80,11 @@ NS_IMPL_CYCLE_COLLECTION_UNLINK_BEGIN_INHERITED(PerformanceMainThread,
                                                 Performance)
   NS_IMPL_CYCLE_COLLECTION_UNLINK(
       mTiming, mNavigation, mDocEntry, mFCPTiming, mEventTimingEntries,
-      mLargestContentfulPaintEntries, mFirstInputEvent, mPendingPointerDown,
-      mPendingEventTimingEntries, mEventCounts, mInteractionMetrics,
-      mCurrentEventTimingEntry)
+      mLargestContentfulPaintEntries, mContainerTimingEntries, mFirstInputEvent,
+      mPendingPointerDown, mPendingEventTimingEntries, mEventCounts,
+      mInteractionMetrics, mCurrentEventTimingEntry, mPendingLCPCandidate)
   tmp->mTextFrameUnions.Clear();
+  tmp->mContainerTimingRecords.Clear();
   mozilla::DropJSObjects(tmp);
 NS_IMPL_CYCLE_COLLECTION_UNLINK_END
 
@@ -81,9 +92,10 @@ NS_IMPL_CYCLE_COLLECTION_TRAVERSE_BEGIN_INHERITED(PerformanceMainThread,
                                                   Performance)
   NS_IMPL_CYCLE_COLLECTION_TRAVERSE(
       mTiming, mNavigation, mDocEntry, mFCPTiming, mEventTimingEntries,
-      mLargestContentfulPaintEntries, mFirstInputEvent, mPendingPointerDown,
-      mPendingEventTimingEntries, mEventCounts, mTextFrameUnions,
-      mInteractionMetrics, mCurrentEventTimingEntry)
+      mLargestContentfulPaintEntries, mContainerTimingEntries, mFirstInputEvent,
+      mPendingPointerDown, mPendingEventTimingEntries, mEventCounts,
+      mTextFrameUnions, mContainerTimingRecords, mInteractionMetrics,
+      mCurrentEventTimingEntry, mPendingLCPCandidate)
 
 NS_IMPL_CYCLE_COLLECTION_TRAVERSE_END
 
@@ -177,8 +189,7 @@ PerformanceTiming* PerformanceMainThread::Timing() {
 
 void PerformanceMainThread::DispatchResourceTimingBufferFullEvent() {
   RefPtr<Event> event = NS_NewDOMEvent(this, nullptr, nullptr);
-  // it bubbles, and it isn't cancelable
-  event->InitEvent(u"resourcetimingbufferfull"_ns, true, false);
+  event->InitEvent(u"resourcetimingbufferfull"_ns, false, false);
   event->SetTrusted(true);
   DispatchEvent(*event);
 }
@@ -316,6 +327,86 @@ void PerformanceMainThread::SetCurrentEventTimingEntry(
 PerformanceEventTiming* PerformanceMainThread::GetCurrentEventTimingEntry()
     const {
   return mCurrentEventTimingEntry;
+}
+
+void PerformanceMainThread::QueueContainerTimingEntry(
+    PerformanceContainerTiming* aEntry) {
+  MOZ_ASSERT(StaticPrefs::dom_enable_container_timing());
+  // Buffer the entry for potential later retrieval with buffered: true
+  if (mContainerTimingEntries.Length() < kMaxContainerTimingBufferSize) {
+    mContainerTimingEntries.AppendElement(aEntry);
+  }
+  QueueEntry(aEntry);
+}
+
+void PerformanceMainThread::FinalizeContainerTimingEntries() {
+  if (!StaticPrefs::dom_enable_container_timing()) {
+    return;
+  }
+
+  // Stop emitting once a scroll has happened; see the note in
+  // ContainerTimingHelpers::MaybeProcessPaintForContainer and
+  // https://github.com/WICG/container-timing/issues/13. Recording is already
+  // gated there, so no further changes accumulate.
+  if (HasDispatchedScrollEvent()) {
+    return;
+  }
+
+  PresShell* presShell = GetPresShell();
+  if (!presShell) {
+    return;
+  }
+
+  nsPresContext* presContext = presShell->GetPresContext();
+  if (!presContext) {
+    return;
+  }
+
+  // In case we paint outside a tick, this is null. That's okay and per the
+  // spec we report it on the next paint.
+  TimeStamp paintTime = presContext->GetMarkPaintTimingStart();
+  if (paintTime.IsNull()) {
+    return;
+  }
+
+  // https://wicg.github.io/container-timing/#emit-container-timing-entries
+  for (auto iter = mContainerTimingRecords.Iter(); !iter.Done(); iter.Next()) {
+    Element* containerRoot = iter.Key();
+    ContainerTimingRecord& record = iter.Data();
+
+    if (!record.mHasPendingChanges) {
+      continue;
+    }
+
+    // Make sure we still clear things for a detached or shadow-tree.
+    if (!containerRoot->IsInUncomposedDoc()) {
+      record.ClearPendingChanges();
+      continue;
+    }
+
+    if (record.mFirstRenderTime.IsNull()) {
+      record.mFirstRenderTime = paintTime;
+    }
+
+    // The intersectionRect is the bounding box of the painted region; size is
+    // the total painted area in CSS pixels.
+    nsRect intersectionRect = record.mPaintedRegion.GetBounds();
+    uint64_t appUnitsPerPixelSquared =
+        static_cast<uint64_t>(AppUnitsPerCSSPixel()) * AppUnitsPerCSSPixel();
+    uint64_t sizeInPixels = record.mPaintedRegionArea / appUnitsPerPixelSquared;
+
+    // We emit once per frame from the paint pipeline, so mFirstRenderTime
+    // stands in for the spec's per-record paintTimingInfo and the emit-frame
+    // paintTime stands in for lastNewPaintedAreaPaintTimingInfo.
+    RefPtr<PerformanceContainerTiming> containerEntry =
+        new PerformanceContainerTiming(this, containerRoot, record.mIdentifier,
+                                       intersectionRect, sizeInPixels,
+                                       record.mFirstRenderTime, paintTime,
+                                       record.mLastNewPaintedAreaElement);
+    QueueContainerTimingEntry(containerEntry);
+
+    record.ClearPendingChanges();
+  }
 }
 
 void PerformanceMainThread::DispatchPendingEventTimingEntries() {
@@ -588,8 +679,7 @@ void PerformanceMainThread::CreateNavigationTimingEntry() {
   nsAutoString name;
   GetURLSpecFromChannel(mChannel, name);
 
-  UniquePtr<PerformanceTimingData> timing(
-      new PerformanceTimingData(mChannel, nullptr, 0));
+  auto timing = std::make_unique<PerformanceTimingData>(mChannel, nullptr, 0);
 
   nsCOMPtr<nsIHttpChannel> httpChannel = do_QueryInterface(mChannel);
   if (httpChannel) {
@@ -597,10 +687,6 @@ void PerformanceMainThread::CreateNavigationTimingEntry() {
   }
 
   mDocEntry = new PerformanceNavigationTiming(std::move(timing), this, name);
-
-  if (mDOMTiming && mDOMTiming->WasActivatedFromNavigationalPrefetch()) {
-    mDocEntry->SetDeliveryType(u"navigational-prefetch"_ns);
-  }
 }
 
 void PerformanceMainThread::UpdateNavigationTimingEntry() {
@@ -612,6 +698,12 @@ void PerformanceMainThread::UpdateNavigationTimingEntry() {
   nsCOMPtr<nsIHttpChannel> httpChannel = do_QueryInterface(mChannel);
   if (httpChannel) {
     mDocEntry->UpdatePropertiesFromHttpChannel(httpChannel, mChannel);
+  }
+
+  // Not in Create(): the cache disposition is unresolved until the load ends.
+  if (mDOMTiming && mDOMTiming->WasActivatedFromNavigationalPrefetch() &&
+      mDocEntry->ServedFromCache()) {
+    mDocEntry->SetDeliveryType(u"navigational-prefetch"_ns);
   }
 }
 
@@ -652,6 +744,10 @@ void PerformanceMainThread::GetEntries(
 
   if (mFCPTiming) {
     aRetval.AppendElement(mFCPTiming);
+  }
+
+  if (mFirstInputEvent) {
+    aRetval.AppendElement(mFirstInputEvent);
   }
   aRetval.Sort(PerformanceEntryComparator());
 }
@@ -696,6 +792,13 @@ void PerformanceMainThread::GetEntriesByTypeForObserver(
     }
   }
 
+  if (StaticPrefs::dom_enable_container_timing()) {
+    if (aEntryType.Equals(kContainerTimingName)) {
+      aRetval.AppendElements(mContainerTimingEntries);
+      return;
+    }
+  }
+
   return GetEntriesByType(aEntryType, aRetval);
 }
 
@@ -704,18 +807,18 @@ void PerformanceMainThread::GetEntriesByName(
     nsTArray<RefPtr<PerformanceEntry>>& aRetval) {
   Performance::GetEntriesByName(aName, aEntryType, aRetval);
 
-  if (mFCPTiming && mFCPTiming->GetName()->Equals(aName) &&
-      (!aEntryType.WasPassed() ||
-       mFCPTiming->GetEntryType()->Equals(aEntryType.Value()))) {
-    aRetval.AppendElement(mFCPTiming);
-    return;
+  if (MatchesNameAndType(mFCPTiming, aName, aEntryType)) {
+    aRetval.InsertElementSorted(mFCPTiming, PerformanceEntryComparator());
+  }
+
+  if (MatchesNameAndType(mFirstInputEvent, aName, aEntryType)) {
+    aRetval.InsertElementSorted(mFirstInputEvent, PerformanceEntryComparator());
   }
 
   // The navigation entry is the first one. If it exists and the name matches,
   // let put it in front.
-  if (mDocEntry && mDocEntry->GetName()->Equals(aName)) {
+  if (MatchesNameAndType(mDocEntry, aName, aEntryType)) {
     aRetval.InsertElementAt(0, mDocEntry);
-    return;
   }
 }
 
@@ -826,6 +929,13 @@ void PerformanceMainThread::FinalizeLCPEntriesForText() {
   MOZ_ASSERT(GetTextFrameUnions().IsEmpty());
 }
 
+void PerformanceMainThread::QueuePendingLCPCandidate() {
+  if (RefPtr<LargestContentfulPaint> candidate =
+          std::move(mPendingLCPCandidate)) {
+    candidate->QueueEntry();
+  }
+}
+
 bool PerformanceMainThread::IsPendingLCPCandidate(
     Element* aElement, imgRequestProxy* aImgRequestProxy) {
   Document* doc = aElement->GetComposedDoc();
@@ -854,6 +964,7 @@ bool PerformanceMainThread::UpdateLargestContentfulPaintSize(double aSize) {
 void PerformanceMainThread::SetHasDispatchedScrollEvent() {
   mHasDispatchedScrollEvent = true;
   ClearGeneratedTempDataForLCP();
+  ClearContainerTimingData();
 }
 
 void PerformanceMainThread::SetHasDispatchedInputEvent() {
@@ -864,6 +975,7 @@ void PerformanceMainThread::SetHasDispatchedInputEvent() {
 void PerformanceMainThread::ClearGeneratedTempDataForLCP() {
   mTextFrameUnions.Clear();
   mImagesPendingRendering.Clear();
+  mPendingLCPCandidate = nullptr;
 
   nsIGlobalObject* global = GetRelevantGlobal();
   if (!global) {
@@ -873,5 +985,9 @@ void PerformanceMainThread::ClearGeneratedTempDataForLCP() {
   if (Document* document = global->GetAsInnerWindow()->GetExtantDoc()) {
     document->ContentIdentifiersForLCP().Clear();
   }
+}
+
+void PerformanceMainThread::ClearContainerTimingData() {
+  mContainerTimingRecords.Clear();
 }
 }  // namespace mozilla::dom

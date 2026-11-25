@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.remember
@@ -23,12 +24,12 @@ import mozilla.components.compose.browser.awesomebar.AwesomeBar
 import mozilla.components.compose.browser.awesomebar.AwesomeBarDefaults
 import mozilla.components.concept.awesomebar.AwesomeBar
 import mozilla.components.feature.awesomebar.provider.SearchSuggestionProvider
+import mozilla.components.ui.icons.R as iconsR
 import org.mozilla.focus.components
 import org.mozilla.focus.searchsuggestions.SearchSuggestionsViewModel
 import org.mozilla.focus.searchsuggestions.State
 import org.mozilla.focus.topsites.TopSitesOverlay
 import org.mozilla.focus.ui.theme.focusColors
-import mozilla.components.ui.icons.R as iconsR
 
 /**
  * Composable function that displays the search overlay.
@@ -46,11 +47,7 @@ fun SearchOverlay(
     val state = viewModel.state.observeAsState()
     val query = viewModel.searchQuery.observeAsState()
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(focusColors.surface),
-    ) {
+    Box(modifier = Modifier.fillMaxSize().background(focusColors.surface)) {
         SearchOverlayContent(
             state = state.value,
             query = query.value,
@@ -75,15 +72,14 @@ private fun SearchOverlayContent(
 ) {
     when (state) {
         is State.Disabled,
-        is State.NoSuggestionsAPI,
-        -> {
+        is State.NoSuggestionsAPI -> {
             if (query.isNullOrEmpty()) {
-                TopSitesOverlay()
+                TopSitesOverlay(modifier = Modifier.fillMaxWidth())
             }
         }
         is State.ReadyForSuggestions -> {
             if (query.isNullOrEmpty()) {
-                TopSitesOverlay()
+                TopSitesOverlay(modifier = Modifier.fillMaxWidth())
             } else {
                 SearchSuggestions(
                     text = query,
@@ -135,22 +131,17 @@ private fun SearchSuggestions(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .nestedScroll(nestedScrollConnection),
-    ) {
+    Column(modifier = Modifier.fillMaxSize().nestedScroll(nestedScrollConnection)) {
         AwesomeBar(
             text = text,
-            colors = AwesomeBarDefaults.colors(
-                background = focusColors.surface,
-                title = focusColors.onBackground,
-                description = focusColors.onBackground.copy(
-                    alpha = 0.6f,
+            colors =
+                AwesomeBarDefaults.colors(
+                    background = focusColors.surface,
+                    title = focusColors.onBackground,
+                    description = focusColors.onBackground.copy(alpha = 0.6f),
+                    autocompleteIcon = focusColors.onSurface,
+                    groupTitle = focusColors.onBackground,
                 ),
-                autocompleteIcon = focusColors.onSurface,
-                groupTitle = focusColors.onBackground,
-            ),
             providers = listOf(provider),
             onSuggestionClicked = onSuggestionClicked,
             onAutoComplete = onAutoComplete,

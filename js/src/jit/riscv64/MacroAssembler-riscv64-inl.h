@@ -891,6 +891,13 @@ void MacroAssembler::branchTestDoubleTruthy(bool b, FloatRegister value,
   DoubleCondition cond = b ? DoubleNotEqual : DoubleEqualOrUnordered;
   branchDouble(cond, value, fpscratch, label);
 }
+void MacroAssembler::branchTestGCThing(Condition cond, Register tag,
+                                       Label* label) {
+  MOZ_ASSERT(cond == Equal || cond == NotEqual);
+  ma_b(tag, ImmTagSignExt(JS::detail::ValueLowerInclGCThingTag), label,
+       (cond == Equal) ? AboveOrEqual : Below, ShortJump);
+}
+
 void MacroAssembler::branchTestGCThing(Condition cond, const Address& address,
                                        Label* label) {
   branchTestGCThingImpl(cond, address, label);
@@ -1003,6 +1010,40 @@ void MacroAssembler::branchTestNull(Condition cond, const ValueOperand& value,
   branchTestNull(cond, scratch2, label);
 }
 
+void MacroAssembler::branchTestNullOrUndefined(Condition cond, Register tag,
+                                               Label* label) {
+  MOZ_ASSERT(cond == Equal || cond == NotEqual);
+  constexpr unsigned kShift = JS::detail::ValueNullOrUndefinedShift;
+  constexpr int32_t kNegBits = static_cast<int32_t>(
+      (UINT32_C(1) << (64 - kShift)) - JS::detail::ValueNullOrUndefinedBits);
+  static_assert(is_int12(kNegBits), "the negated bits must fit imm12");
+
+  UseScratchRegisterScope temps(this);
+  const Register scratch2 = temps.Acquire();
+  srai(scratch2, tag, JS::detail::ValueNullOrUndefinedShift - JSVAL_TAG_SHIFT);
+  addi(scratch2, scratch2, kNegBits);
+  ma_b(scratch2, scratch2, label, cond == Equal ? Zero : NonZero, ShortJump);
+}
+
+void MacroAssembler::branchTestNullOrUndefined(Condition cond,
+                                               const ValueOperand& value,
+                                               Label* label) {
+  MOZ_ASSERT(cond == Equal || cond == NotEqual);
+  constexpr unsigned kShift = JS::detail::ValueNullOrUndefinedShift;
+  constexpr uint32_t kBits = JS::detail::ValueNullOrUndefinedBits;
+  static_assert(kBits >> (64 - kShift - 1) == 1,
+                "the shared bits must sign-extend to a negative value");
+  constexpr int32_t kNegBits =
+      static_cast<int32_t>((UINT32_C(1) << (64 - kShift)) - kBits);
+  static_assert(is_int12(kNegBits), "the negated bits must fit a imm12");
+
+  UseScratchRegisterScope temps(this);
+  const Register scratch2 = temps.Acquire();
+  srai(scratch2, value.valueReg(), kShift);
+  addi(scratch2, scratch2, kNegBits);
+  ma_b(scratch2, scratch2, label, cond == Equal ? Zero : NonZero, ShortJump);
+}
+
 void MacroAssembler::branchTestNull(Condition cond, const Address& address,
                                     Label* label) {
   UseScratchRegisterScope temps(this);
@@ -1073,8 +1114,8 @@ void MacroAssembler::branchTestPrimitive(Condition cond,
 void MacroAssembler::branchTestPrimitive(Condition cond, Register tag,
                                          Label* label) {
   MOZ_ASSERT(cond == Equal || cond == NotEqual);
-  ma_b(tag, ImmTagSignExt(JS::detail::ValueUpperExclPrimitiveTag), label,
-       (cond == Equal) ? Below : AboveOrEqual, ShortJump);
+  ma_b(tag, ImmTagSignExt(JSVAL_TAG_OBJECT), label,
+       (cond == Equal) ? NotEqual : Equal, ShortJump);
 }
 void MacroAssembler::branchTestPtr(Condition cond, Register lhs, Register rhs,
                                    Label* label) {
@@ -1593,6 +1634,12 @@ void MacroAssembler::lshift64(Imm32 imm, Register64 dest) {
   MOZ_ASSERT(0 <= imm.value && imm.value < 64);
   slli(dest.reg, dest.reg, imm.value);
 }
+
+void MacroAssembler::lshift64(Imm32 imm, Register64 src, Register64 dest) {
+  MOZ_ASSERT(0 <= imm.value && imm.value < 64);
+  slli(dest.reg, src.reg, imm.value);
+}
+
 void MacroAssembler::lshiftPtr(Register shift, Register dest) {
   sll(dest, dest, shift);
 }
@@ -1840,6 +1887,11 @@ void MacroAssembler::orPtr(Imm32 imm, Register src, Register dest) {
   ma_or(dest, src, imm);
 }
 
+void MacroAssembler::nor32(Imm32 imm, Register src, Register dest) {
+  or32(imm, src, dest);
+  not32(dest);
+}
+
 void MacroAssembler::popcnt32(Register input, Register output, Register tmp) {
   Popcnt32(output, input, tmp);
 }
@@ -1916,6 +1968,37 @@ void MacroAssembler::rotateRight(Register count, Register input,
   Ror(dest, input, count);
 }
 
+// ===============================================================
+// Shift or rotate, then combine with another register
+
+void MacroAssembler::lshift32ThenAdd(Imm32 shift, Register rhs,
+                                     Register srcDest) {
+  MOZ_ASSERT(rhs != srcDest);
+  lshift32(shift, srcDest);
+  add32(rhs, srcDest);
+}
+
+void MacroAssembler::lshift32ThenOr(Imm32 shift, Register rhs,
+                                    Register srcDest) {
+  MOZ_ASSERT(rhs != srcDest);
+  lshift32(shift, srcDest);
+  or32(rhs, srcDest);
+}
+
+void MacroAssembler::rshiftPtrThenXor(Imm32 shift, Register rhs,
+                                      Register srcDest) {
+  MOZ_ASSERT(rhs != srcDest);
+  rshiftPtr(shift, srcDest);
+  xorPtr(rhs, srcDest);
+}
+
+void MacroAssembler::rotateLeft64ThenXor(Imm32 count, Register64 rhs,
+                                         Register64 srcDest) {
+  MOZ_ASSERT(rhs != srcDest);
+  rotateLeft64(count, srcDest, srcDest, InvalidReg);
+  xor64(rhs, srcDest);
+}
+
 void MacroAssembler::rshift32Arithmetic(Register src, Register dest) {
   sraw(dest, dest, src);
 }
@@ -1946,6 +2029,12 @@ void MacroAssembler::rshift64Arithmetic(Imm32 imm, Register64 dest) {
   srai(dest.reg, dest.reg, imm.value);
 }
 
+void MacroAssembler::rshift64Arithmetic(Imm32 imm, Register64 src,
+                                        Register64 dest) {
+  MOZ_ASSERT(0 <= imm.value && imm.value < 64);
+  srai(dest.reg, src.reg, imm.value);
+}
+
 void MacroAssembler::rshift64Arithmetic(Register shift, Register64 dest) {
   sra(dest.reg, dest.reg, shift);
 }
@@ -1957,6 +2046,11 @@ void MacroAssembler::rshift64(Register shift, Register64 dest) {
 void MacroAssembler::rshift64(Imm32 imm, Register64 dest) {
   MOZ_ASSERT(0 <= imm.value && imm.value < 64);
   srli(dest.reg, dest.reg, imm.value);
+}
+
+void MacroAssembler::rshift64(Imm32 imm, Register64 src, Register64 dest) {
+  MOZ_ASSERT(0 <= imm.value && imm.value < 64);
+  srli(dest.reg, src.reg, imm.value);
 }
 
 void MacroAssembler::rshiftPtrArithmetic(Imm32 imm, Register dest) {

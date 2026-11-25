@@ -11,6 +11,7 @@ import mozilla.components.compose.browser.toolbar.store.BrowserToolbarState
 import mozilla.components.lib.state.Middleware
 import mozilla.components.lib.state.Store
 import org.mozilla.fenix.GleanMetrics.Toolbar
+import org.mozilla.fenix.components.AppStore
 import org.mozilla.fenix.components.toolbar.DisplayActions.AddBookmarkClicked
 import org.mozilla.fenix.components.toolbar.DisplayActions.EditBookmarkClicked
 import org.mozilla.fenix.components.toolbar.DisplayActions.EditShortcutClicked
@@ -32,6 +33,8 @@ import org.mozilla.fenix.components.toolbar.TabCounterInteractions.AddNewPrivate
 import org.mozilla.fenix.components.toolbar.TabCounterInteractions.AddNewTab
 import org.mozilla.fenix.components.toolbar.TabCounterInteractions.TabCounterClicked
 import org.mozilla.fenix.components.toolbar.TabCounterInteractions.TabCounterLongClicked
+import org.mozilla.fenix.search.EditPageEndActionsInteractions.LensButtonClicked
+import org.mozilla.fenix.search.EditPageEndActionsInteractions.QrScannerClicked
 import org.mozilla.fenix.telemetry.ACTION_ADD_BOOKMARK_CLICKED
 import org.mozilla.fenix.telemetry.ACTION_ADD_NEW_PRIVATE_TAB
 import org.mozilla.fenix.telemetry.ACTION_ADD_NEW_TAB
@@ -43,6 +46,7 @@ import org.mozilla.fenix.telemetry.ACTION_NAVIGATE_BACK_CLICKED
 import org.mozilla.fenix.telemetry.ACTION_NAVIGATE_BACK_LONG_CLICKED
 import org.mozilla.fenix.telemetry.ACTION_NAVIGATE_FORWARD_CLICKED
 import org.mozilla.fenix.telemetry.ACTION_NAVIGATE_FORWARD_LONG_CLICKED
+import org.mozilla.fenix.telemetry.ACTION_QR_CLICKED
 import org.mozilla.fenix.telemetry.ACTION_READER_MODE_CLICKED
 import org.mozilla.fenix.telemetry.ACTION_REFRESH_CLICKED
 import org.mozilla.fenix.telemetry.ACTION_SECURITY_INDICATOR_CLICKED
@@ -60,11 +64,23 @@ import org.mozilla.fenix.telemetry.SOURCE_NAVIGATION_BAR
 import org.mozilla.fenix.telemetry.SOURCE_PAGE_END
 import org.mozilla.fenix.telemetry.SOURCE_PAGE_START
 import org.mozilla.fenix.telemetry.SURFACE_BROWSER
+import org.mozilla.fenix.telemetry.recordAddressBarButtonTapped
+import org.mozilla.fenix.telemetry.recordLensButtonTapped
+import org.mozilla.fenix.utils.Settings
 
 /**
  * [Middleware] responsible for recording telemetry of actions triggered by compose toolbars.
+ *
+ * @param appStore [AppStore] used to determine the surface on which the search was started.
+ * @param settings [Settings] used to determine the last selected Lens camera mode.
  */
-class BrowserToolbarTelemetryMiddleware : Middleware<BrowserToolbarState, BrowserToolbarAction> {
+class BrowserToolbarTelemetryMiddleware(
+    private val appStore: AppStore,
+    private val settings: Settings,
+) : Middleware<BrowserToolbarState, BrowserToolbarAction> {
+    private val sourceTabId: String?
+        get() = appStore.state.searchState.sourceTabId
+
     @Suppress("CyclomaticComplexMethod")
     override fun invoke(
         store: Store<BrowserToolbarState, BrowserToolbarAction>,
@@ -135,6 +151,8 @@ class BrowserToolbarTelemetryMiddleware : Middleware<BrowserToolbarState, Browse
             is EditShortcutClicked -> {
                 trackToolbarEvent(ToolbarActionRecord.EditShortcutClicked, action.source)
             }
+            is QrScannerClicked -> recordAddressBarButtonTapped(ACTION_QR_CLICKED, sourceTabId)
+            is LensButtonClicked -> recordLensButtonTapped(settings.lensCameraLastMode, sourceTabId)
             else -> {}
         }
 
@@ -144,25 +162,45 @@ class BrowserToolbarTelemetryMiddleware : Middleware<BrowserToolbarState, Browse
     @VisibleForTesting
     internal sealed class ToolbarActionRecord(val action: String) {
         data object MenuClicked : ToolbarActionRecord(ACTION_MENU_CLICKED)
+
         data object TabCounterClicked : ToolbarActionRecord(ACTION_TAB_COUNTER_CLICKED)
+
         data object TabCounterLongClicked : ToolbarActionRecord(ACTION_TAB_COUNTER_LONG_CLICKED)
+
         data object AddNewTab : ToolbarActionRecord(ACTION_ADD_NEW_TAB)
+
         data object AddNewPrivateTab : ToolbarActionRecord(ACTION_ADD_NEW_PRIVATE_TAB)
+
         data object NavigateBackClicked : ToolbarActionRecord(ACTION_NAVIGATE_BACK_CLICKED)
+
         data object NavigateBackLongClicked : ToolbarActionRecord(ACTION_NAVIGATE_BACK_LONG_CLICKED)
+
         data object NavigateForwardClicked : ToolbarActionRecord(ACTION_NAVIGATE_FORWARD_CLICKED)
+
         data object NavigateForwardLongClicked : ToolbarActionRecord(ACTION_NAVIGATE_FORWARD_LONG_CLICKED)
+
         data object RefreshClicked : ToolbarActionRecord(ACTION_REFRESH_CLICKED)
+
         data object StopRefreshClicked : ToolbarActionRecord(ACTION_STOP_CLICKED)
+
         data object AddBookmarkClicked : ToolbarActionRecord(ACTION_ADD_BOOKMARK_CLICKED)
+
         data object EditBookmarkClicked : ToolbarActionRecord(ACTION_EDIT_BOOKMARK_CLICKED)
+
         data object ShareClicked : ToolbarActionRecord(ACTION_SHARE_CLICKED)
+
         data object ReaderModeClicked : ToolbarActionRecord(ACTION_READER_MODE_CLICKED)
+
         data object TranslateClicked : ToolbarActionRecord(ACTION_TRANSLATE_CLICKED)
+
         data object HomepageClicked : ToolbarActionRecord(ACTION_HOME_CLICKED)
+
         data object SecurityIndicatorClicked : ToolbarActionRecord(ACTION_SECURITY_INDICATOR_CLICKED)
+
         data object SummarizeClicked : ToolbarActionRecord(ACTION_SUMMARIZE_CLICKED)
+
         data object ShortcutLongClicked : ToolbarActionRecord(ACTION_SHORTCUT_LONG_CLICKED)
+
         data object EditShortcutClicked : ToolbarActionRecord(ACTION_EDIT_SHORTCUT_CLICKED)
     }
 
@@ -178,7 +216,7 @@ class BrowserToolbarTelemetryMiddleware : Middleware<BrowserToolbarState, Browse
                         item = toolbarActionRecord.action,
                         extra = source.telemetryName(),
                         surface = SURFACE_BROWSER,
-                    ),
+                    )
                 )
 
             Source.NavigationBar ->
@@ -187,7 +225,7 @@ class BrowserToolbarTelemetryMiddleware : Middleware<BrowserToolbarState, Browse
                         source = SOURCE_NAVIGATION_BAR,
                         item = toolbarActionRecord.action,
                         surface = SURFACE_BROWSER,
-                    ),
+                    )
                 )
 
             Source.Unknown -> return

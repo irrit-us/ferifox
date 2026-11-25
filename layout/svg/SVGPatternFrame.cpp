@@ -169,9 +169,9 @@ static Matrix GetPatternMatrix(nsIFrame* aSource,
 
   // revert the vector effect transform so that the pattern appears unchanged
   if (aFillOrStroke == &nsStyleSVG::mStroke) {
-    gfxMatrix userToOuterSVG;
-    if (SVGUtils::GetNonScalingStrokeTransform(aSource, &userToOuterSVG)) {
-      patternMatrix *= userToOuterSVG;
+    if (Maybe<gfxMatrix> userToOuterSVG =
+            SVGUtils::GetNonScalingStrokeTransform(aSource)) {
+      patternMatrix *= *userToOuterSVG;
     }
   }
 
@@ -695,6 +695,5 @@ already_AddRefed<gfxPattern> SVGPatternFrame::GetPaintServerPattern(
 
 nsIFrame* NS_NewSVGPatternFrame(mozilla::PresShell* aPresShell,
                                 mozilla::ComputedStyle* aStyle) {
-  return new (aPresShell)
-      mozilla::SVGPatternFrame(aStyle, aPresShell->GetPresContext());
+  return new mozilla::SVGPatternFrame(aStyle, aPresShell->GetPresContext());
 }

@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.edit
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -21,8 +22,12 @@ import org.mozilla.fenix.ext.components
  * A metrics service that handles sending the first session ping.
  *
  * @param context The application context.
+ * @param ioDispatcher The dispatcher used to fill and submit the ping.
  */
-class FirstSessionMetricsService(private val context: Context) : MetricsService {
+class FirstSessionMetricsService(
+    private val context: Context,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+) : MetricsService {
     override val type = MetricServiceType.Data
 
     private val prefs: SharedPreferences by lazy {
@@ -37,16 +42,16 @@ class FirstSessionMetricsService(private val context: Context) : MetricsService 
     }
 
     override fun stop() = Unit
+
     override fun track(event: Event) = Unit
+
     override fun shouldTrack(event: Event): Boolean = false
 
     /**
-     * Checks whether or not the installation ping was already
-     * triggered by the application.
+     * Checks whether or not the installation ping was already triggered by the application.
      *
-     * Note that this only tells us that Fenix triggered the
-     * ping and then delegated the transmission to Glean. We
-     * have no way to tell if it was actually sent or not.
+     * Note that this only tells us that Fenix triggered the ping and then delegated the transmission to Glean. We have
+     * no way to tell if it was actually sent or not.
      *
      * @return true if it was already triggered, false otherwise.
      */
@@ -56,22 +61,18 @@ class FirstSessionMetricsService(private val context: Context) : MetricsService 
     }
 
     /**
-     * Marks the "installation" ping as triggered by the application.
-     * This ensures the ping is not triggered again at the next app
-     * start.
+     * Marks the "installation" ping as triggered by the application. This ensures the ping is not triggered again at
+     * the next app start.
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     internal fun markAsTriggered() {
         prefs.edit { putBoolean("ping_sent", true) }
     }
 
-    /**
-     * Fills the metrics and triggers the 'installation' ping.
-     * This is a separate function to simplify unit-testing.
-     */
+    /** Fills the metrics and triggers the 'installation' ping. This is a separate function to simplify unit-testing. */
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     internal fun triggerPingIfNotSent() {
-        CoroutineScope(Dispatchers.IO).launch {
+        CoroutineScope(ioDispatcher).launch {
             if (wasAlreadyTriggered()) {
                 Logger.debug("InstallationPing - already generated")
                 return@launch
@@ -82,7 +83,7 @@ class FirstSessionMetricsService(private val context: Context) : MetricsService 
                 installSourcePackage(
                     packageManager = context.application.packageManager,
                     packageName = context.application.packageName,
-                ),
+                )
             )
             FirstSession.distributionId.set(context.components.distributionIdManager.getDistributionId())
 

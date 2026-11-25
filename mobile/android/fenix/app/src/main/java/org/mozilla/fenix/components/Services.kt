@@ -14,28 +14,26 @@ import mozilla.components.feature.accounts.FirefoxAccountsAuthFeature
 import mozilla.components.feature.app.links.AppLinksInterceptor
 import mozilla.components.service.fxa.manager.FxaAccountManager
 import org.mozilla.fenix.ext.components
-import org.mozilla.fenix.perf.lazyMonitored
 import org.mozilla.fenix.settings.SupportUtils
 import org.mozilla.fenix.utils.PersistStoryUTMRequestInterceptor
 
-/**
- * Component group which encapsulates foreground-friendly services.
- */
+/** Component group which encapsulates foreground-friendly services. */
 class Services(
     private val context: Context,
     private val store: BrowserStore,
     private val accountManager: FxaAccountManager,
 ) {
-    val accountsAuthFeature by lazyMonitored {
+    val accountsAuthFeature by lazy {
         FirefoxAccountsAuthFeature(accountManager, FxaServer.REDIRECT_URL) { context, authUrl ->
             var url = authUrl
             if (context.components.settings.useReactFxAServer) {
-                url = url.toUri()
-                    .buildUpon()
-                    .appendQueryParameter("forceExperiment", "generalizedReactApp")
-                    .appendQueryParameter("forceExperimentGroup", "react")
-                    .build()
-                    .toString()
+                url =
+                    url.toUri()
+                        .buildUpon()
+                        .appendQueryParameter("forceExperiment", "generalizedReactApp")
+                        .appendQueryParameter("forceExperimentGroup", "react")
+                        .build()
+                        .toString()
             }
             CoroutineScope(Dispatchers.Main).launch {
                 val intent = SupportUtils.createAuthCustomTabIntent(context, url)
@@ -44,16 +42,16 @@ class Services(
         }
     }
 
-    val appLinksInterceptor by lazyMonitored {
+    val appLinksInterceptor by lazy {
         AppLinksInterceptor(
             context = context,
-            launchInApp = { context.components.settings.shouldOpenLinksInApp() },
+            launchInApp = { _ -> context.components.settings.shouldOpenLinksInApp() },
             launchFromInterceptor = false,
             store = store,
         )
     }
 
-    val storyUTMRequestInterceptor by lazyMonitored {
+    val storyUTMRequestInterceptor by lazy {
         PersistStoryUTMRequestInterceptor()
     }
 }

@@ -12,7 +12,6 @@
 
 // IWYU pragma: begin_keep
 #if defined(WEBRTC_LINUX)
-#include <linux/prctl.h>
 #include <sys/prctl.h>
 #include <sys/syscall.h>
 

@@ -31,7 +31,6 @@ use crate::renderer::{FullFrameStats, init::wr_has_been_initialized};
 use api::units::DeviceIntSize;
 use std::collections::vec_deque::VecDeque;
 use std::fmt::{Write, Debug};
-use std::f32;
 use std::ops::Range;
 use std::time::Duration;
 
@@ -96,7 +95,7 @@ static PROFILER_PRESETS: &'static[(&'static str, &'static str)] = &[
     (&"GPU Memory", &"External image mem, Atlas textures mem, Standalone textures mem, Picture tiles mem, Render targets mem, Depth targets mem, Atlas items mem, GPU cache mem, GPU buffer mem, GPU total mem"),
     (&"CPU Memory", &"Image templates, Image templates mem, Font templates,Font templates mem, DisplayList mem"),
     (&"Memory", &"$CPU,CPU Memory, ,$GPU,GPU Memory"),
-    (&"Interners", "Intern insertions,Intern removals,Off-grid coords, ,Interned primitives,Interned clips,Interned pictures,Interned text runs,Interned normal borders,Interned image borders,Interned images,Interned YUV images,Interned line decorations,Interned linear gradients,Interned radial gradients,Interned conic gradients,Interned filter data,Interned backdrop renders, Interned backdrop captures"),
+    (&"Interners", "Intern insertions,Intern removals,Off-grid coords, ,Interned primitives,Interned clips,Interned pictures,Interned text runs,Interned normal borders,Interned image borders,Interned images,Interned YUV images,Interned line decorations,Interned linear gradients,Interned radial gradients,Interned conic gradients,Interned filter data,Interned backdrop renders, Interned backdrop captures,Interned polygons,Interned box-shadows,Interned paths"),
     // Gpu sampler queries (need the pref gfx.webrender.debug.gpu-sampler-queries).
     (&"GPU samplers", &"Alpha targets samplers,Transparent pass samplers,Opaque pass samplers,Total samplers"),
 
@@ -311,7 +310,33 @@ pub const INTERN_REMOVALS: usize = 139;
 /// unexplained invalidation.
 pub const OFF_GRID_COORDS: usize = 140;
 
-pub const NUM_PROFILER_EVENTS: usize = 141;
+// The four counters below measure what moving culling and clipping from the root
+// reference frame to each surface's raster space changes.
+
+/// Clips that had to be projected into visibility space to decide whether they
+/// affect a primitive, because clip and primitive are in different coordinate
+/// systems (`ClipSpaceConversion::Transform`). Expected to fall as visibility
+/// space moves towards each surface's raster space, since a raster root inside a
+/// 3D context shares a coordinate system with the content it rasterizes.
+pub const VIS_CLIP_PROJECTIONS: usize = 141;
+/// Projections from the count above that could not be computed, which degrade an
+/// exact accept/reject into "needs a clip mask". Each one is an avoidable mask.
+pub const VIS_CLIP_PROJECTION_FAILS: usize = 142;
+/// Primitives rejected outright by a clip via the projected path. This is the
+/// counter that says content stopped being drawn, so it must not rise without an
+/// explanation.
+pub const VIS_CLIP_REJECTS: usize = 143;
+/// Surfaces whose culling rect fell back to `max_rect` because the screen rect
+/// had no pre-image in visibility space. Zero while visibility space is
+/// axis-aligned with the screen.
+pub const VIS_CULLING_RECT_FALLBACKS: usize = 144;
+/// Clips whose space cannot be related to the surface's raster space at all, so
+/// a mask is assumed. Non-zero only for a clip outside the 3D context that
+/// established the surface's raster root.
+pub const VIS_CLIP_INDETERMINATE: usize = 145;
+pub const INTERNED_PATHS: usize = 146;
+
+pub const NUM_PROFILER_EVENTS: usize = 147;
 
 pub struct Profiler {
     counters: Vec<Counter>,
@@ -533,6 +558,13 @@ impl Profiler {
             int("Intern insertions", "", INTERN_INSERTIONS, Expected::none()),
             int("Intern removals", "", INTERN_REMOVALS, Expected::none()),
             int("Off-grid coords", "", OFF_GRID_COORDS, expected(0..1)),
+
+            int("Vis clip projections", "", VIS_CLIP_PROJECTIONS, Expected::none()),
+            int("Vis clip projection fails", "", VIS_CLIP_PROJECTION_FAILS, Expected::none()),
+            int("Vis clip rejects", "", VIS_CLIP_REJECTS, Expected::none()),
+            int("Vis culling rect fallbacks", "", VIS_CULLING_RECT_FALLBACKS, expected(0..1)),
+            int("Vis clip indeterminate", "", VIS_CLIP_INDETERMINATE, Expected::none()),
+            int("Interned paths", "", INTERNED_PATHS, Expected::none()),
         ];
 
         let mut counters = Vec::with_capacity(profile_counters.len());
@@ -567,6 +599,20 @@ impl Profiler {
 
             ui: Vec::new(),
         }
+    }
+
+    /// The named values of the counters that were set in a transaction profile.
+    pub fn counter_values(&self, profile: &TransactionProfile) -> Vec<ProfileCounterValue> {
+        profile.events.iter().zip(self.counters.iter()).filter_map(|(event, counter)| {
+            match *event {
+                Event::Value(value) => Some(ProfileCounterValue {
+                    name: counter.name,
+                    unit: counter.unit,
+                    value,
+                }),
+                _ => None,
+            }
+        }).collect()
     }
 
     pub fn set_parameter(&mut self, param: &api::Parameter) {
@@ -1386,10 +1432,10 @@ pub trait ProfilerHooks : Send + Sync {
     fn unregister_thread(&self);
 
     /// Called at the beginning of a profile scope.
-    fn begin_marker(&self, label: &str);
+    fn begin_marker(&self, label: &str, text: &str);
 
     /// Called at the end of a profile scope.
-    fn end_marker(&self, label: &str);
+    fn end_marker(&self, label: &str, text: &str);
 
     /// Called to mark an event happening.
     fn event_marker(&self, label: &str);
@@ -1425,6 +1471,7 @@ pub fn set_profiler_hooks(hooks: Option<&'static dyn ProfilerHooks>) {
 /// A simple RAII style struct to manage a profile scope.
 pub struct ProfileScope {
     name: &'static str,
+    text: &'static str,
 }
 
 
@@ -1478,12 +1525,27 @@ impl ProfileScope {
     pub fn new(name: &'static str) -> Self {
         unsafe {
             if let Some(ref hooks) = PROFILER_HOOKS {
-                hooks.begin_marker(name);
+                hooks.begin_marker(name, "");
             }
         }
 
         ProfileScope {
             name,
+            text: "",
+        }
+    }
+
+    #[allow(unused)]
+    pub fn with_text(name: &'static str, text: &'static str) -> Self {
+        unsafe {
+            if let Some(ref hooks) = PROFILER_HOOKS {
+                hooks.begin_marker(name, text);
+            }
+        }
+
+        ProfileScope {
+            name,
+            text,
         }
     }
 }
@@ -1492,7 +1554,7 @@ impl Drop for ProfileScope {
     fn drop(&mut self) {
         unsafe {
             if let Some(ref hooks) = PROFILER_HOOKS {
-                hooks.end_marker(self.name);
+                hooks.end_marker(self.name, self.text);
             }
         }
     }
@@ -1504,12 +1566,19 @@ macro_rules! profile_marker {
     ($string:expr) => {
         let _scope = $crate::profiler::ProfileScope::new($string);
     };
+    ($string:expr, $text:expr) => {
+        let _scope = $crate::profiler::ProfileScope::with_text($string, $text);
+    };
 }
 
 #[cfg(feature="tracy")]
 /// A helper macro to define profile scopes.
 macro_rules! profile_marker {
     ($string:expr) => {
+        tracy_rs::profile_scope!($string)
+    };
+    ($string:expr, $text:expr) => {
+        // Just drop the extra text in the case of tracy.
         tracy_rs::profile_scope!($string)
     };
 }
@@ -1570,6 +1639,14 @@ impl Expected<i64> {
     }
 }
 
+/// The value a profiler counter was set to in one transaction profile.
+#[derive(Copy, Clone, Debug)]
+pub struct ProfileCounterValue {
+    pub name: &'static str,
+    pub unit: &'static str,
+    pub value: f64,
+}
+
 pub struct CounterDescriptor {
     pub name: &'static str,
     pub unit: &'static str,
@@ -1610,7 +1687,7 @@ impl Counter {
             unit: descriptor.unit,
             show_as: descriptor.show_as,
             expected: descriptor.expected.clone(),
-            value: std::f64::NAN,
+            value: f64::NAN,
             num_samples: 0,
             sum: 0.0,
             next_max: 0.0,
@@ -1700,7 +1777,7 @@ impl Counter {
             graph.set(self.value);
         }
 
-        self.value = std::f64::NAN;
+        self.value = f64::NAN;
 
         if update_avg {
             if self.num_samples > 0 {
@@ -1713,7 +1790,7 @@ impl Counter {
             }
             self.sum = 0.0;
             self.num_samples = 0;
-            self.next_max = std::f64::MIN;
+            self.next_max = f64::MIN;
         }
     }
 }
@@ -1763,7 +1840,7 @@ impl TransactionProfile {
     pub fn end_time_if_started(&mut self, id: usize) -> Option<f64> {
         if let Event::Start(start) = self.events[id] {
             let now = zeitstempel::now();
-            let time_ns = now - start;
+            let time_ns = now.saturating_sub(start);
 
             let time_ms = ns_to_ms(time_ns);
             self.events[id] = Event::Value(time_ms);
@@ -2134,5 +2211,17 @@ impl RenderCommandLog {
             shader: self.current_shader.into(),
             instances,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn end_time_before_start_time() {
+        let mut profile = TransactionProfile::new();
+        profile.events[API_SEND_TIME] = Event::Start(zeitstempel::now() + 1_000_000);
+        assert_eq!(profile.end_time_if_started(API_SEND_TIME), Some(0.0));
     }
 }

@@ -65,6 +65,7 @@ rtc_library("read_auth_file") {
     "turnserver/read_auth_file.h",
   ]
   deps = [
+    "../rtc_base:span_helpers",
     "../rtc_base:stringutils",
     "//third_party/abseil-cpp/absl/strings:string_view",
   ]
@@ -634,12 +635,10 @@ if (is_ios || (is_mac && target_cpu != "x86")) {
       rtc_test("apprtcmobile_tests") {
         is_xctest = true
         info_plist = "objc/AppRTCMobile/ios/Info.plist"
-        sources = [ "objc/AppRTCMobile/tests/main.mm" ]
         deps = [
           ":AppRTCMobile_lib",
           ":apprtcmobile_test_sources",
           "../sdk:framework_objc",
-          "//test:test_support_objc",
         ]
         ldflags = [ "-all_load" ]
       }
@@ -802,6 +801,7 @@ if (is_linux || is_chromeos || is_win) {
       "//third_party/abseil-cpp/absl/strings:string_view",
     ]
   }
+
   rtc_executable("turnserver") {
     testonly = true
     sources = [ "turnserver/turnserver_main.cc" ]
@@ -823,6 +823,7 @@ if (is_linux || is_chromeos || is_win) {
       "//third_party/abseil-cpp/absl/strings",
     ]
   }
+
   rtc_executable("stunserver") {
     testonly = true
     sources = [ "stunserver/stunserver_main.cc" ]

@@ -101,7 +101,7 @@ class InvalidRegressionDetectorQuery(Exception):
 
 class PerfParser(CompareParser):
     name = "perf"
-    common_groups = ["push"]
+    common_groups = ["push", "preset"]
     task_configs = [
         "artifact",
         "browsertime",
@@ -111,6 +111,7 @@ class PerfParser(CompareParser):
         "extensions",
         "gecko-profile",
         "path",
+        "pushdate",
         "rebuild",
     ]
 
@@ -994,14 +995,14 @@ class PerfParser(CompareParser):
 
         return max(set.intersection(*map(__substrings, tasks)), key=len)
 
-    def set_categories_for_test(full_task_graph_path, tests):
-        """Parses the full task-graph to find all tasks that run this test.
+    def set_categories_for_test(full_task_set_path, tests):
+        """Parses the full task set to find all tasks that run this test.
 
         Returns a new category for the test to replace our existing ones.
         """
         print("Searching for requested tests in the generated tasks...")
-        with full_task_graph_path.open() as f:
-            full_task_graph = json.load(f)
+        with full_task_set_path.open() as f:
+            full_task_set = json.load(f)
 
         all_tasks = set()
         categories = {}
@@ -1009,7 +1010,7 @@ class PerfParser(CompareParser):
             tasks = set()
             found_suite = ""
 
-            for task_label, task_info in full_task_graph.items():
+            for task_label, task_info in full_task_set.items():
                 cmds = task_info.get("task", {}).get("payload", {}).get("command", [])
                 for suite, suite_info in PerfParser.suites.items():
                     if suite_info["task-specifier"] not in task_label:
@@ -1332,6 +1333,7 @@ class PerfParser(CompareParser):
                         ),
                         stage_changes=False,
                         dry_run=dry_run,
+                        write_task_config=False,
                         closed_tree=False,
                         allow_log_capture=True,
                         push_to_vcs=False,
@@ -1358,6 +1360,7 @@ class PerfParser(CompareParser):
                             ),
                             stage_changes=False,
                             dry_run=dry_run,
+                            write_task_config=False,
                             closed_tree=False,
                             allow_log_capture=True,
                             push_to_vcs=True,
@@ -1391,6 +1394,7 @@ class PerfParser(CompareParser):
                     ),
                     stage_changes=False,
                     dry_run=dry_run,
+                    write_task_config=False,
                     closed_tree=False,
                     allow_log_capture=True,
                     push_to_vcs=False,
@@ -1417,6 +1421,7 @@ class PerfParser(CompareParser):
                         ),
                         stage_changes=False,
                         dry_run=dry_run,
+                        write_task_config=False,
                         closed_tree=False,
                         allow_log_capture=True,
                         push_to_vcs=True,
@@ -1498,6 +1503,7 @@ class PerfParser(CompareParser):
         rebuild=1,
         clear_cache=False,
         push_to_vcs=False,
+        full_task_graph=True,
         **kwargs,
     ):
         # Setup fzf
@@ -1514,18 +1520,18 @@ class PerfParser(CompareParser):
         all_tasks, cache_dir = setup_tasks_for_fzf(
             not dry_run,
             parameters,
-            full=True,
+            full=full_task_graph,
             disable_target_task_filter=False,
         )
         base_cmd = build_base_cmd(
             fzf,
             preview_script=PREVIEW_SCRIPT,
         )
-        full_task_graph = pathlib.Path(cache_dir, "full_task_graph")
+        full_task_set = pathlib.Path(cache_dir, "full_task_set")
 
         if kwargs.get("tests"):
             all_tasks = PerfParser.set_categories_for_test(
-                full_task_graph, kwargs.get("tests")
+                full_task_set, kwargs.get("tests")
             )
             if not all_tasks:
                 print("Could not find any tasks for the requested tests")

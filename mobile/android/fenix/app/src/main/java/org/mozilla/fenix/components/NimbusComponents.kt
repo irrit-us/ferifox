@@ -5,6 +5,7 @@
 package org.mozilla.fenix.components
 
 import android.content.Context
+import java.io.File
 import mozilla.appservices.remotesettings.RemoteSettingsService
 import mozilla.components.ExperimentalAndroidComponentsApi
 import mozilla.components.concept.engine.Engine
@@ -14,18 +15,19 @@ import mozilla.components.service.nimbus.messaging.NimbusMessagingController
 import mozilla.components.service.nimbus.messaging.NimbusMessagingControllerInterface
 import mozilla.components.service.nimbus.messaging.NimbusMessagingStorage
 import mozilla.components.service.nimbus.messaging.OnDiskMessageMetadataStorage
+import org.mozilla.experiments.nimbus.NIMBUS_DATA_DIR
 import org.mozilla.experiments.nimbus.NimbusEventStore
 import org.mozilla.experiments.nimbus.NimbusMessagingHelperInterface
+import org.mozilla.experiments.nimbus.internal.EnrollmentSlugs
+import org.mozilla.experiments.nimbus.internal.NimbusException
+import org.mozilla.experiments.nimbus.internal.getActiveEnrollments
 import org.mozilla.fenix.BuildConfig
 import org.mozilla.fenix.experiments.createNimbus
 import org.mozilla.fenix.experiments.prefhandling.NimbusGeckoPrefHandler
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.messaging.CustomAttributeProvider
-import org.mozilla.fenix.perf.lazyMonitored
 
-/**
- * Component group for access to Nimbus and other Nimbus services.
- */
+/** Component group for access to Nimbus and other Nimbus services. */
 @OptIn(ExperimentalAndroidComponentsApi::class)
 class NimbusComponents(
     private val context: Context,
@@ -34,10 +36,10 @@ class NimbusComponents(
 ) {
 
     /**
-     * The main entry point for the Nimbus SDK. Note that almost all access to feature configuration
-     * should be mediated through a FML generated class, e.g. [FxNimbus].
+     * The main entry point for the Nimbus SDK. Note that almost all access to feature configuration should be mediated
+     * through a FML generated class, e.g. [FxNimbus].
      */
-    val sdk: NimbusApi by lazyMonitored {
+    val sdk: NimbusApi by lazy {
         createNimbus(
             context,
             context.components.settings,
@@ -47,27 +49,21 @@ class NimbusComponents(
         )
     }
 
-    /**
-     * Bridge between Nimbus and Gecko to allow enrollment, unenrollment, and observation of
-     * Gecko pref experiments.
-     */
-    val geckoPrefHandler by lazyMonitored {
+    /** Bridge between Nimbus and Gecko to allow enrollment, unenrollment, and observation of Gecko pref experiments. */
+    val geckoPrefHandler by lazy {
         NimbusGeckoPrefHandler(engine = engine, nimbusApi = lazy { sdk })
     }
 
     /**
      * Convenience method for getting the event store from the SDK.
      *
-     * Before EXP-4354, this is the main write API for recording events to drive
-     * messaging, experiments and onboarding.
+     * Before EXP-4354, this is the main write API for recording events to drive messaging, experiments and onboarding.
      *
-     * Following EXP-4354, clients will not need to write these events
-     * themselves.
+     * Following EXP-4354, clients will not need to write these events themselves.
      *
-     * Read access to the event store should be done through
-     * the JEXL helper available from [createJexlHelper].
+     * Read access to the event store should be done through the JEXL helper available from [createJexlHelper].
      */
-    val events: NimbusEventStore by lazyMonitored {
+    val events: NimbusEventStore by lazy {
         sdk.events
     }
 
@@ -78,8 +74,8 @@ class NimbusComponents(
      *
      * For this reason, an evaluator should be not be stored or cached.
      *
-     * Since it has a native peer, to avoid leaking memory, the helper's [destroy] method
-     * should be called after finishing the set of evaluations.
+     * Since it has a native peer, to avoid leaking memory, the helper's [destroy] method should be called after
+     * finishing the set of evaluations.
      *
      * This can be done automatically using the interface's `use` method, e.g.
      *
@@ -89,19 +85,17 @@ class NimbusComponents(
      * }
      * ```
      *
-     * The helper has access to all context needed to drive decisions
-     * about messaging, onboarding and experimentation.
+     * The helper has access to all context needed to drive decisions about messaging, onboarding and experimentation.
      *
      * It also has a built-in cache.
      */
-    fun createJexlHelper(): NimbusMessagingHelperInterface =
-        messagingStorage.createMessagingHelper()
+    fun createJexlHelper(): NimbusMessagingHelperInterface = messagingStorage.createMessagingHelper()
 
     /**
-     * The main entry point for UI surfaces to interact with (get, click, dismiss) messages
-     * from the Nimbus Messaging component.
+     * The main entry point for UI surfaces to interact with (get, click, dismiss) messages from the Nimbus Messaging
+     * component.
      */
-    val messaging: NimbusMessagingControllerInterface by lazyMonitored {
+    val messaging: NimbusMessagingControllerInterface by lazy {
         NimbusMessagingController(
             messagingStorage = messagingStorage,
             deepLinkScheme = BuildConfig.DEEP_LINK_SCHEME,
@@ -113,7 +107,7 @@ class NimbusComponents(
      *
      * The app should access this through a [mozilla.components.service.nimbus.messaging.NimbusMessagingController].
      */
-    private val messagingStorage by lazyMonitored {
+    private val messagingStorage by lazy {
         NimbusMessagingStorage(
             context = context,
             metadataStorage = OnDiskMessageMetadataStorage(context),
@@ -121,5 +115,19 @@ class NimbusComponents(
             messagingFeature = FxNimbusMessaging.features.messaging,
             attributeProvider = CustomAttributeProvider,
         )
+    }
+
+    /**
+     * Return the list of enrolled experiments for the crash reporter.
+     *
+     * This will not instantiate the NimbusClient and instead attempt to read from the Nimbus database directly.
+     */
+    fun getEnrollmentsForCrashReporter(): List<EnrollmentSlugs> {
+        try {
+            val dbPath = File(context.applicationInfo.dataDir, NIMBUS_DATA_DIR).path
+            return getActiveEnrollments(dbPath)
+        } catch (e: NimbusException) {
+            return emptyList()
+        }
     }
 }

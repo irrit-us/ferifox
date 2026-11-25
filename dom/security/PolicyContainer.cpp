@@ -4,10 +4,12 @@
 
 #include "PolicyContainer.h"
 
+#include "mozilla/dom/ConnectionAllowlists.h"
 #include "mozilla/dom/IntegrityPolicy.h"
 #include "mozilla/dom/IntegrityPolicyWAICT.h"
 #include "mozilla/dom/nsCSPContext.h"
 #include "mozilla/ipc/PBackgroundSharedTypes.h"
+#include "nsCSPUtils.h"
 #include "nsIClassInfoImpl.h"
 #include "nsIObjectInputStream.h"
 #include "nsIObjectOutputStream.h"
@@ -83,9 +85,52 @@ PolicyContainer::Write(nsIObjectOutputStream* aStream) {
   // TODO(Bug 2017654): (De)Serialize the WAICT state as part of the
   // Policy-Container
 
+  // TODO(Bug 2073404): Support ConnectionAllowlists
+
   MOZ_TRY(aStream->Write16(static_cast<uint16_t>(mIPAddressSpace)));
 
   return NS_OK;
+}
+
+// static
+Result<already_AddRefed<PolicyContainer>, nsresult>
+PolicyContainer::CreateForNonDocument(nsIPrincipal* aPrincipal,
+                                      nsIURI* aSelfURI,
+                                      const Headers& aHeaders) {
+  RefPtr<PolicyContainer> policyContainer = new PolicyContainer();
+
+  if (!aHeaders.mContentSecurityPolicy.IsEmpty() ||
+      !aHeaders.mContentSecurityPolicyReportOnly.IsEmpty()) {
+    RefPtr<nsCSPContext> csp = new nsCSPContext();
+    MOZ_TRY(csp->SetRequestContextWithPrincipal(aPrincipal, aSelfURI,
+                                                /* aReferrer */ ""_ns,
+                                                /* aInnerWindowId */ 0));
+    if (!aHeaders.mContentSecurityPolicy.IsEmpty()) {
+      MOZ_TRY(CSP_AppendCSPFromHeader(
+          csp, NS_ConvertUTF8toUTF16(aHeaders.mContentSecurityPolicy),
+          false /* aReportOnly */));
+    }
+    if (!aHeaders.mContentSecurityPolicyReportOnly.IsEmpty()) {
+      MOZ_TRY(CSP_AppendCSPFromHeader(
+          csp, NS_ConvertUTF8toUTF16(aHeaders.mContentSecurityPolicyReportOnly),
+          true /* aReportOnly */));
+    }
+    policyContainer->SetCSP(csp);
+  }
+
+  if (!aHeaders.mConnectionAllowlist.IsEmpty() ||
+      !aHeaders.mConnectionAllowlistReportOnly.IsEmpty()) {
+    RefPtr<ConnectionAllowlists> allowlists;
+    MOZ_TRY(ConnectionAllowlists::ParseHeaders(
+        aHeaders.mConnectionAllowlist, aHeaders.mConnectionAllowlistReportOnly,
+        getter_AddRefs(allowlists)));
+    if (allowlists) {
+      allowlists->SetResponseURI(aSelfURI);
+    }
+    policyContainer->SetConnectionAllowlists(allowlists);
+  }
+
+  return policyContainer.forget();
 }
 
 void PolicyContainer::ToArgs(const PolicyContainer* aPolicy,
@@ -105,6 +150,12 @@ void PolicyContainer::ToArgs(const PolicyContainer* aPolicy,
     IntegrityPolicy::ToArgs(IntegrityPolicy::Cast(aPolicy->mIntegrityPolicy),
                             integrityPolicyArgs);
     aArgs.integrityPolicy() = Some(integrityPolicyArgs);
+  }
+
+  if (aPolicy->mConnectionAllowlists) {
+    mozilla::ipc::ConnectionAllowlistsArgs connectionAllowlistsArgs;
+    aPolicy->mConnectionAllowlists->ToArgs(connectionAllowlistsArgs);
+    aArgs.connectionAllowlists() = Some(std::move(connectionAllowlistsArgs));
   }
 
   aArgs.ipAddressSpace() = aPolicy->mIPAddressSpace;
@@ -128,6 +179,12 @@ void PolicyContainer::FromArgs(const mozilla::ipc::PolicyContainerArgs& aArgs,
     policy->SetIntegrityPolicy(integrityPolicy);
   }
 
+  if (aArgs.connectionAllowlists().isSome()) {
+    RefPtr<ConnectionAllowlists> connectionAllowlists =
+        ConnectionAllowlists::FromArgs(*aArgs.connectionAllowlists());
+    policy->SetConnectionAllowlists(connectionAllowlists);
+  }
+
   policy->SetIPAddressSpace(aArgs.ipAddressSpace());
 
   policy.forget(aPolicy);
@@ -139,17 +196,23 @@ void PolicyContainer::InitFromOther(PolicyContainer* aOther) {
   }
 
   if (aOther->mCSP) {
-    RefPtr<nsCSPContext> csp = new nsCSPContext();
-    csp = new nsCSPContext();
+    RefPtr csp = MakeRefPtr<nsCSPContext>();
     csp->InitFromOther(nsCSPContext::Cast(aOther->mCSP));
     mCSP = csp;
   }
 
   if (aOther->mIntegrityPolicy) {
-    RefPtr<dom::IntegrityPolicy> integrityPolicy = new dom::IntegrityPolicy();
+    RefPtr integrityPolicy = MakeRefPtr<IntegrityPolicy>();
     integrityPolicy->InitFromOther(
         IntegrityPolicy::Cast(aOther->mIntegrityPolicy));
     mIntegrityPolicy = integrityPolicy;
+  }
+
+  if (aOther->mConnectionAllowlists) {
+    // Unlike CSP, connection allowlists are not mutable, so they don't need to
+    // be cloned.
+    mConnectionAllowlists = aOther->mConnectionAllowlists;
+    mConnectionAllowlists->Freeze();  // Avoid accidental modifications.
   }
 
   mIPAddressSpace = aOther->mIPAddressSpace;
@@ -182,6 +245,8 @@ bool PolicyContainer::Equals(const PolicyContainer* aContainer,
           IntegrityPolicy::Cast(aOtherContainer->mIntegrityPolicy))) {
     return false;
   }
+
+  // TODO(Bug 2073404): Support ConnectionAllowlists
 
   if (aContainer->mIPAddressSpace != aOtherContainer->mIPAddressSpace) {
     return false;
@@ -239,6 +304,24 @@ IntegrityPolicyWAICT* PolicyContainer::GetIntegrityPolicyWAICT(
     return nullptr;
   }
   return PolicyContainer::Cast(aPolicyContainer)->GetIntegrityPolicyWAICT();
+}
+
+// == Connection Allowlists ==
+void PolicyContainer::SetConnectionAllowlists(
+    ConnectionAllowlists* aAllowlists) {
+  mConnectionAllowlists = aAllowlists;
+}
+
+ConnectionAllowlists* PolicyContainer::GetConnectionAllowlists() const {
+  return mConnectionAllowlists;
+}
+
+ConnectionAllowlists* PolicyContainer::GetConnectionAllowlists(
+    const nsIPolicyContainer* aPolicyContainer) {
+  if (!aPolicyContainer) {
+    return nullptr;
+  }
+  return PolicyContainer::Cast(aPolicyContainer)->GetConnectionAllowlists();
 }
 
 // == IP Address Space ==

@@ -281,7 +281,7 @@ add_task(async function test_new_profile_theme() {
 
   is(
     null,
-    Glean.profilesNew.theme.testGetValue(),
+    Glean.themePicker.change.testGetValue(),
     "We have not recorded any Glean data yet"
   );
 
@@ -305,7 +305,11 @@ add_task(async function test_new_profile_theme() {
         // Fill in the input so we don't hit the beforeunload warning
         newProfileCard.nameInput.value = "test";
 
-        let defaultThemeCard = newProfileCard.themesPicker.querySelector(
+        await newProfileCard.themesPicker.updateComplete;
+
+        let pickerEl = newProfileCard.themesPicker.pickerEl;
+
+        let defaultThemeCard = pickerEl.querySelector(
           "moz-visual-picker-item[value='default-theme@mozilla.org']"
         );
 
@@ -339,7 +343,7 @@ add_task(async function test_new_profile_theme() {
         "Current profile theme was updated"
       );
 
-      await assertGlean("profiles", "new", "theme", expectedThemeId);
+      await assertThemePickerThemeChange(expectedThemeId);
     }
   );
 

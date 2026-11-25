@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.5.0 - 2026-11-25
+
+- Updated the browser engine to Firefox 161.0 and aligned the shipped persona versions.
+- Built Linux x86_64 packages for GNU/glibc and musl.
+
 ## v0.4.0 - 2026-10-20
 
 Fourth Ferifox release based on Firefox 155.0: default persona, startup cookie import, and agent tooling.

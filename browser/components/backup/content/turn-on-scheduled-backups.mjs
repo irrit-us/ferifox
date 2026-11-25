@@ -5,9 +5,9 @@
 import { html, nothing } from "chrome://global/content/vendor/lit.all.mjs";
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
 
-// eslint-disable-next-line import/no-unassigned-import
+// eslint-disable-next-line import-x/no-unassigned-import
 import "chrome://global/content/elements/moz-message-bar.mjs";
-// eslint-disable-next-line import/no-unassigned-import
+// eslint-disable-next-line import-x/no-unassigned-import
 import "chrome://browser/content/backup/password-validation-inputs.mjs";
 
 import { ERRORS } from "chrome://browser/content/backup/backup-constants.mjs";
@@ -259,19 +259,17 @@ export default class TurnOnScheduledBackups extends MozLitElement {
       detail.password = this._inputPassValue;
     }
 
-    if (this.embeddedFxBackupOptIn && this.backupIsEncrypted) {
-      if (!detail.password) {
-        this.dispatchEvent(
-          new CustomEvent("SpotlightOnboardingAdvanceScreens", {
-            bubbles: true,
-          })
-        );
-        return;
-      }
-
-      detail.parentDirPath =
-        this.backupServiceState?.embeddedComponentPersistentData?.path ||
-        detail.parentDirPath;
+    if (
+      this.embeddedFxBackupOptIn &&
+      this.backupIsEncrypted &&
+      !detail.password
+    ) {
+      this.dispatchEvent(
+        new CustomEvent("SpotlightOnboardingAdvanceScreens", {
+          bubbles: true,
+        })
+      );
+      return;
     }
 
     this._pendingConfirmDetail = detail;
@@ -279,7 +277,6 @@ export default class TurnOnScheduledBackups extends MozLitElement {
       new CustomEvent("BackupUI:ProbeDefaultBackupDir", {
         bubbles: true,
         composed: true,
-        detail: { parentDirPath: detail.parentDirPath },
       })
     );
   }
@@ -489,12 +486,12 @@ export default class TurnOnScheduledBackups extends MozLitElement {
         aria-describedby="backup-turn-on-scheduled-description"
         part="form"
       >
-        <h1
+        <h2
           id="backup-turn-on-scheduled-header"
           class="heading-medium"
           data-l10n-id=${this.turnOnBackupHeaderL10nId ||
           "turn-on-scheduled-backups-header"}
-        ></h1>
+        ></h2>
         <main id="backup-turn-on-scheduled-content">
           <div id="backup-turn-on-scheduled-description">
             <span
