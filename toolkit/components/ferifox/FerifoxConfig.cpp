@@ -25,6 +25,7 @@
 #include <cmath>
 #include <cstring>
 #include <inttypes.h>
+#include <memory>
 #include <string>
 
 namespace mozilla {
@@ -126,7 +127,7 @@ void FerifoxConfig::InitializeParentProcess() {
 }
 
 FerifoxConfig::FerifoxConfig()
-    : mRoot(MakeUnique<Json::Value>()), mLoaded(false) {
+    : mRoot(std::make_unique<Json::Value>()), mLoaded(false) {
   Load();
 }
 
@@ -271,7 +272,7 @@ bool FerifoxConfig::LoadFromFile(nsIFile* aFile, const nsACString& aSource) {
 
 bool FerifoxConfig::LoadFromJSONString(const nsACString& aContent,
                                        const char* aSource) {
-  auto root = MakeUnique<Json::Value>();
+  auto root = std::make_unique<Json::Value>();
   Json::Reader reader;
   if (!reader.parse(aContent.BeginReading(), aContent.EndReading(), *root,
                     false)) {
@@ -512,7 +513,7 @@ void FerifoxConfig::SetConfigForTesting(const nsACString& aJson) {
     return;
   }
 
-  sSingleton->mRoot = MakeUnique<Json::Value>();
+  sSingleton->mRoot = std::make_unique<Json::Value>();
   sSingleton->mCanonicalLocale.Truncate();
   sSingleton->mTimeZone.Truncate();
   sSingleton->mLoaded = false;
@@ -527,7 +528,7 @@ void FerifoxConfig::ClearConfigForTesting() {
     return;
   }
 
-  sSingleton->mRoot = MakeUnique<Json::Value>();
+  sSingleton->mRoot = std::make_unique<Json::Value>();
   sSingleton->mCanonicalLocale.Truncate();
   sSingleton->mTimeZone.Truncate();
   sSingleton->mLoaded = false;
@@ -536,7 +537,7 @@ void FerifoxConfig::ClearConfigForTesting() {
 
 bool FerifoxConfig::SetPersistentEnv(const nsACString& aName,
                                      const nsACString& aValue) {
-  auto storage = MakeUnique<nsCString>(aName);
+  auto storage = std::make_unique<nsCString>(aName);
   storage->Append('=');
   storage->Append(aValue);
   nsCString& kept = *storage;
