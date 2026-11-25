@@ -15,7 +15,6 @@
 
 #include <algorithm>
 
-#include "AltServiceChild.h"
 #include "CacheControlParser.h"
 #include "Http2Session.h"
 #include "Http2Stream.h"
@@ -23,6 +22,7 @@
 #include "Http2StreamTunnel.h"
 #include "Http2WebTransportSession.h"
 #include "LoadContextInfo.h"
+#include "mozilla/CheckedInt.h"
 #include "mozilla/EndianUtils.h"
 #include "mozilla/Preferences.h"
 #include "mozilla/Sprintf.h"
@@ -227,8 +227,8 @@ Http2Session::Http2Session(nsISocketTransport* aSocketTransport,
 
   LOG3(("Http2Session::Http2Session %p serial=0x%" PRIX64 "\n", this, mSerial));
 
-  mInputFrameBuffer = MakeUnique<char[]>(mInputFrameBufferSize);
-  mOutputQueueBuffer = MakeUnique<char[]>(mOutputQueueSize);
+  mInputFrameBuffer = std::make_unique<char[]>(mInputFrameBufferSize);
+  mOutputQueueBuffer = std::make_unique<char[]>(mOutputQueueSize);
   mDecompressBuffer.SetCapacity(kDefaultBufferSize);
 
   mPushAllowance = gHttpHandler->SpdyPushAllowance();
@@ -278,7 +278,10 @@ void Http2Session::ShutdownStream(Http2StreamBase* aStream, nsresult aReason) {
   } else if (!mCleanShutdown && PossibleZeroRTTRetryError(aReason)) {
     CloseStream(aStream, aReason);
   } else {
-    CloseStream(aStream, NS_ERROR_ABORT);
+    // The connection went away without a clean GOAWAY-based shutdown, but
+    // this stream never received any response data, so it is safe to retry
+    // it on a new connection.
+    CloseStream(aStream, NS_ERROR_NET_UNCLEAN_SHUTDOWN);
   }
 }
 
@@ -927,8 +930,13 @@ void Http2Session::CreateFrameHeader(charType dest, uint16_t frameLength,
 char* Http2Session::EnsureOutputBuffer(uint32_t spaceNeeded) {
   // this is an infallible allocation (if an allocation is
   // needed, which is probably isn't)
-  EnsureBuffer(mOutputQueueBuffer, mOutputQueueUsed + spaceNeeded,
-               mOutputQueueUsed, mOutputQueueSize);
+  CheckedInt<uint32_t> newSize =
+      CheckedInt<uint32_t>(mOutputQueueUsed) + spaceNeeded;
+  if (!newSize.isValid()) {
+    NS_ABORT_OOM(UINT32_MAX);
+  }
+  EnsureBuffer(mOutputQueueBuffer, newSize.value(), mOutputQueueUsed,
+               mOutputQueueSize);
   return mOutputQueueBuffer.get() + mOutputQueueUsed;
 }
 
@@ -1400,6 +1408,8 @@ void Http2Session::CleanupStream(Http2StreamBase* aStream, nsresult aResult,
     LOG3(("Http2Session::CleanupStream failed to verify stream\n"));
     return;
   }
+
+  RefPtr<Http2Session> self(this);
 
   // don't reset a stream that has recevied a fin or rst
   if (!aStream->RecvdFin() && !aStream->RecvdReset() && aStream->StreamID() &&
@@ -2267,14 +2277,6 @@ class UpdateAltSvcEvent : public Runnable {
     uri->GetScheme(originScheme);
     uri->GetHost(originHost);
     uri->GetPort(&originPort);
-
-    if (XRE_IsSocketProcess()) {
-      AltServiceChild::ProcessHeader(
-          mHeader, originScheme, originHost, originPort, mCI->GetUsername(),
-          mCI->GetPrivate(), nullptr, mCI->ProxyInfo(), 0,
-          mCI->GetOriginAttributes(), mCI);
-      return NS_OK;
-    }
 
     AltSvcMapping::ProcessHeader(mHeader, originScheme, originHost, originPort,
                                  mCI->GetUsername(), mCI->GetPrivate(), nullptr,
@@ -3695,7 +3697,7 @@ nsresult Http2Session::OnReadSegment(const char* buf, uint32_t count,
   // for other routines to use - but this is an all-or-nothing function,
   // so if it will not all fit just return WOULD_BLOCK
 
-  if ((mOutputQueueUsed + count) > (mOutputQueueSize - kQueueReserved)) {
+  if (!OutputQueueHasRoom(count)) {
     return NS_BASE_STREAM_WOULD_BLOCK;
   }
 
@@ -3708,12 +3710,18 @@ nsresult Http2Session::OnReadSegment(const char* buf, uint32_t count,
   return NS_OK;
 }
 
+bool Http2Session::OutputQueueHasRoom(uint32_t aCount) const {
+  CheckedInt<uint32_t> needed =
+      CheckedInt<uint32_t>(mOutputQueueUsed) + aCount + kQueueReserved;
+  return needed.isValid() && needed.value() <= mOutputQueueSize;
+}
+
 nsresult Http2Session::CommitToSegmentSize(uint32_t count,
                                            bool forceCommitment) {
   if (mOutputQueueUsed && !mAttemptingEarlyData) FlushOutputQueue();
 
   // would there be enough room to buffer this if needed?
-  if ((mOutputQueueUsed + count) <= (mOutputQueueSize - kQueueReserved)) {
+  if (OutputQueueHasRoom(count)) {
     return NS_OK;
   }
 
@@ -3727,16 +3735,28 @@ nsresult Http2Session::CommitToSegmentSize(uint32_t count,
     RealignOutputQueue();
 
     // is there enough room now?
-    if ((mOutputQueueUsed + count) <= (mOutputQueueSize - kQueueReserved)) {
+    if (OutputQueueHasRoom(count)) {
       return NS_OK;
     }
   }
 
   // resize the buffers as needed
-  EnsureOutputBuffer(count + kQueueReserved);
+  CheckedInt<uint32_t> newSize =
+      CheckedInt<uint32_t>(mOutputQueueUsed) + count + kQueueReserved;
+  if (!newSize.isValid() ||
+      newSize.value() >
+          StaticPrefs::network_http_http2_max_output_queue_size()) {
+    LOG3(
+        ("Http2Session::CommitToSegmentSize %p output queue would exceed "
+         "the limit used=%u count=%u",
+         this, mOutputQueueUsed, count));
+    return NS_ERROR_OUT_OF_MEMORY;
+  }
 
-  MOZ_ASSERT((mOutputQueueUsed + count) <= (mOutputQueueSize - kQueueReserved),
-             "buffer not as large as expected");
+  EnsureBuffer(mOutputQueueBuffer, newSize.value(), mOutputQueueUsed,
+               mOutputQueueSize);
+
+  MOZ_ASSERT(OutputQueueHasRoom(count), "buffer not as large as expected");
 
   return NS_OK;
 }
@@ -3942,7 +3962,14 @@ nsresult Http2Session::ConfirmTLSProfile() {
     return SessionError(INADEQUATE_SECURITY);
   }
 
-  if (kea != ssl_kea_dh && kea != ssl_kea_ecdh && kea != ssl_kea_ecdh_hybrid) {
+  if (kea == ssl_kea_kem && !StaticPrefs::security_tls_enable_mlkem1024()) {
+    LOG3(("Http2Session::ConfirmTLSProfile %p FAILED due to disabled KEA %d\n",
+          this, kea));
+    return SessionError(INADEQUATE_SECURITY);
+  }
+
+  if (kea != ssl_kea_dh && kea != ssl_kea_ecdh && kea != ssl_kea_ecdh_hybrid &&
+      kea != ssl_kea_kem) {
     LOG3(("Http2Session::ConfirmTLSProfile %p FAILED due to invalid KEA %d\n",
           this, kea));
     return SessionError(INADEQUATE_SECURITY);

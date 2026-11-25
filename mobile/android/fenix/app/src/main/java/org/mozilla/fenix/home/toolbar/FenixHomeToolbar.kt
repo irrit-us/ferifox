@@ -5,22 +5,23 @@
 package org.mozilla.fenix.home.toolbar
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 
-/**
- * Home screen toolbar.
- */
+/** Home screen toolbar. */
 interface FenixHomeToolbar {
+    /** Renders the toolbar content. */
+    @Composable fun Content()
+
     /**
-     * Renders the toolbar content.
+     * Returns the background color of the search screen while search is active, or null otherwise. Must be called from
+     * within the same theme as [Content].
      */
-    @Composable
-    fun Content()
+    @Composable fun searchBackgroundColor(): Color? = null
 
     /**
      * Setups the home screen toolbar.
      *
-     * @param middleSearchEnabled Whether middle search is enabled, and the address bar
-     * should be invisible.
+     * @param middleSearchEnabled Whether middle search is enabled, and the address bar should be invisible.
      */
     fun build(middleSearchEnabled: Boolean)
 

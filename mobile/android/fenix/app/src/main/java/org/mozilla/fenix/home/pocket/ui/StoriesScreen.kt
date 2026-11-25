@@ -31,23 +31,19 @@ import mozilla.components.compose.base.annotation.FlexibleWindowLightDarkPreview
 import mozilla.components.compose.base.button.IconButton
 import mozilla.components.compose.base.theme.layout.AcornWindowSize
 import mozilla.components.compose.base.utils.BackInvokedHandler
+import mozilla.components.ui.icons.R as iconsR
 import org.mozilla.fenix.R
 import org.mozilla.fenix.components.appstate.recommendations.ContentRecommendationsState
 import org.mozilla.fenix.home.fake.FakeHomepagePreview
 import org.mozilla.fenix.home.pocket.controller.StoriesImpressionSource
 import org.mozilla.fenix.home.pocket.interactor.PocketStoriesInteractor
-import org.mozilla.fenix.home.ui.LeftChevronPillButton
 import org.mozilla.fenix.theme.FirefoxTheme
-import mozilla.components.ui.icons.R as iconsR
 
-/**
- * Stories screen.
- */
+/** Stories screen. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StoriesScreen(
     state: ContentRecommendationsState,
-    entryPointExperimentEnabled: Boolean,
     interactor: PocketStoriesInteractor,
     onNavigationIconClick: () -> Unit,
 ) {
@@ -80,32 +76,25 @@ fun StoriesScreen(
                     )
                 },
                 navigationIcon = {
-                    if (entryPointExperimentEnabled) {
-                        HomeButton(
-                            onClick = onNavigationIconClick,
+                    IconButton(
+                        onClick = onNavigationIconClick,
+                        contentDescription = stringResource(R.string.stories_back_button_content_description),
+                    ) {
+                        Icon(
+                            painter = painterResource(iconsR.drawable.mozac_ic_back_24),
+                            contentDescription = null,
                         )
-                    } else {
-                        IconButton(
-                            onClick = onNavigationIconClick,
-                            contentDescription = stringResource(R.string.stories_back_button_content_description),
-                        ) {
-                            Icon(
-                                painter = painterResource(iconsR.drawable.mozac_ic_back_24),
-                                contentDescription = null,
-                            )
-                        }
                     }
                 },
-                windowInsets = WindowInsets(
-                    top = 0.dp,
-                    bottom = 0.dp,
-                ),
+                windowInsets =
+                    WindowInsets(
+                        top = 0.dp,
+                        bottom = 0.dp,
+                    ),
                 scrollBehavior = scrollBehavior,
             )
         },
-        modifier = Modifier
-            .fillMaxSize()
-            .nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = Modifier.fillMaxSize().nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { paddingValues ->
         StoriesScreenContent(
             state = state,
@@ -122,11 +111,12 @@ private fun StoriesScreenContent(
     interactor: PocketStoriesInteractor,
 ) {
     Column(
-        modifier = Modifier.padding(
-            top = paddingValues.calculateTopPadding(),
-            start = FirefoxTheme.layout.space.dynamic200,
-            end = FirefoxTheme.layout.space.dynamic200,
-        ),
+        modifier =
+            Modifier.padding(
+                top = paddingValues.calculateTopPadding(),
+                start = FirefoxTheme.layout.space.dynamic200,
+                end = FirefoxTheme.layout.space.dynamic200,
+            ),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Stories(
@@ -142,25 +132,28 @@ private fun Stories(
     interactor: PocketStoriesInteractor,
 ) {
     val windowSizeClass = FirefoxTheme.windowSize
-    val columnCount = when (windowSizeClass) {
-        AcornWindowSize.Small -> 1
-        AcornWindowSize.Medium -> 2
-        AcornWindowSize.Large -> 3
-    }
+    val columnCount =
+        when (windowSizeClass) {
+            AcornWindowSize.Small -> 1
+            AcornWindowSize.Medium -> 2
+            AcornWindowSize.Large -> 3
+        }
 
-    val verticalPadding = if (windowSizeClass != AcornWindowSize.Small) {
-        16.dp
-    } else {
-        12.dp
-    }
+    val verticalPadding =
+        if (windowSizeClass != AcornWindowSize.Small) {
+            16.dp
+        } else {
+            12.dp
+        }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(columnCount),
         verticalArrangement = Arrangement.spacedBy(verticalPadding),
-        horizontalArrangement = Arrangement.spacedBy(
-            16.dp,
-            alignment = Alignment.CenterHorizontally,
-        ),
+        horizontalArrangement =
+            Arrangement.spacedBy(
+                16.dp,
+                alignment = Alignment.CenterHorizontally,
+            ),
     ) {
         itemsIndexed(state.pocketStories) { index, story ->
             StoryCard(
@@ -178,40 +171,12 @@ private fun Stories(
 }
 
 @Composable
-private fun HomeButton(onClick: () -> Unit) {
-    LeftChevronPillButton(onClick = onClick) {
-        Icon(
-            painter = painterResource(iconsR.drawable.mozac_ic_home_24),
-            contentDescription = stringResource(R.string.content_description_normal_browsing),
-        )
-    }
-}
-
-@Composable
 @FlexibleWindowLightDarkPreview
 private fun StoriesScreenPreviews() {
     FirefoxTheme {
         StoriesScreen(
-            state = ContentRecommendationsState(
-                pocketStories = FakeHomepagePreview.stories(),
-            ),
+            state = ContentRecommendationsState(pocketStories = FakeHomepagePreview.stories()),
             interactor = FakeHomepagePreview.storiesInteractor,
-            entryPointExperimentEnabled = false,
-            onNavigationIconClick = {},
-        )
-    }
-}
-
-@Composable
-@FlexibleWindowLightDarkPreview
-private fun StoriesScreenExperimentPreviews() {
-    FirefoxTheme {
-        StoriesScreen(
-            state = ContentRecommendationsState(
-                pocketStories = FakeHomepagePreview.stories(),
-            ),
-            interactor = FakeHomepagePreview.storiesInteractor,
-            entryPointExperimentEnabled = true,
             onNavigationIconClick = {},
         )
     }

@@ -12,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -21,14 +22,17 @@ import mozilla.components.ExperimentalAndroidComponentsApi
 import mozilla.components.concept.engine.Engine
 import mozilla.components.concept.engine.ipprotection.IPProtectionDelegate
 import mozilla.components.concept.engine.ipprotection.IPProtectionHandler
+import mozilla.components.concept.engine.ipprotection.ProxyState
 import mozilla.components.concept.engine.ipprotection.ServiceState
-import mozilla.components.feature.ipprotection.IPProtectionFxaAuthFlow.Companion.SCOPE_IPPROTECTION
 import mozilla.components.feature.ipprotection.auth.IPProtectionAuthProvider
+import mozilla.components.feature.ipprotection.auth.fxa.IPProtectionFxaAuthFlow.Companion.SCOPE_IPPROTECTION
+import mozilla.components.feature.ipprotection.store.ActivationOperation
 import mozilla.components.feature.ipprotection.store.IPProtectionAction
 import mozilla.components.feature.ipprotection.store.IPProtectionStore
-import mozilla.components.feature.ipprotection.store.InternalAction
 import mozilla.components.feature.ipprotection.store.state.AccountStatus
 import mozilla.components.feature.ipprotection.store.state.EligibilityStatus
+import mozilla.components.feature.ipprotection.store.state.LocationListUpdateState
+import mozilla.components.feature.ipprotection.store.state.PendingActivationRequest
 import mozilla.components.lib.state.ext.flow
 import mozilla.components.lib.state.ext.flowScoped
 import mozilla.components.service.fxa.manager.FxaAccountManager
@@ -36,15 +40,15 @@ import mozilla.components.service.fxa.manager.SCOPE_PROFILE
 import mozilla.components.support.base.log.logger.Logger
 
 /**
- * Feature that coordinates the IP protection proxy service. It observes [IPProtectionStore] for
- * eligibility and account state changes, registers with the [Engine] and forwards
- * activate/deactivate requests back to the [Engine].
+ * Feature that coordinates the IP protection proxy service. It observes [IPProtectionStore] for eligibility and account
+ * state changes, registers with the [Engine] and forwards activate/deactivate requests back to the [Engine].
  *
- * See [IPProtectionFxaAuthFlow] and [IPProtectionStorageSynchronizer] helpers that complement
- * this feature.
+ * See [mozilla.components.feature.ipprotection.auth.fxa.IPProtectionFxaAuthFlow] and
+ * [mozilla.components.feature.ipprotection.storage.IPProtectionStorageSynchronizer] helpers that complement this
+ * feature.
  *
- * Call [initialize] once at startup to begin observing. The feature manages its own lifecycle
- * internally and does not need to be stopped.
+ * Call [initialize] once at startup to begin observing. The feature manages its own lifecycle internally and does not
+ * need to be stopped.
  *
  * @param store [IPProtectionStore] that holds the feature state.
  * @param engine [Engine] used to register the IP protection delegate and obtain the handler.
@@ -63,15 +67,16 @@ class IPProtectionFeature(
     private val mainScope = CoroutineScope(mainDispatcher)
     private var handler: IPProtectionHandler? = null
 
-    /**
-     * Starts observing eligibility and account state. Must be called once at application startup.
-     */
+    /** Starts observing eligibility and account state. Must be called once at application startup. */
     fun initialize() {
         mainScope.launch {
             observeEligibilityAndService(store, mainDispatcher)
         }
         mainScope.launch {
             observeAccount(store, mainDispatcher)
+        }
+        mainScope.launch {
+            observeLocationUpdates(store, mainDispatcher)
         }
     }
 
@@ -80,7 +85,8 @@ class IPProtectionFeature(
         mainDispatcher: CoroutineDispatcher,
     ) {
         store.flowScoped(dispatcher = mainDispatcher) { flow ->
-            flow.map { Triple(it.eligibilityStatus, it.serviceStatus, it.accountState.status) }
+            flow
+                .map { Triple(it.eligibilityStatus, it.serviceStatus, it.accountState.status) }
                 .distinctUntilChanged()
                 // We use `collectLatest` only because of the nested `observeToggle` that
                 // should be canceled on new observation.
@@ -95,8 +101,9 @@ class IPProtectionFeature(
                             // When the app starts with an already signed-in user, the account state
                             // is likely to be ready faster than the service, so we should notify
                             // a ready account state after initializing the handler.
-                            if (serviceStatus == ServiceState.Unauthenticated &&
-                                accountStatus == AccountStatus.Authenticated
+                            if (
+                                serviceStatus == ServiceState.Unauthenticated &&
+                                    accountStatus == AccountStatus.Authenticated
                             ) {
                                 handler?.notifyAccountStatus(true)
                             }
@@ -104,13 +111,12 @@ class IPProtectionFeature(
                         }
 
                         EligibilityStatus.Ineligible,
-                        EligibilityStatus.UnsupportedRegion,
-                            -> {
+                        EligibilityStatus.UnsupportedRegion -> {
                             uninit()
                         }
 
                         EligibilityStatus.Unknown -> {
-                            // no-op, initializing
+                            // no-op, initializing or no region set.
                         }
                     }
                 }
@@ -119,12 +125,12 @@ class IPProtectionFeature(
 
     private fun observeAccount(store: IPProtectionStore, mainDispatcher: CoroutineDispatcher) {
         store.flowScoped(dispatcher = mainDispatcher) { flow ->
-            flow.distinctUntilChangedBy { it.accountState.status }
+            flow
+                .distinctUntilChangedBy { it.accountState.status }
                 .collect { state ->
                     when (state.accountState.status) {
                         AccountStatus.AuthFailed,
-                        AccountStatus.NoAccount,
-                            -> {
+                        AccountStatus.NoAccount -> {
                             handler?.notifyAccountStatus(false)
                         }
 
@@ -136,9 +142,9 @@ class IPProtectionFeature(
                             handler?.notifyAccountStatus(true)
                             handler?.enroll { enrollInfo ->
                                 store.dispatch(
-                                    InternalAction.FinishingEnrollment(
-                                        success = enrollInfo.isEnrolledAndEntitled,
-                                    ),
+                                    IPProtectionAction.AccountAction.FinishingEnrollment(
+                                        success = enrollInfo.isEnrolledAndEntitled
+                                    )
                                 )
                             }
                         }
@@ -155,8 +161,7 @@ class IPProtectionFeature(
                         AccountStatus.RequestingAuthorization,
                         AccountStatus.AwaitingAuthentication,
                         AccountStatus.AwaitingAuthorization,
-                        AccountStatus.EnrolledAndEntitled,
-                            -> {
+                        AccountStatus.EnrolledAndEntitled -> {
                             // no-op when we are in transient states.
                         }
                     }
@@ -164,74 +169,152 @@ class IPProtectionFeature(
         }
     }
 
-    private suspend fun registerAndInit() = withContext(mainDispatcher) {
-        handler = engine.registerIPProtectionDelegate(
-            object : IPProtectionDelegate {
-                override fun onStateChanged(info: IPProtectionHandler.StateInfo) {
-                    store.dispatch(IPProtectionAction.EngineStateChanged(info))
+    private fun observeLocationUpdates(store: IPProtectionStore, mainDispatcher: CoroutineDispatcher) {
+        store.flowScoped(dispatcher = mainDispatcher) { flow ->
+            flow
+                .map { it.serviceStatus to it.locationState.updateState }
+                .distinctUntilChanged()
+                .filter { (service, update) ->
+                    service == ServiceState.Ready && update == LocationListUpdateState.Requested
                 }
-
-                override fun onCountryListChanged(countries: List<IPProtectionHandler.Country>) {
-                    store.dispatch(IPProtectionAction.CountryListChanged(countries))
-                }
-            },
-        )
-        handler?.run {
-            setAuthProvider(
-                object : IPProtectionHandler.AuthProvider {
-                    override fun getToken(onComplete: (String?) -> Unit) {
-                        mainScope.launch {
-                            try {
-                                val tokenInfo = accountManager.authenticatedAccount()
-                                    ?.getAccessToken("$SCOPE_PROFILE $SCOPE_IPPROTECTION")
-                                onComplete(tokenInfo?.token)
-                            } catch (e: FxaException.Forbidden) {
-                                logger.error(
-                                    "We don't have a scope that gives us an token. Moving to needs authorization.",
-                                    e,
-                                )
-                                store.dispatch(IPProtectionAction.AccountStateChanged(AccountStatus.NeedsAuthorization))
-                                onComplete(null)
-                            }
+                .collect {
+                    handler?.updateCountryList { error ->
+                        if (error != null) {
+                            store.dispatch(IPProtectionAction.LocationAction.LocationUpdateFailed(error))
                         }
                     }
-                },
-            )
-            extraAuthProvider?.configure(this, mainScope)
-            // Initialization needs to be done ASAP whether we are using the service or not to avoid start-up delays.
-            // We do need to register our listeners first to avoid dropping a message because,
-            // as a side effect, the init call triggers `IPProtectionController#onServiceStateChanged`
-            // that can trigger the account manager that leads to `AuthProvider#getToken`.
-            init()
-
-            updateCountryList()
+                }
         }
     }
 
-    private suspend fun uninit() = withContext(mainDispatcher) {
-        handler?.uninit()
-    }
+    private suspend fun registerAndInit() =
+        withContext(mainDispatcher) {
+            handler =
+                engine.registerIPProtectionDelegate(
+                    object : IPProtectionDelegate {
+                        override fun onServiceStateChanged(serviceState: ServiceState) {
+                            store.dispatch(IPProtectionAction.ServiceAction.ServiceStateChanged(serviceState))
+                        }
 
-    private suspend fun observeToggle() = withContext(mainDispatcher) {
-        // Dedupe over the nullable so `true -> null -> true` reads as two edges, not one.
-        store.flow()
-            .map { it.activate }
-            .distinctUntilChanged()
-            .filterNotNull()
-            .collect { activate ->
-                val onResult: (Throwable?) -> Unit = { err ->
-                    if (err != null) {
-                        store.dispatch(IPProtectionAction.ToggleFailed(err))
+                        override fun onProxyStateChanged(
+                            proxyState: ProxyState,
+                            lastError: String?,
+                        ) {
+                            store.dispatch(
+                                IPProtectionAction.ProxyAction.ProxyStateChanged(
+                                    proxyState = proxyState,
+                                    lastError = lastError,
+                                )
+                            )
+                        }
+
+                        override fun onUsageChanged(
+                            remaining: Long,
+                            max: Long,
+                            resetTime: String?,
+                        ) {
+                            store.dispatch(
+                                IPProtectionAction.UsageAction.UsageChanged(
+                                    remaining = remaining,
+                                    max = max,
+                                    resetTime = resetTime,
+                                )
+                            )
+                        }
+
+                        override fun onCountryListChanged(countries: List<IPProtectionHandler.Country>) {
+                            store.dispatch(IPProtectionAction.LocationAction.CountryListChanged(countries))
+                        }
+                    }
+                )
+            handler?.run {
+                setAuthProvider(
+                    object : IPProtectionHandler.AuthProvider {
+                        override fun getToken(onComplete: (String?) -> Unit) {
+                            mainScope.launch {
+                                try {
+                                    val tokenInfo =
+                                        accountManager
+                                            .authenticatedAccount()
+                                            ?.getAccessToken("$SCOPE_PROFILE $SCOPE_IPPROTECTION")
+                                    onComplete(tokenInfo?.token)
+                                } catch (e: FxaException.Forbidden) {
+                                    logger.error(
+                                        "We don't have a scope that gives us an token. Moving to needs authorization.",
+                                        e,
+                                    )
+                                    store.dispatch(
+                                        IPProtectionAction.AccountAction.AccountStateChanged(
+                                            AccountStatus.NeedsAuthorization
+                                        )
+                                    )
+                                    onComplete(null)
+                                }
+                            }
+                        }
+                    }
+                )
+                extraAuthProvider?.configure(this, mainScope)
+                // Initialization needs to be done ASAP whether we are using the service or not to avoid start-up
+                // delays.
+                // We do need to register our listeners first to avoid dropping a message because,
+                // as a side effect, the init call triggers `IPProtectionController#onServiceStateChanged`
+                // that can trigger the account manager that leads to `AuthProvider#getToken`.
+                init()
+            }
+        }
+
+    private suspend fun uninit() =
+        withContext(mainDispatcher) {
+            handler?.uninit()
+        }
+
+    private suspend fun observeToggle() =
+        withContext(mainDispatcher) {
+            // Dedupe over the nullable so `true -> null -> true` reads as two edges, not one.
+            store
+                .flow()
+                .map { it.pendingActivationRequest }
+                .distinctUntilChanged()
+                .filterNotNull()
+                .collect { activationState ->
+                    when (activationState) {
+                        is PendingActivationRequest.Activate -> {
+                            handler?.activate(
+                                countryCode = activationState.selectedLocationCode,
+                                onResult = { err -> handleActivationResult(activationState, err) },
+                            )
+                        }
+                        is PendingActivationRequest.Deactivate -> {
+                            handler?.deactivate { err -> handleActivationResult(activationState, err) }
+                        }
                     }
                 }
-                if (activate) {
-                    handler?.activate(
-                        countryCode = store.state.locationState.selectedLocation.countryCode,
-                        onResult = onResult,
-                    )
-                } else {
-                    handler?.deactivate(onResult)
+        }
+
+    // A pending request is normally cleared when the engine reports the new proxy state. Changing country while
+    // the VPN is on does not change that state, so no report arrives and nothing else would clear it.
+    private fun handleActivationResult(request: PendingActivationRequest, error: Throwable?) {
+        when (request) {
+            is PendingActivationRequest.Activate -> {
+                when {
+                    error == null ->
+                        store.dispatch(IPProtectionAction.ActivationAction.ActivationRequestCompleted(request))
+                    request.isLocationSwitch ->
+                        store.dispatch(IPProtectionAction.LocationAction.LocationSwitchFailed(error))
+                    else ->
+                        store.dispatch(
+                            IPProtectionAction.ActivationAction.ToggleFailed(ActivationOperation.Activate, error)
+                        )
                 }
             }
+            is PendingActivationRequest.Deactivate -> {
+                if (error != null) {
+                    store.dispatch(
+                        IPProtectionAction.ActivationAction.ToggleFailed(ActivationOperation.Deactivate, error)
+                    )
+                }
+            }
+        }
     }
 }

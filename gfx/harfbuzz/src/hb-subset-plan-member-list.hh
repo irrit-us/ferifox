@@ -61,10 +61,16 @@ HB_SUBSET_PLAN_MEMBER (hb_set_t, drop_tables)
 // Old -> New glyph id mapping
 HB_SUBSET_PLAN_MEMBER (hb_map_t, glyph_map_gsub)
 
+// Same mapping as glyph_map_gsub, as a flat array indexed by old gid,
+// with HB_MAP_VALUE_INVALID entries for glyphs not retained.  Sized to
+// the highest retained GSUB gid plus one.
+HB_SUBSET_PLAN_MEMBER (hb_vector_t<hb_codepoint_t>, glyph_map_gsub_flat)
+
 HB_SUBSET_PLAN_MEMBER (hb_set_t, _glyphset)
 HB_SUBSET_PLAN_MEMBER (hb_set_t, _glyphset_gsub)
 HB_SUBSET_PLAN_MEMBER (hb_set_t, _glyphset_mathed)
 HB_SUBSET_PLAN_MEMBER (hb_set_t, _glyphset_colred)
+HB_SUBSET_PLAN_MEMBER (hb_set_t, _glyphset_varced)
 HB_SUBSET_PLAN_MEMBER (hb_set_t, _glyphset_cmaped)
 
 //active lookups we'd like to retain
@@ -94,6 +100,10 @@ HB_SUBSET_PLAN_MEMBER (hb_hashmap_t E(<unsigned, hb::shared_ptr<hb_set_t>>), gpo
 //variations
 HB_SUBSET_PLAN_MEMBER (hb_hashmap_t E(<unsigned, const OT::Feature*>), gsub_feature_substitutes_map)
 HB_SUBSET_PLAN_MEMBER (hb_hashmap_t E(<unsigned, const OT::Feature*>), gpos_feature_substitutes_map)
+
+//feature index->resolved lookup set mapping for fully-instanced lookup variations
+HB_SUBSET_PLAN_MEMBER (hb_hashmap_t E(<unsigned, hb::shared_ptr<hb_set_t>>), gsub_lookup_variations)
+HB_SUBSET_PLAN_MEMBER (hb_hashmap_t E(<unsigned, hb::shared_ptr<hb_set_t>>), gpos_lookup_variations)
 
 // old feature_indexes set, used to reinstate the old features
 HB_SUBSET_PLAN_MEMBER (hb_set_t, gsub_old_features)

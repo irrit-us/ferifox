@@ -6,15 +6,25 @@
 #define mozilla_dom_serviceworkeroppromise_h_
 
 #include "mozilla/MozPromise.h"
+#include "mozilla/Result.h"
 #include "mozilla/dom/SafeRefPtr.h"
 #include "mozilla/dom/ServiceWorkerOpArgs.h"
+#include "nsCOMPtr.h"
+#include "nsIInputStream.h"
 
 namespace mozilla::dom {
 
 class InternalResponse;
 
-using SynthesizeResponseArgs = std::pair<SafeRefPtr<InternalResponse>,
-                                         ChildToParentSynthesizeResponseArgs>;
+// The body streams are extracted from the InternalResponse on the worker
+// thread before this struct crosses to the Worker Launcher thread for
+// serialization, instead of serializing lazily from the shared
+// InternalResponse there.
+struct SynthesizeResponseArgs {
+  ChildToParentSynthesizeResponseArgs mIPCArgs;
+  nsCOMPtr<nsIInputStream> mBody;
+  nsCOMPtr<nsIInputStream> mAlternativeBody;
+};
 
 using FetchEventRespondWithResult =
     Variant<SynthesizeResponseArgs, ResetInterceptionArgs,
@@ -36,6 +46,10 @@ using FetchEventPreloadResponseEndPromise =
 
 using ServiceWorkerOpPromise =
     MozPromise<ServiceWorkerOpResult, nsresult, true>;
+
+// Resolves once a push message's push event has settled, rejects with the
+// reason the event never reached the worker
+using PushHandledPromise = MozPromise<Ok, nsresult, /* IsExclusive = */ true>;
 
 using ServiceWorkerFetchEventOpPromise =
     MozPromise<ServiceWorkerFetchEventOpResult, nsresult, true>;

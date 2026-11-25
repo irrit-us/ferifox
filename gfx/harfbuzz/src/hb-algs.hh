@@ -227,10 +227,10 @@ struct HBInt<BE, Type, 4>
       __builtin_bswap32 ((uint32_t) *((const hb_packed_t<uint32_t> *) v))
     ;
 #else
-    return (BE ? (v[0] << 24) : (v[0]      ))
-	 + (BE ? (v[1] << 16) : (v[1] <<  8))
-	 + (BE ? (v[2] <<  8) : (v[2] << 16))
-	 + (BE ? (v[3]      ) : (v[3] << 24));
+    return (BE ? (uint32_t (v[0]) << 24) : (uint32_t (v[0])      ))
+	 + (BE ? (uint32_t (v[1]) << 16) : (uint32_t (v[1]) <<  8))
+	 + (BE ? (uint32_t (v[2]) <<  8) : (uint32_t (v[2]) << 16))
+	 + (BE ? (uint32_t (v[3])      ) : (uint32_t (v[3]) << 24));
 #endif
   }
   private: uint8_t v[4];
@@ -890,16 +890,92 @@ struct
 }
 HB_FUNCOBJ (hb_clamp);
 
+/* Signed saturating arithmetic. */
+template <typename T>
+static HB_ALWAYS_INLINE T
+hb_saturate_add (T a, T b)
+{
+  static_assert (std::is_integral<T>::value && std::is_signed<T>::value, "");
+
+#if hb_has_builtin(__builtin_add_overflow)
+  T result;
+  if (likely (!__builtin_add_overflow (a, b, &result)))
+    return result;
+#else
+  if (b > 0)
+  {
+    if (likely (a <= hb_int_max (T) - b))
+      return a + b;
+  }
+  else if (likely (a >= hb_int_min (T) - b))
+    return a + b;
+#endif
+
+  return a < 0 ? hb_int_min (T) : hb_int_max (T);
+}
+
+template <typename T>
+static HB_ALWAYS_INLINE T
+hb_saturate_sub (T a, T b)
+{
+  static_assert (std::is_integral<T>::value && std::is_signed<T>::value, "");
+
+#if hb_has_builtin(__builtin_sub_overflow)
+  T result;
+  if (likely (!__builtin_sub_overflow (a, b, &result)))
+    return result;
+#else
+  if (b > 0)
+  {
+    if (likely (a >= hb_int_min (T) + b))
+      return a - b;
+  }
+  else if (likely (a <= hb_int_max (T) + b))
+    return a - b;
+#endif
+
+  return b < 0 ? hb_int_max (T) : hb_int_min (T);
+}
+
+template <typename T>
+static HB_ALWAYS_INLINE T
+hb_saturate_neg (T a)
+{
+  static_assert (std::is_integral<T>::value && std::is_signed<T>::value, "");
+
+  return hb_saturate_sub ((T) 0, a);
+}
+
 /* Convert a floating-point value to integer type T, saturating to T's
  * range instead of relying on the undefined behavior of an out-of-range
  * float-to-int conversion.  NaN saturates to the minimum of T. */
 template <typename T>
-static inline T
+static HB_ALWAYS_INLINE T
 hb_clamp_to (double v)
 {
   return (T) hb_clamp (v,
 		       (double) hb_int_min (T),
 		       (double) hb_int_max (T));
+}
+
+template <typename T>
+static HB_ALWAYS_INLINE T
+hb_clamp_to (float v)
+{
+  /* Widen explicitly: float cannot represent all integer bounds exactly,
+   * so the clamp itself is done in double. */
+  return hb_clamp_to<T> ((double) v);
+}
+
+template <typename T>
+static HB_ALWAYS_INLINE T
+hb_clamp_to (int64_t v)
+{
+  static_assert (std::is_integral<T>::value && std::is_signed<T>::value, "");
+
+  return (T) hb_clamp (v,
+		       (int64_t) hb_int_min (T),
+		       (int64_t) hb_int_max (T));
 }
 
 /*

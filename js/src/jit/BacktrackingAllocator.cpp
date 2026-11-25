@@ -779,35 +779,31 @@ void SpillSet::setAllocation(LAllocation alloc) {
 //                                                                           //
 ///////////////////////////////////////////////////////////////////////////////
 
-static size_t SpillWeightFromUsePolicy(LUse::Policy policy) {
-  switch (policy) {
-    case LUse::ANY:
-      return 1000;
-
-    case LUse::REGISTER:
-    case LUse::FIXED:
-      return 2000;
-
-    default:
-      return 0;
-  }
-}
-
 inline void LiveRange::noteAddedUse(UsePosition* use) {
   LUse::Policy policy = use->usePolicy();
-  usesSpillWeight_ += SpillWeightFromUsePolicy(policy);
   if (policy == LUse::FIXED) {
     ++numFixedUses_;
+  } else if (policy == LUse::REGISTER) {
+    ++numRegisterUses_;
+  } else if (policy == LUse::ANY) {
+    ++numAnyUses_;
   }
 }
 
 inline void LiveRange::noteRemovedUse(UsePosition* use) {
   LUse::Policy policy = use->usePolicy();
-  usesSpillWeight_ -= SpillWeightFromUsePolicy(policy);
   if (policy == LUse::FIXED) {
+    MOZ_ASSERT(numFixedUses_ > 0);
     --numFixedUses_;
+  } else if (policy == LUse::REGISTER) {
+    MOZ_ASSERT(numRegisterUses_ > 0);
+    --numRegisterUses_;
+  } else if (policy == LUse::ANY) {
+    MOZ_ASSERT(numAnyUses_ > 0);
+    --numAnyUses_;
   }
-  MOZ_ASSERT_IF(!hasUses(), !usesSpillWeight_ && !numFixedUses_);
+  MOZ_ASSERT_IF(!hasUses(),
+                !numFixedUses_ && !numRegisterUses_ && !numAnyUses_);
 }
 
 void LiveRange::addUse(UsePosition* use) {
@@ -894,10 +890,12 @@ void LiveRange::moveAllUsesToTheEndOf(LiveRange* other) {
   other->uses_.extendBack(std::move(uses_));
   MOZ_ASSERT(!hasUses());
 
-  other->usesSpillWeight_ += usesSpillWeight_;
   other->numFixedUses_ += numFixedUses_;
-  usesSpillWeight_ = 0;
+  other->numRegisterUses_ += numRegisterUses_;
+  other->numAnyUses_ += numAnyUses_;
   numFixedUses_ = 0;
+  numRegisterUses_ = 0;
+  numAnyUses_ = 0;
 }
 
 bool LiveRange::contains(LiveRange* other) const {
@@ -1571,7 +1569,9 @@ size_t BacktrackingAllocator::computeSpillWeight(LiveBundle* bundle) {
       }
     }
 
-    usesTotal += range->usesSpillWeight();
+    usesTotal +=
+        size_t(2000) * (range->numFixedUses() + range->numRegisterUses()) +
+        size_t(1000) * range->numAnyUses();
     if (range->numFixedUses() > 0) {
       fixed = true;
     }
@@ -2133,12 +2133,15 @@ static bool CanMergeTypesInBundle(LDefinition::Type a, LDefinition::Type b) {
   return LStackSlot::width(a) == LStackSlot::width(b);
 }
 
-// Helper for ::tryMergeReusedRegister
-void BacktrackingAllocator::tryMergeBundles(LiveBundle* bundle0,
-                                            LiveBundle* bundle1) {
+// Try to merge bundle1 into bundle0. Returns whether the bundles were merged.
+// If |limitRangeComparisons| is false, the merge only fails if the bundles
+// have overlapping live ranges or can't share a spill location.
+bool BacktrackingAllocator::tryMergeBundles(LiveBundle* bundle0,
+                                            LiveBundle* bundle1,
+                                            bool limitRangeComparisons) {
   // See if bundle0 and bundle1 can be merged together.
   if (bundle0 == bundle1) {
-    return;
+    return true;
   }
 
   // Get a representative virtual register from each bundle.
@@ -2155,7 +2158,7 @@ void BacktrackingAllocator::tryMergeBundles(LiveBundle* bundle0,
     // constructor calling convention.
     if (IsThisSlotDefinition(reg0.def()) || IsThisSlotDefinition(reg1.def())) {
       if (*reg0.def()->output() != *reg1.def()->output()) {
-        return;
+        return false;
       }
     }
 
@@ -2181,7 +2184,7 @@ void BacktrackingAllocator::tryMergeBundles(LiveBundle* bundle0,
 #endif
       if (!canSpillToArgSlots) {
         if (*reg0.def()->output() != *reg1.def()->output()) {
-          return;
+          return false;
         }
       }
     }
@@ -2195,7 +2198,7 @@ void BacktrackingAllocator::tryMergeBundles(LiveBundle* bundle0,
   // policy LDefinition::STACK.  This aliasing between allocations makes it
   // unsound to merge anything with a LDefinition::STACK policy.
   if (HasStackPolicy(reg0.def()) || HasStackPolicy(reg1.def())) {
-    return;
+    return false;
   }
 
   // Limit the number of times we compare ranges if there are many ranges in
@@ -2207,8 +2210,8 @@ void BacktrackingAllocator::tryMergeBundles(LiveBundle* bundle0,
                             iter1 = bundle1->rangesBegin();
   size_t count = 0;
   while (iter0 && iter1) {
-    if (++count >= MAX_RANGES) {
-      return;
+    if (limitRangeComparisons && ++count >= MAX_RANGES) {
+      return false;
     }
 
     LiveRange* range0 = *iter0;
@@ -2219,7 +2222,7 @@ void BacktrackingAllocator::tryMergeBundles(LiveBundle* bundle0,
     } else if (range1->from() >= range0->to()) {
       iter0++;
     } else {
-      return;
+      return false;
     }
   }
 
@@ -2236,6 +2239,7 @@ void BacktrackingAllocator::tryMergeBundles(LiveBundle* bundle0,
       prevRange = range;
     }
   }
+  return true;
 }
 
 // Helper for ::mergeAndQueueRegisters
@@ -2424,6 +2428,14 @@ bool BacktrackingAllocator::mergeAndQueueRegisters() {
 
   // If there is an OSR block, merge parameters in that block with the
   // corresponding parameters in the initial block.
+  //
+  // This is required for correctness: when canSpillToArgSlots is true,
+  // tryMergeBundles can merge other (non-overlapping) bundles with an LArgument
+  // bundle, and this is only safe if that bundle contains both virtual
+  // registers for the argument slot.
+  //
+  // This merge can't fail because the parameters are live in disjoint sets of
+  // blocks and we disable the range-comparison limit used for optional merges.
   if (MBasicBlock* osr = graph.mir().osrBlock()) {
     size_t original = 1;
     for (LInstructionIterator iter = osr->lir()->begin();
@@ -2436,8 +2448,10 @@ bool BacktrackingAllocator::mergeAndQueueRegisters() {
             VirtualRegister& originalVreg = vregs[original];
             if (*originalVreg.def()->output() == *iter->getDef(i)->output()) {
               MOZ_ASSERT(originalVreg.ins()->isParameter());
-              tryMergeBundles(originalVreg.firstBundle(),
-                              paramVreg.firstBundle());
+              bool merged = tryMergeBundles(
+                  originalVreg.firstBundle(), paramVreg.firstBundle(),
+                  /* limitRangeComparisons = */ false);
+              MOZ_RELEASE_ASSERT(merged);
               found = true;
               break;
             }
@@ -3425,9 +3439,11 @@ bool BacktrackingAllocator::computeRequirement(LiveBundle* bundle,
     }
 
     // Search uses for requirements.
-    for (UsePositionIterator iter = range->usesBegin(); iter; iter++) {
-      LUse::Policy policy = iter->usePolicy();
-      if (policy == LUse::FIXED) {
+    if (range->numFixedUses() > 0) {
+      for (UsePositionIterator iter = range->usesBegin(); iter; iter++) {
+        if (iter->usePolicy() != LUse::FIXED) {
+          continue;
+        }
         AnyRegister required = GetFixedRegister(reg.def(), iter->use());
 
         JitSpewIfEnabled(JitSpew_RegAlloc, "  Requirement %s, due to use at %u",
@@ -3439,25 +3455,31 @@ bool BacktrackingAllocator::computeRequirement(LiveBundle* bundle,
         if (!requirement->merge(Requirement(LAllocation(required)))) {
           return false;
         }
-      } else if (policy == LUse::REGISTER) {
-        if (!requirement->merge(Requirement(Requirement::REGISTER))) {
-          return false;
-        }
-      } else if (policy == LUse::ANY) {
-        // ANY differs from KEEPALIVE by actively preferring a register.
-        if (!hint->merge(Requirement(Requirement::REGISTER))) {
-          return false;
-        }
       }
+    }
+    if (range->numRegisterUses() > 0) {
+      if (!requirement->merge(Requirement(Requirement::REGISTER))) {
+        return false;
+      }
+    }
+    if (range->numAnyUses() > 0) {
+      // ANY differs from KEEPALIVE by actively preferring a register.
+      if (!hint->merge(Requirement(Requirement::REGISTER))) {
+        return false;
+      }
+    }
 
-      // The only case of STACK use policies is individual stack results using
-      // their containing stack result area, which is given a fixed allocation
-      // above.
-      MOZ_ASSERT_IF(policy == LUse::STACK,
+#ifdef DEBUG
+    // The only case of STACK use policies is individual stack results using
+    // their containing stack result area, which is given a fixed allocation
+    // above.
+    for (UsePositionIterator iter = range->usesBegin(); iter; iter++) {
+      MOZ_ASSERT_IF(iter->usePolicy() == LUse::STACK,
                     requirement->kind() == Requirement::FIXED);
-      MOZ_ASSERT_IF(policy == LUse::STACK,
+      MOZ_ASSERT_IF(iter->usePolicy() == LUse::STACK,
                     requirement->allocation().isStackArea());
     }
+#endif
   }
 
   return true;

@@ -42,10 +42,9 @@ public class GeckoServiceChildProcess extends Service {
   private static ProcessState sState = ProcessState.NEW;
 
   @WrapForJNI(calledFrom = "gecko")
-  private static void getEditableParent(
-      final IGeckoEditableChild child, final long contentId, final long tabId) {
+  private static void getEditableParent(final IGeckoEditableChild child, final long tabId) {
     try {
-      sProcessManager.getEditableParent(child, contentId, tabId);
+      sProcessManager.getEditableParent(child, tabId);
     } catch (final RemoteException e) {
       Log.e(LOGTAG, "Cannot get editable", e);
     }
@@ -189,7 +188,7 @@ public class GeckoServiceChildProcess extends Service {
     return new ChildProcessBinder();
   }
 
-  private final Binder mBinder = createBinder();
+  private Binder mBinder;
 
   @Override
   public void onDestroy() {
@@ -203,6 +202,9 @@ public class GeckoServiceChildProcess extends Service {
     // Calling stopSelf ensures that whenever the client unbinds the process dies immediately.
     stopSelf();
     sState = ProcessState.BOUND;
+    if (mBinder == null) {
+      mBinder = createBinder();
+    }
     return mBinder;
   }
 

@@ -19,13 +19,6 @@ struct already_AddRefed;
 
 namespace mozilla {
 
-namespace net {
-
-class SocketProcessBridgeParent;
-class SocketProcessParent;
-
-}  // namespace net
-
 namespace dom {
 
 class BlobImpl;
@@ -47,8 +40,6 @@ class Endpoint;
 class BackgroundParent final {
   friend class mozilla::ipc::BackgroundStarterParent;
   friend class mozilla::dom::ContentParent;
-  friend class mozilla::net::SocketProcessBridgeParent;
-  friend class mozilla::net::SocketProcessParent;
 
   using ProcessId = base::ProcessId;
   using BlobImpl = mozilla::dom::BlobImpl;
@@ -87,7 +78,8 @@ class BackgroundParent final {
 
   static uint64_t GetChildID(PBackgroundParent* aBackgroundActor);
 
-  static nsCString GetRemoteType(PBackgroundParent* aBackgroundActor);
+  static mozilla::dom::RemoteType GetRemoteType(
+      PBackgroundParent* aBackgroundActor);
 
   // Whenever receiving a Principal we need to validate that Principal case
   // by case. The options can customize the behaviour of the checks.
@@ -106,10 +98,6 @@ class BackgroundParent final {
   // Only called by ContentParent for cross-process actors.
   static bool AllocStarter(ContentParent* aContent,
                            Endpoint<PBackgroundStarterParent>&& aEndpoint);
-
-  // Called by SocketProcessBridgeParent and SocketProcessParent for
-  // cross-process actors.
-  static bool AllocStarter(Endpoint<PBackgroundStarterParent>&& aEndpoint);
 };
 
 // Implemented in BackgroundImpl.cpp.

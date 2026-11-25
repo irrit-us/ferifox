@@ -79,6 +79,11 @@ class nsMenuItemX final : public nsChangeObserver,
   nsIContent* Content() { return mContent; }
   NSMenuItem* NativeNSMenuItem() { return mNativeMenuItem; }
 
+  // Mirrors a shortcut the user assigned to this item in System Settings into
+  // the XUL key element, or takes it back out. AppKit applies such shortcuts
+  // once the native item is in a menu, so this runs after insertion.
+  void CopyUserKeyEquivalentToKeyElement();
+
   void Dump(uint32_t aIndent) const;
 
  protected:
@@ -104,6 +109,9 @@ class nsMenuItemX final : public nsChangeObserver,
   nsMenuX* mMenuParent = nullptr;                // [weak]
   nsMenuGroupOwnerX* mMenuGroupOwner = nullptr;  // [weak]
   RefPtr<mozilla::dom::Element> mCommandElement;
+  // The <key> element mContent's key attribute resolves to, observed so that
+  // edits to it reach the native menu item.
+  RefPtr<mozilla::dom::Element> mKeyElement;
   RefPtr<mozilla::dom::Element> mImageElement;
   mozilla::UniquePtr<nsMenuItemIconX> mIcon;  // always non-null
   bool mIsChecked = false;

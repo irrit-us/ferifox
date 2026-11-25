@@ -5,7 +5,7 @@
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  BackupService: "resource:///modules/backup/BackupService.sys.mjs",
+  BackupService: "moz-src:///browser/components/backup/BackupService.sys.mjs",
   ERRORS: "chrome://browser/content/backup/backup-constants.mjs",
   E10SUtils: "resource://gre/modules/E10SUtils.sys.mjs",
 });
@@ -270,7 +270,7 @@ export class BackupUIParent extends JSWindowActorParent {
       });
     } else if (message.name == "ProbeDefaultBackupDir") {
       let readAccessGranted = await this.#bs.probeDefaultDirAccess(
-        message.data?.parentDirPath
+        this.#bs.state.embeddedComponentPersistentData?.path || undefined
       );
       return { readAccessGranted };
     } else if (message.name == "PrepareRestoreDialog") {

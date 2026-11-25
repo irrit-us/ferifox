@@ -47,7 +47,7 @@ ConnectionEntry::ConnectionEntry(nsHttpConnectionInfo* ci,
   mConnectionAttemptPool = new ConnectionAttemptPool(this);
 }
 
-bool ConnectionEntry::HasActiveH3Connection() const {
+bool ConnectionEntry::HasUsableH3Connection() const {
   for (const auto& conn : mActiveConns) {
     // An unusable h3 connection lingering in mActiveConns must not hold the
     // single-H3-per-entry slot: GetH2orH3ActiveConn won't dispatch onto it, so
@@ -61,7 +61,12 @@ bool ConnectionEntry::HasActiveH3Connection() const {
     }
   }
 
-  return mConnectionAttemptPool->UnconnectedUDPConnsLength() > 0;
+  return false;
+}
+
+bool ConnectionEntry::HasActiveH3Connection() const {
+  return HasUsableH3Connection() ||
+         mConnectionAttemptPool->UnconnectedUDPConnsLength() > 0;
 }
 
 bool ConnectionEntry::AvailableForDispatchNow() {
@@ -1017,7 +1022,7 @@ void ConnectionEntry::MaybeUpdateEchConfig(nsHttpConnectionInfo* aConnInfo) {
   LOG(("ConnectionEntry::MaybeUpdateEchConfig [ci=%s]\n",
        mConnInfo->HashKey().get()));
 
-  mConnInfo->SetEchConfig(echConfig);
+  mConnInfo = mConnInfo->Mutate().SetEchConfig(echConfig).Finalize();
 
   // If echConfig is changed, we should close all DnsAndConnectSockets and idle
   // connections. This is to make sure the new echConfig will be used for the

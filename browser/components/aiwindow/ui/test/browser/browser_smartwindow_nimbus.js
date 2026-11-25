@@ -6,12 +6,65 @@
 const { NimbusTestUtils } = ChromeUtils.importESModule(
   "resource://testing-common/NimbusTestUtils.sys.mjs"
 );
-
 const PREF_IS_DEFAULT_WINDOW = "browser.smartwindow.isDefaultWindow";
+const PREF_RESUME_ACTIVITY_ENABLED =
+  "browser.smartwindow.resumeActivity.enabled";
 const PREF_SMARTWINDOW_ENABLED = "browser.smartwindow.enabled";
+const PREF_AUTH_IMPL = "browser.smartwindow.auth.impl";
 const PREF_AGENT_ENABLED = "browser.smartwindow.agent.enabled";
 const PREF_AGENT_SUPPORTED_REGIONS =
   "browser.smartwindow.agent.supportedRegions";
+const PREF_AITAB_MENUS = "browser.smartwindow.aitab.menus";
+
+add_task(async function test_nimbus_enables_aitab_menus() {
+  await SpecialPowers.pushPrefEnv({
+    set: [[PREF_AITAB_MENUS, false]],
+  });
+
+  const cleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+    featureId: "smartWindow",
+    value: { aiTabMenus: true },
+  });
+
+  ok(
+    Services.prefs.getBoolPref(PREF_AITAB_MENUS),
+    "Enrollment enables the menus"
+  );
+
+  await cleanup();
+
+  ok(
+    !Services.prefs.getBoolPref(PREF_AITAB_MENUS),
+    "Unenrollment restores disabled menus"
+  );
+
+  await SpecialPowers.popPrefEnv();
+});
+
+add_task(async function test_nimbus_disables_aitab_menus() {
+  await SpecialPowers.pushPrefEnv({
+    set: [[PREF_AITAB_MENUS, true]],
+  });
+
+  const cleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+    featureId: "smartWindow",
+    value: { aiTabMenus: false },
+  });
+
+  ok(
+    !Services.prefs.getBoolPref(PREF_AITAB_MENUS),
+    "Enrollment disables the menus"
+  );
+
+  await cleanup();
+
+  ok(
+    Services.prefs.getBoolPref(PREF_AITAB_MENUS),
+    "Unenrollment restores enabled menus"
+  );
+
+  await SpecialPowers.popPrefEnv();
+});
 
 /**
  * Enrolling in the smartWindow feature with isDefault=true sets the
@@ -181,4 +234,85 @@ add_task(async function test_nimbus_agent_watch_sets_and_restores_prefs() {
     "US,CA",
     "agent.supportedRegions is restored to its default after unenrollment"
   );
+});
+
+/**
+ * smartWindow's resumeActivity variable reads through to its fallbackPref, and
+ * an enrollment overrides it in memory without writing the pref, so resume
+ * activity can be turned off remotely. A smartWindow recipe that leaves the
+ * variable unset still lets the pref decide, but because the variable lives on
+ * the smartWindow feature it cannot carry a recipe of its own alongside a live
+ * Smart Window rollout.
+ */
+add_task(async function test_nimbus_resume_activity_overrides_fallback_pref() {
+  is(
+    NimbusFeatures.smartWindow.getVariable("resumeActivity"),
+    true,
+    "resumeActivity falls back to the pref default before enrollment"
+  );
+
+  const cleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+    featureId: "smartWindow",
+    value: { resumeActivity: false },
+  });
+
+  is(
+    NimbusFeatures.smartWindow.getVariable("resumeActivity"),
+    false,
+    "resumeActivity reflects the enrolled value"
+  );
+  ok(
+    !Services.prefs.prefHasUserValue(PREF_RESUME_ACTIVITY_ENABLED),
+    "A fallbackPref variable does not write the pref"
+  );
+
+  await cleanup();
+
+  is(
+    NimbusFeatures.smartWindow.getVariable("resumeActivity"),
+    true,
+    "resumeActivity falls back to the pref again after unenrollment"
+  );
+});
+
+/**
+ * Enrolling in the smartWindow feature with authImpl writes it to the auth
+ * impl pref via AIWindow.onNimbusUpdate, and unenrolling leaves the pref.
+ */
+add_task(async function test_nimbus_authImpl_sets_pref() {
+  ok(
+    !Services.prefs.prefHasUserValue(PREF_AUTH_IMPL),
+    "No user value for the auth impl before enrollment"
+  );
+  is(
+    await AuthProvider.getProviderName(),
+    "fxa",
+    "FxA is used before enrollment"
+  );
+  Services.fog.testResetFOG();
+
+  const cleanup = await NimbusTestUtils.enrollWithFeatureConfig({
+    featureId: "smartWindow",
+    value: { authImpl: "" },
+  });
+  is(
+    Services.prefs.getStringPref(PREF_AUTH_IMPL),
+    "",
+    "The auth impl pref is set from the enrollment"
+  );
+  const events = Glean.smartWindow.authImplSwitched.testGetValue();
+  is(events?.length, 1, "One auth_impl_switched was recorded");
+  Assert.deepEqual(
+    events[0].extra,
+    { from: "fxa", to: "guest", reason: "nimbus" },
+    "The enrollment switch is attributed to Nimbus"
+  );
+
+  await cleanup();
+  is(
+    Services.prefs.getStringPref(PREF_AUTH_IMPL),
+    "",
+    "Unenrolling leaves the auth impl pref"
+  );
+  Services.prefs.clearUserPref(PREF_AUTH_IMPL);
 });

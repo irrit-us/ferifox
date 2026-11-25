@@ -55,6 +55,11 @@ perf:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1923894
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1954216
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1949038
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2063750
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2064052
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2064064
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2064072
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2085940
     data_reviews:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1759744#c5
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1799727#c4
@@ -68,7 +73,8 @@ perf:
     extra_keys:
       load_time:
         description: |
-          Time between loadEventStart and navigationStart, in ms.
+          Time between loadEventStart and navigationStart, in ms. Absent when
+          the document was replaced before its load event fired.
         type: quantity
         unit: ms
       dns_lookup_time:
@@ -79,6 +85,14 @@ perf:
       time_to_request_start:
         description: |
           Time between requestStart and navigationStart, in ms.
+        type: quantity
+        unit: ms
+      time_to_connect_start:
+        description: |
+          Time between connectStart and navigationStart, in ms. Absent when
+          the document was loaded on an existing connection, and zero when
+          the connection attempt started before navigationStart (e.g. a
+          speculative connection).
         type: quantity
         unit: ms
       response_time:
@@ -93,7 +107,11 @@ perf:
         unit: ms
       lcp_time:
         description: |
-          Time between largestContentfulPaint and navigationStart, at the point of onLoad firing, in ms. This may differ from the final LCP value as reported through the LCP histogram.
+          Time between largestContentfulPaint and navigationStart, in ms.
+          Recorded when the document is hidden, at which point the largest
+          contentful paint is final, so it matches the value reported through
+          the LCP histogram. Absent when the document was replaced before its
+          load event fired.
         type: quantity
         unit: ms
       js_exec_time:
@@ -129,6 +147,14 @@ perf:
         description: |
           If true, a normal navigation was performed on the same origin.
         type: boolean
+      loaded_in_foreground:
+        description: |
+          Whether the tab was in the foreground when the load event started. A
+          background tab throttles the load and holds back its paints, inflating
+          the timings, so such a load is left out of the performance.pageload
+          histograms. Absent when the document was replaced before its load
+          event fired.
+        type: boolean
       using_webdriver:
         description: |
           If true, a webdriver is running on the client.
@@ -146,6 +172,11 @@ perf:
         description: >
           Bitfield of web features in use within this document:
             1 - fetchpriority applied to images
+            2 - navigation was served the response body of a Speculation Rules
+                navigational prefetch
+            4 - a Speculation Rules prefetch candidate covered this navigation,
+                whether or not it was fetched; set in both branches of the
+                prefetch experiment
         type: quantity
         unit: integer
       user_features:
@@ -258,6 +289,14 @@ perf:
           events of at least 40 ms, in ms.
         type: quantity
         unit: ms
+      is_active_client:
+        description: |
+          Whether this profile looks like it belongs to a real person rather
+          than to automation: its browsing history reaches back at least three
+          days and holds at least five distinct pages. False in every other
+          scenario, including when history is disabled or unavailable. Not
+          reported on GeckoView, where history lives in the embedding app.
+        type: boolean
     send_in_pings:
       - pageload
   page_load_domain:
@@ -267,6 +306,10 @@ perf:
         Includes ETLD+1 information and sent with ohttp.
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1967780
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2063750
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2064052
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2064064
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2064072
     data_reviews:
       - https://phabricator.services.mozilla.com/D250521
     notification_emails:
@@ -276,7 +319,10 @@ perf:
     extra_keys:
       lcp_time:
         description: |
-          Time between largestContentfulPaint and navigationStart, at the point of onLoad firing, in ms. This may differ from the final LCP value as reported through the LCP histogram.
+          Time between largestContentfulPaint and navigationStart, in ms.
+          Recorded when the document is hidden, at which point the largest
+          contentful paint is final. Absent when the document was replaced
+          before its load event fired.
         type: quantity
         unit: ms
       load_type:
@@ -286,6 +332,14 @@ perf:
       same_origin_nav:
         description: |
           If true, a normal navigation was performed on the same origin.
+        type: boolean
+      loaded_in_foreground:
+        description: |
+          Whether the tab was in the foreground when the load event started. A
+          background tab throttles the load and holds back its paints, inflating
+          the timings, so such a load is left out of the performance.pageload
+          histograms. Absent when the document was replaced before its load
+          event fired.
         type: boolean
       http_ver:
         description: |
@@ -326,6 +380,14 @@ perf:
           with a large enough user base to avoid fingerprinting risk:
           US, DE, FR, GB, CA, PL, JP, IN, BR, ID, MX, IT, ES, NL.
         type: string
+      is_active_client:
+        description: |
+          Whether this profile looks like it belongs to a legitimate user: its
+          browsing history reaches back at least three days and holds at least
+          five distinct pages. False in every other scenario, including when
+          history is disabled or unavailable. Not reported on GeckoView, where
+          history lives in the embedding app.
+        type: boolean
     send_in_pings:
       - pageload-base-domain
 
@@ -674,25 +736,6 @@ security:
           If the principal is a ContentPrincipal, we also collect the scheme
         type: string
 
-  shadowed_html_document_property_access:
-    type: event
-    description: >
-      When accessing a property on the HTMLDocument like (document.currentScript),
-      if that property was shadowed/"clobbered" (e.g. using <img name=currentScript>), the
-      name of the shadowed built-in property is collected.
-    bugs:
-      - https://bugzil.la/1955578
-    data_reviews:
-      - https://bugzil.la/1955578
-    notification_emails:
-      - tschuster@mozilla.com
-    expires: 160
-    extra_keys:
-      name:
-        description: >
-          Name of the shadowed HTML property that was accessed.
-        type: string
-
 dom.contentprocess:
   build_id_mismatch:
     type: counter
@@ -747,8 +790,6 @@ dom.contentprocess:
       The number of times a content process has had its OS priority
       lowered due to only containing background tabs without audible media
       playing.
-      This metric was generated to correspond to the Legacy Telemetry
-      scalar dom.contentprocess.os_priority_lowered.
     bugs:
       - https://bugzil.la/1538987
     data_reviews:
@@ -757,7 +798,6 @@ dom.contentprocess:
       - mconley@mozilla.com
       - gsvelto@mozilla.com
     expires: never
-    telemetry_mirror: DOM_CONTENTPROCESS_OS_PRIORITY_LOWERED
 
   os_priority_raised:
     type: counter
@@ -765,8 +805,6 @@ dom.contentprocess:
       The number of times a content process has had its OS priority raised
       due to containing at least one foregrounded tab, or a tab with
       audible media has started playing in it.
-      This metric was generated to correspond to the Legacy Telemetry
-      scalar dom.contentprocess.os_priority_raised.
     bugs:
       - https://bugzil.la/1538987
     data_reviews:
@@ -775,15 +813,12 @@ dom.contentprocess:
       - mconley@mozilla.com
       - gsvelto@mozilla.com
     expires: never
-    telemetry_mirror: DOM_CONTENTPROCESS_OS_PRIORITY_RAISED
 
   os_priority_change_considered:
     type: counter
     description: >
       The number of times we've had the opportunity to change content
       process priority due to a tab switch or a tab being opened.
-      This metric was generated to correspond to the Legacy Telemetry
-      scalar dom.contentprocess.os_priority_change_considered.
     bugs:
       - https://bugzil.la/1538987
     data_reviews:
@@ -792,7 +827,6 @@ dom.contentprocess:
       - mconley@mozilla.com
       - gsvelto@mozilla.com
     expires: never
-    telemetry_mirror: DOM_CONTENTPROCESS_OS_PRIORITY_CHANGE_CONSIDERED
 
   launch_mainthread:
     type: timing_distribution
@@ -811,7 +845,6 @@ dom.contentprocess:
       - jimm@mozilla.com
       - mconley@mozilla.com
     expires: never
-    telemetry_mirror: CONTENT_PROCESS_LAUNCH_MAINTHREAD_MS
 
   launch_total:
     type: timing_distribution
@@ -831,7 +864,6 @@ dom.contentprocess:
       - jimm@mozilla.com
       - mconley@mozilla.com
     expires: never
-    telemetry_mirror: CONTENT_PROCESS_LAUNCH_TOTAL_MS
 
   sync_launch:
     type: timing_distribution
@@ -851,7 +883,6 @@ dom.contentprocess:
       - jimm@mozilla.com
       - mconley@mozilla.com
     expires: never
-    telemetry_mirror: CONTENT_PROCESS_SYNC_LAUNCH_MS
 
   launch_is_sync:
     type: labeled_counter
@@ -873,15 +904,12 @@ dom.contentprocess:
       - jimm@mozilla.com
       - mconley@mozilla.com
     expires: never
-    telemetry_mirror: h#CONTENT_PROCESS_LAUNCH_IS_SYNC
 
 dom.parentprocess:
   private_window_used:
     type: boolean
     description: >
       Whether a private browsing window has been used in the session.
-      This metric was generated to correspond to the Legacy Telemetry
-      scalar dom.parentprocess.private_window_used.
     bugs:
       - https://bugzil.la/1491047
     data_reviews:
@@ -890,7 +918,6 @@ dom.parentprocess:
       - seceng-telemetry@mozilla.com
       - ehsan+telemetry@mozilla.com
     expires: never
-    telemetry_mirror: DOM_PARENTPROCESS_PRIVATE_WINDOW_USED
 
   process_launch_errors:
     type: labeled_counter
@@ -942,9 +969,6 @@ dom:
     type: custom_distribution
     description: >
       Percent of the cycle collector's forget skippable done during idle time
-
-      This metric was generated to correspond to the Legacy Telemetry linear
-      histogram FORGET_SKIPPABLE_DURING_IDLE.
     range_min: 1
     range_max: 100
     bucket_count: 50
@@ -957,15 +981,11 @@ dom:
     notification_emails:
       - dev-telemetry-gc-alerts@mozilla.org
     expires: never
-    telemetry_mirror: FORGET_SKIPPABLE_DURING_IDLE
 
   forget_skippable_frequency:
     type: custom_distribution
     description: >
       Number of forget skippables occurred during a minute
-
-      This metric was generated to correspond to the Legacy Telemetry linear
-      histogram FORGET_SKIPPABLE_FREQUENCY.
     range_min: 1
     range_max: 500
     bucket_count: 100
@@ -979,15 +999,11 @@ dom:
       - smaug@mozilla.com
       - dev-telemetry-gc-alerts@mozilla.org
     expires: never
-    telemetry_mirror: FORGET_SKIPPABLE_FREQUENCY
 
   fullscreen_transition_black:
     type: timing_distribution
     description: >
       The time spent in the fully-black screen in fullscreen transition
-
-      This metric was generated to correspond to the Legacy Telemetry
-      exponential histogram FULLSCREEN_TRANSITION_BLACK_MS.
     time_unit: millisecond
     bugs:
       - https://bugzilla.mozilla.org/show_bug.cgi?id=1271160
@@ -996,7 +1012,6 @@ dom:
     notification_emails:
       - mozilla-telemetry@upsuper.org
     expires: never
-    telemetry_mirror: FULLSCREEN_TRANSITION_BLACK_MS
 
   gc_in_progress:
     type: labeled_timing_distribution
@@ -1059,9 +1074,6 @@ dom:
     type: labeled_counter
     description: >
       Storage Access API UI events.
-
-      This metric was generated to correspond to the Legacy Telemetry
-      categorical histogram STORAGE_ACCESS_API_UI.
     labels:
       - Request
       - AllowAutomatically
@@ -1086,7 +1098,41 @@ dom:
       - emz@mozilla.com
       - tihuang@mozilla.com
     expires: never
-    telemetry_mirror: h#STORAGE_ACCESS_API_UI
+
+  register_protocol_handler_calls:
+    type: dual_labeled_counter
+    description: >
+      Counts navigator.registerProtocolHandler calls that passed the scheme and
+      URL checks, by the frame they came from and whether it had transient user
+      activation. The site permission gating the prompt is keyed on the
+      top-level origin. Used to judge the web compatibility impact of no longer
+      prompting for calls from cross-origin iframes, or without user
+      activation.
+    dual_labels:
+      key:
+        description: >
+          Whether the call came from the top-level document, an iframe whose
+          ancestors are all same-origin with the top-level document, or any
+          other iframe.
+        labels:
+          - top_level
+          - same_origin_iframe
+          - cross_origin_iframe
+      category:
+        description: >
+          Whether the calling document had transient user activation.
+        labels:
+          - activated
+          - not_activated
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=668577
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=668577
+    data_sensitivity:
+      - interaction
+    notification_emails:
+      - emz@mozilla.com
+    expires: 165
 
   slow_script_notice_count:
     type: counter
@@ -1180,9 +1226,6 @@ dom:
     type: labeled_counter
     description: >
       Webkit/Blink filesystem used
-
-      This metric was generated to correspond to the Legacy Telemetry boolean
-      histogram BLINK_FILESYSTEM_USED.
     labels:
       - "false"
       - "true"
@@ -1193,15 +1236,11 @@ dom:
     notification_emails:
       - amarchesini@mozilla.com
     expires: never
-    telemetry_mirror: h#BLINK_FILESYSTEM_USED
 
   webkit_directory_used:
     type: labeled_counter
     description: >
       HTMLInputElement.webkitdirectory attribute used
-
-      This metric was generated to correspond to the Legacy Telemetry boolean
-      histogram WEBKIT_DIRECTORY_USED.
     labels:
       - "false"
       - "true"
@@ -1212,4 +1251,43 @@ dom:
     notification_emails:
       - amarchesini@mozilla.com
     expires: never
-    telemetry_mirror: h#WEBKIT_DIRECTORY_USED
+
+speculation_rules:
+  prefetch_transfer_size:
+    type: labeled_memory_distribution
+    memory_unit: byte
+    labels:
+      - used
+      - unused
+      - incomplete
+    description: >
+      Bytes a Speculation Rules prefetch read from the network, summed over its
+      redirect chain. Recorded once per prefetch record when the record is
+      discarded, which is the first point that knows whether a navigation ever
+      came for it, so each label's sample count is also the number of records
+      that ended with that outcome.
+
+      used: a navigation activated the record.
+      unused: the prefetch completed, but no navigation activated it. Includes
+      a record that a later prefetch of the same URL superseded.
+      incomplete: the fetch started but never completed, because the document
+      cancelled it, it exceeded the body cap, or it failed.
+
+      The value is nsIHttpChannel.transferSize: response header fields plus the
+      encoded response body. It excludes the request, and it is zero when the
+      prefetch was itself served from the HTTP cache. A navigation that reuses a
+      prefetched cache entry transfers nothing of its own, so prefetched bytes
+      are counted here and only here.
+
+      A candidate rejected before its request was sent, a cross-origin one for
+      instance, cost no data and is not recorded at all. A prefetch still in
+      flight when its record is discarded records zero bytes, so the incomplete
+      label's sum is a lower bound while its count is exact.
+    bugs:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2072656
+    data_reviews:
+      - https://bugzilla.mozilla.org/show_bug.cgi?id=2072656
+    notification_emails:
+      - sning@mozilla.com
+      - acreskey@mozilla.com
+    expires: never

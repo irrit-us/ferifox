@@ -1,3 +1,5 @@
+(working-on-firefox)=
+
 # Working on Firefox
 
 Welcome to the Firefox codebase. This is the home of the Firefox
@@ -9,6 +11,7 @@ development process and source code documentation.
 
 contribution_quickref
 stack_quickref
+reviewable-patch-series
 phabricator_vs_github
 pocket-guide-shipping-firefox
 editor

@@ -73,7 +73,7 @@
 
 #search-container {
   position: sticky;
-  top: 0;
+  inset-block-start: 0;
   /* Bug 2026689 Negative margin is used here to hide the borders of setting-controls on scroll
      as well as the shadow to the left of the searchbar */
   margin-inline-start: -4px;
@@ -83,20 +83,19 @@
      up after searching. */
   z-index: 2;
   background-color: var(--background-color-canvas);
-  padding-top: var(--page-space-block-start);
-  padding-bottom: var(--search-container-padding);
+  padding-block: var(--page-space-block-start) var(--search-container-padding);
   padding-inline: var(--focus-outline-offset);
   /* Ensure focus indicators on elements below the search container
      aren't obscured. */
-  margin-bottom: var(--search-container-margin);
+  margin-block-end: var(--search-container-margin);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-small);
 }
 
 #searchInput {
   width: 100%;
-}
-
-#policies-container-content:not([hidden]) + #searchInput {
-  margin-block-start: var(--space-small);
 }
 
 .main-content {
@@ -104,7 +103,7 @@
   --search-container-margin: calc(var(--focus-outline-width) + var(--focus-outline-offset));
 
   contain: inline-size;
-  padding-top: 0;
+  padding-block-start: 0;
   scroll-padding-top: calc(calc(2 * var(--page-space-block-start)) + var(--search-container-padding) + var(--search-container-margin));
 
   @media (max-width: 950px) {
@@ -151,7 +150,7 @@ description.indent,
   color: var(--text-color-deemphasized);
 
   /* Ensures margin on checkboxes, radios, and description don't create a big gap between the input and indented description */
-  margin-top: calc(var(--space-xsmall) * -1);
+  margin-block-start: calc(var(--space-xsmall) * -1);
 }
 
 button,
@@ -182,6 +181,10 @@ label {
     margin-block: var(--space-xxsmall);
     margin-inline: var(--space-small) 0;
   }
+}
+
+#urlLabel {
+  margin-block-end: var(--space-small);
 }
 
 .description-deemphasized {
@@ -283,8 +286,8 @@ radio {
 
   /* The first subcategory title for each category should not have margin-top. */
   .subcategory:not([hidden]) ~ .subcategory {
-    padding-top: var(--space-xxlarge);
-    border-top: 1px solid var(--border-color);
+    padding-block-start: var(--space-xxlarge);
+    border-block-start: 1px solid var(--border-color);
   }
 }
 
@@ -443,74 +446,6 @@ richlistitem[selected] .actionsMenu:focus-visible {
   outline-offset: -3px;
 }
 
-/* Home Pane */
-
-#homepageGroup menulist,
-#homepageGroup html|input {
-  margin: var(--space-xsmall) 0;
-}
-
-#homepageGroup html|input {
-  text-align: match-parent;
-}
-
-#homepageGroup:-moz-locale-dir(rtl) html|input {
-  unicode-bidi: plaintext;
-}
-
-#homepageAndNewWindowsOption {
-  margin-top: 20px;
-}
-
-#homepageGroup:-moz-locale-dir(rtl) panel[type="autocomplete-richlistbox"] {
-  direction: rtl;
-}
-
-.homepage-buttons > .homepage-button {
-  flex: 1 auto;
-}
-
-.homepage-button:first-of-type {
-  margin-inline-start: 0;
-}
-
-.homepage-button:last-of-type {
-  margin-inline-end: 0;
-}
-
-#homeContentsGroup .checkbox-icon[src] {
-  -moz-context-properties: fill;
-  fill: currentColor;
-  margin-inline-end: var(--checkbox-margin-inline);
-  width: 16px;
-}
-
-#homeContentsGroup > [data-subcategory] {
-  margin-top: 14px;
-}
-
-#homeContentsGroup > [data-subcategory] .section-checkbox {
-  font-weight: var(--font-weight-semibold);
-}
-
-#homeContentsGroup > [data-subcategory] > vbox menulist {
-  margin-block: 0;
-}
-
-/* Align fix for prefs that have a text link in the headline */
-#homeContentsGroup > [data-subcategory] > hbox {
-  align-items: last baseline;
-}
-
-#homeContentsGroup .checkbox-label {
-  margin-inline-end: var(--space-small);
-}
-
-a[is="moz-support-link"] {
-  display: inline-block;
-  white-space: initial;
-}
-
 /* Search Pane */
 
 #engineList > treechildren::-moz-tree-image(engineShown, checked),
@@ -555,7 +490,7 @@ a[is="moz-support-link"] {
 }
 
 #historyPane {
-  margin-top: 4px;
+  margin-block-start: 4px;
 }
 
 #historyButtons {
@@ -566,7 +501,7 @@ a[is="moz-support-link"] {
 
 #blockCookies,
 #keepRow {
-  margin-top: 1.5em;
+  margin-block-start: 1.5em;
 }
 
 /* Collapse the non-active vboxes in decks to use only the height the
@@ -584,7 +519,7 @@ a[is="moz-support-link"] {
 }
 
 .text-link {
-  margin-bottom: 0;
+  margin-block-end: 0;
 }
 
 .text-link[disabled] {
@@ -610,7 +545,7 @@ html|label[disabled] {
 }
 
 html|dialog {
-  padding: var(--space-xlarge);
+  padding: var(--dialog-padding);
 }
 
 html|dialog::backdrop,
@@ -620,13 +555,15 @@ html|dialog::backdrop,
 
 html|dialog,
 .dialogBox {
-  border: 1px solid transparent;
-  border-radius: var(--border-radius-medium);
-  box-shadow: var(--popup-box-shadow);
+  border: var(--border-width) solid var(--dialog-border-color);
+  border-radius: var(--dialog-border-radius);
+  box-shadow: var(--dialog-box-shadow);
+  background-color: var(--dialog-background-color);
 }
 
 .dialogBox {
-  background-color: var(--background-color-box);
+  --dialog-resizer-inset: calc(0.3 * var(--dialog-border-radius));
+
   background-clip: content-box;
   color: var(--text-color);
   /* `transparent` will use the dialogText color in high-contrast themes and
@@ -635,15 +572,8 @@ html|dialog,
   margin: 0;
   padding: 0;
   overflow-x: auto;
-}
-
-@media (prefers-color-scheme: dark) {
-  @media not (forced-colors) {
-    html|dialog,
-    .dialogBox {
-      --background-color-canvas: #42414d;
-    }
-  }
+  -moz-scrollbar-inset-inline: 0 var(--dialog-resizer-inset);
+  -moz-scrollbar-inset-block: 0 var(--dialog-resizer-inset);
 }
 
 .dialogBox[resizable="true"] {
@@ -653,9 +583,18 @@ html|dialog,
   min-width: 66ch;
 }
 
+.dialogBox.vpnSiteRuleDialogBox {
+  min-width: 24em;
+
+  .dialogFrame {
+    width: 24em;
+    min-width: 24em;
+  }
+}
+
 .dialogTitleBar {
   padding: 0.4em 0.2em;
-  border-bottom: 1px solid var(--border-color);
+  border-block-end: 1px solid var(--border-color);
 }
 
 .dialogTitle {
@@ -747,11 +686,11 @@ html|dialog,
 }
 
 #fxaAccountDisabled {
-  margin-bottom: calc(-1 * var(--space-large));
+  margin-block-end: calc(-1 * var(--space-large));
 }
 
 #noFxaAccount > label:first-child {
-  margin-bottom: 0.6em;
+  margin-block-end: 0.6em;
 }
 
 #noFxaCaption {
@@ -791,11 +730,11 @@ button#noFxaSignIn {
 }
 
 .separator {
-  border-bottom: 1px solid var(--border-color);
+  border-block-end: 1px solid var(--border-color);
 }
 
 #fxaGroup {
-  margin-bottom: 32px;
+  margin-block-end: 32px;
 }
 
 .openLink {
@@ -824,7 +763,7 @@ button#noFxaSignIn {
 }
 
 #syncStatusContainer {
-  margin-top: 32px;
+  margin-block-start: 32px;
 }
 
 #syncChangeOptions {
@@ -847,13 +786,13 @@ button#noFxaSignIn {
 
 .sync-engines-list > div,
 .sync-engines-list + hbox {
-  margin-top: 0;
-  padding-top: var(--space-large);
+  margin-block-start: 0;
+  padding-block-start: var(--space-large);
 }
 
 dialog > .sync-engines-list > div,
 dialog > .sync-engines-list + hbox {
-  padding-top: 0;
+  padding-block-start: 0;
 }
 
 .sync-engines-list checkbox .checkbox-icon,
@@ -928,8 +867,8 @@ dialog > .sync-engines-list + hbox {
 }
 
 .fxaMobilePromo {
-  margin-top: 2px !important;
-  margin-bottom: var(--space-xxlarge);
+  margin-block-start: 2px !important;
+  margin-block-end: var(--space-xxlarge);
 }
 
 .androidIcon,
@@ -961,12 +900,12 @@ dialog > .sync-engines-list + hbox {
   height: 16px;
   margin-inline-end: 6px;
   align-self: start;
-  margin-top: 0.4em;
+  margin-block-start: 0.4em;
   flex-shrink: 0;
 }
 
 .info-box-container.smaller-font-size .info-icon {
-  margin-top: 0.3em;
+  margin-block-start: 0.3em;
 }
 
 #search-results-back-button {
@@ -981,7 +920,7 @@ dialog > .sync-engines-list + hbox {
 
 #search-tooltip-container {
   position: relative;
-  top: 0;
+  inset-block-start: 0;
 }
 
 .search-tooltip {
@@ -992,7 +931,7 @@ dialog > .sync-engines-list + hbox {
   background-color: #ffe900;
   color: #000;
   border: 1px solid #d7b600;
-  margin-top: -18px;
+  margin-block-start: -18px;
   opacity: 0.85;
   z-index: 1;
 }
@@ -1005,8 +944,8 @@ dialog > .sync-engines-list + hbox {
   position: absolute;
   content: "";
   border: 7px solid transparent;
-  border-top-color: #d7b600;
-  top: 100%;
+  border-block-start-color: #d7b600;
+  inset-block-start: 100%;
   inset-inline-start: calc(50% - 7px);
   forced-color-adjust: none;
 }
@@ -1015,19 +954,19 @@ dialog > .sync-engines-list + hbox {
   position: absolute;
   content: "";
   border: 6px solid transparent;
-  border-top-color: #ffe900;
-  top: 100%;
+  border-block-start-color: #ffe900;
+  inset-block-start: 100%;
   inset-inline-start: calc(50% - 6px);
   forced-color-adjust: none;
 }
 
 @media (forced-colors: active) {
   .search-tooltip::before {
-    border-top-color: CanvasText;
+    border-block-start-color: CanvasText;
   }
 
   .search-tooltip::after {
-    border-top-color: Canvas;
+    border-block-start-color: Canvas;
   }
 }
 
@@ -1106,12 +1045,8 @@ menulist[indicator="true"] > menupopup menuitem[indicator="true"]:not([image]) >
   padding-inline-start: 13px;
 }
 
-#warning-message > .message-bar-description {
-  width: 32em;
-}
-
 #warning-message {
-  margin-top: 8px;
+  margin-block-start: 8px;
 }
 
 .action-button {
@@ -1157,7 +1092,7 @@ richlistitem .text-link:hover {
 }
 
 #pane-experimental-featureGates > .featureGate:not(.visually-hidden) ~ .featureGate:not(.visually-hidden) {
-  margin-top: var(--space-xlarge);
+  margin-block-start: var(--space-xlarge);
 }
 
 #pane-experimental-featureGates moz-fieldset::part(label) {
@@ -1165,7 +1100,7 @@ richlistitem .text-link:hover {
 }
 
 #experimentalCategory-reset {
-  margin-top: var(--space-small);
+  margin-block-start: var(--space-small);
 }
 
 .featureGateDescription {
@@ -1204,7 +1139,7 @@ richlistitem .text-link:hover {
 }
 
 #moreFromMozillaCategory .mozilla-product-item {
-  margin-top: 30px;
+  margin-block-start: 30px;
 }
 
 #moreFromMozillaCategory .product-title {
@@ -1252,10 +1187,6 @@ richlistitem .text-link:hover {
 
   #firefox-relay {
     background-image: url("chrome://browser/skin/preferences/relay-logo.svg");
-  }
-
-  #solo-ai {
-    background-image: url("chrome://browser/skin/preferences/solo-ai-logo.svg");
   }
 
   #mdn {
@@ -1386,7 +1317,7 @@ richlistitem .text-link:hover {
     height: var(--icon-size);
     width: var(--icon-size);
     inset-inline-end: var(--space-large);
-    top: 50%;
+    inset-block-start: 50%;
     transform: translateY(-50%);
   }
 }
@@ -1422,6 +1353,9 @@ setting-group[groupid="aiFeatures"] {
 }
 
 #blockAiGroup {
+  /* aiBlockedMessage overlaps our border on purpose to avoid a corner seam; clip it so it doesn't paint over the border. */
+  overflow: hidden;
+
   @media not (prefers-contrast) {
     --block-ai-background-color: light-dark(color-mix(in srgb, currentColor 3%, transparent), color-mix(in srgb, currentColor 5%, transparent));
     background-color: var(--block-ai-background-color);
@@ -1429,11 +1363,12 @@ setting-group[groupid="aiFeatures"] {
 }
 
 #aiBlockedMessage {
-  margin: calc(-1 * var(--space-large));
-  margin-top: var(--space-medium);
-  --message-bar-border-radius: 0 0 var(--box-border-radius) var(--box-border-radius);
-  border-bottom-color: transparent;
-  border-inline-color: transparent;
+  /* Overshoot the border by a hair, at odd zoom levels an exact match can round short and leave a gap. */
+  margin: calc(-1 * var(--space-large) - var(--box-border-width) - 1px);
+  margin-block-start: var(--space-medium);
+  border-radius: 0;
+  --message-bar-icon-container-border-radius-start-start: 0;
+  border-color: transparent;
 }
 
 #aiControlDefaultToggle {
@@ -1507,9 +1442,9 @@ setting-group[groupid="aiStatesDescription"] {
 }
 
 .translations-manage-language:first-child {
-  border-bottom: 1px solid var(--border-color);
+  border-block-end: 1px solid var(--border-color);
   padding: 8px;
-  margin-bottom: 8px;
+  margin-block-end: 8px;
 }
 
 .translations-manage-language {
@@ -1549,7 +1484,7 @@ setting-group[groupid="aiStatesDescription"] {
   #browserUseCurrent,
   #browserUseBookmark,
   #browserUseBlank {
-    margin-top: 10px;
+    margin-block-start: 10px;
   }
 
   #privacyPrefs {
@@ -1589,7 +1524,7 @@ setting-group[groupid="aiStatesDescription"] {
 }
 
 .subsection-heading {
-  margin-bottom: var(--space-small);
+  margin-block-end: var(--space-small);
 }
 
 .section-header-last {
@@ -1604,15 +1539,6 @@ setting-group[groupid="aiStatesDescription"] {
 
 setting-pane[onsearchpane] {
   margin-block-start: var(--space-large);
-}
-
-/* Styles for the "sponsors support our mission" message and link on the Home tab */
-.mission-message {
-  margin-block-start: var(--space-large);
-
-  > a {
-    font-size: var(--font-size-small);
-  }
 }
 
 #dohProviderSelect {
@@ -1665,15 +1591,32 @@ setting-pane[onsearchpane] {
   --box-label-font-weight: var(--font-weight-heading);
 }
 
+/* box-header-bold only reaches the item's own label, so the second column
+   heading, which is slotted, has to be weighted on its own. */
+#notification-sites-list moz-box-item[slot="header"] [slot="actions"] {
+  font-weight: var(--font-weight-heading);
+}
+
+#containers-list {
+  --box-group-max-height: 525px;
+}
+
 .containers-identity-item {
   --box-icon-start-fill: var(--identity-icon-color);
   --box-icon-size: var(--icon-size-xlarge);
 
   @media -moz-pref("browser.nova.enabled") {
-    --box-icon-start-fill: var(--identity-fill-color);
+    --box-icon-start-fill: var(--identity-color);
     --box-icon-padding: round(up, var(--space-small), 0.5px);
-    --box-icon-border-radius: var(--border-radius-circle);
-    --box-icon-background: var(--identity-fill-tint);
+  }
+}
+
+#site-containers-list {
+  --box-group-max-height: 500px;
+
+  container-select {
+    --select-min-width: 10em;
+    --select-max-width: 10em;
   }
 }
 

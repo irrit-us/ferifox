@@ -45,7 +45,7 @@ add_task(async function test_switch_tab() {
       return (
         result.type == UrlbarShared.RESULT_TYPE.TAB_SWITCH &&
         result.payload.url == "https://example.com/" &&
-        result.payload.userContextId == contextIdTabA
+        result.payload.userContext.id == contextIdTabA
       );
     }),
     "Switch tab row for user context A is present in results."
@@ -57,7 +57,7 @@ add_task(async function test_switch_tab() {
     return (
       result.type == UrlbarShared.RESULT_TYPE.TAB_SWITCH &&
       result.payload.url == "https://example.com/" &&
-      result.payload.userContextId == contextIdTabB
+      result.payload.userContext.id == contextIdTabB
     );
   });
 
@@ -67,21 +67,12 @@ add_task(async function test_switch_tab() {
     "Urlbar results contain the switch to tab from another container."
   );
   let element = UrlbarTestUtils.getRowAt(window, resultIndex);
-  if (Services.prefs.getBoolPref("browser.nova.enabled", false)) {
-    let chiclet = element.querySelector(".urlbarView-user-context");
-    Assert.ok(chiclet, "The user-context chiclet should exist");
-    Assert.ok(
-      BrowserTestUtils.isVisible(chiclet),
-      "The user-context chiclet should be visible"
-    );
-  } else {
-    is(
-      element.querySelectorAll(".urlbarView-action.urlbarView-userContext")
-        .length,
-      1,
-      "Has switch to tab with user-context chiclet"
-    );
-  }
+  let chiclet = element.querySelector(".urlbarView-user-context");
+  Assert.ok(chiclet, "The user-context chiclet should exist");
+  Assert.ok(
+    BrowserTestUtils.isVisible(chiclet),
+    "The user-context chiclet should be visible"
+  );
 
   let tabSwitchDonePromise = BrowserTestUtils.waitForEvent(
     window,
@@ -138,17 +129,12 @@ add_task(async function test_chiclet_disabled_on_update() {
   });
 
   let row = UrlbarTestUtils.getRowAt(window, 1);
-  if (Services.prefs.getBoolPref("browser.nova.enabled", false)) {
-    let chiclet = row.querySelector(".urlbarView-user-context");
-    Assert.ok(chiclet, "The user-context chiclet should exist");
-    Assert.ok(
-      BrowserTestUtils.isHidden(chiclet),
-      "The user-context chiclet should be hidden"
-    );
-  } else {
-    let chiclet = row.querySelector(".urlbarView-userContext");
-    Assert.ok(!chiclet, "The user-context chiclet should not exist");
-  }
+  let chiclet = row.querySelector(".urlbarView-user-context");
+  Assert.ok(chiclet, "The user-context chiclet should exist");
+  Assert.ok(
+    BrowserTestUtils.isHidden(chiclet),
+    "The user-context chiclet should be hidden"
+  );
 
   window.gBrowser.removeTab(tabA);
   window.gBrowser.removeTab(tabB);

@@ -174,10 +174,10 @@ bool nsNativeTheme::IsWidgetStyled(nsPresContext* aPresContext,
     }
   }
 
-  return nsLayoutUtils::AuthorSpecifiedBorderBackgroundDisablesTheming(
+  return nsLayoutUtils::AuthorOrUserSpecifiedBorderBackgroundDisablesTheming(
              aAppearance) &&
          aFrame->GetContent()->IsHTMLElement() &&
-         aFrame->Style()->HasAuthorSpecifiedBorderOrBackground();
+         aFrame->Style()->HasAuthorOrUserSpecifiedBorderOrBackground();
 }
 
 /* static */
@@ -343,6 +343,9 @@ bool nsNativeTheme::IsDarkBackgroundForScrollbar(nsIFrame* aFrame) {
 
 /* static */
 bool nsNativeTheme::IsDarkBackground(nsIFrame* aFrame) {
+  if (auto cs = LookAndFeel::ExplicitColorSchemeForFrame(aFrame)) {
+    return *cs == ColorScheme::Dark;
+  }
   auto color =
       nsCSSRendering::FindEffectiveBackgroundColor(
           aFrame, /* aStopAtThemed = */ false, /* aPreferBodyToCanvas = */ true)

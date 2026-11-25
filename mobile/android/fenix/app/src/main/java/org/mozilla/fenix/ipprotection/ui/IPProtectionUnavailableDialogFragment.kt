@@ -52,14 +52,15 @@ class IPProtectionUnavailableDialogFragment : AppCompatDialogFragment() {
                     // no-op, the dialog fragment is intentionally blocking the UI so the user has to make a choice.
                 },
                 onTurnOffProxyClicked = {
-                    requireComponents.ipProtection.store.dispatch(IPProtectionAction.Toggle)
+                    requireComponents.ipProtection.store.dispatch(IPProtectionAction.ActivationAction.Toggle)
                 },
                 onOpenTabsTrayClicked = {
-                    findNavController().navigate(
-                        IPProtectionUnavailableDialogFragmentDirections.actionGlobalTabManagementFragment(
-                            page = if (isPrivateMode) Page.PrivateTabs else Page.NormalTabs,
-                        ),
-                    )
+                    findNavController()
+                        .navigate(
+                            IPProtectionUnavailableDialogFragmentDirections.actionGlobalTabManagementFragment(
+                                page = if (isPrivateMode) Page.PrivateTabs else Page.NormalTabs
+                            )
+                        )
                 },
             )
         }

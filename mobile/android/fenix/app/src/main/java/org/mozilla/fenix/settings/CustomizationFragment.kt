@@ -34,6 +34,7 @@ import org.mozilla.fenix.e2e.SystemInsetsPaddedFragment
 import org.mozilla.fenix.ext.components
 import org.mozilla.fenix.ext.isTallWindow
 import org.mozilla.fenix.ext.isWideWindow
+import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.ext.showToolbar
 import org.mozilla.fenix.settings.settingssearch.PreferenceFileInformation.CustomizationPreferences
@@ -43,26 +44,27 @@ import org.mozilla.fenix.translations.TranslationsEnabledSettings
 import org.mozilla.fenix.utils.Settings
 import org.mozilla.fenix.utils.view.addToRadioGroup
 
-/**
- * Lets the user customize the UI.
- */
-
+/** Lets the user customize the UI. */
 @Suppress("TooManyFunctions")
 class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFragment {
     private lateinit var radioLightTheme: RadioButtonPreference
     private lateinit var radioDarkTheme: RadioButtonPreference
+    private lateinit var radioDarkestTheme: RadioButtonPreference
     private lateinit var radioAutoBatteryTheme: RadioButtonPreference
     private lateinit var radioFollowDeviceTheme: RadioButtonPreference
+    private lateinit var radioHomepageSearchMiddle: RadioButtonPreference
+    private lateinit var radioHomepageSearchTop: RadioButtonPreference
     private val args by navArgs<CustomizationFragmentArgs>()
 
     // Cached reactive feature state used when (re)building preferences.
     // Defaults match the DataStore defaults (summarization off, translations on)
-    private var dynamicFeaturesStatus = DynamicFeaturesStatus(
-        isSummarizationFeatureEnabled = false,
-        isSummarizationGestureEnabled = false,
-        isTranslationsFeatureEnabled = true,
-        isTranslationsFeatureSupported = false,
-    )
+    private var dynamicFeaturesStatus =
+        DynamicFeaturesStatus(
+            isSummarizationFeatureEnabled = false,
+            isSummarizationGestureEnabled = false,
+            isTranslationsFeatureEnabled = true,
+            isTranslationsFeatureSupported = false,
+        )
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         setPreferencesFromResource(R.xml.customization_preferences, rootKey)
@@ -79,18 +81,18 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
                 val translationsDataStore = TranslationsEnabledSettings.dataStore(requireContext())
                 val browserStore = requireComponents.core.store
                 combine(
-                    summarizationDataStore.getFeatureEnabledUserStatus(),
-                    summarizationDataStore.getGestureEnabledUserStatus(),
-                    translationsDataStore.isEnabled,
-                    browserStore.stateFlow,
-                ) { isSummarizationEnabled, isSummarizationGestureEnabled, areTranslationsEnabled, browserState ->
-                    DynamicFeaturesStatus(
-                        isSummarizationFeatureEnabled = isSummarizationEnabled == true,
-                        isSummarizationGestureEnabled = isSummarizationGestureEnabled,
-                        isTranslationsFeatureEnabled = areTranslationsEnabled,
-                        isTranslationsFeatureSupported = browserState.translationEngine.isEngineSupported ?: false,
-                    )
-                }
+                        summarizationDataStore.getFeatureEnabledUserStatus(),
+                        summarizationDataStore.getGestureEnabledUserStatus(),
+                        translationsDataStore.isEnabled,
+                        browserStore.stateFlow,
+                    ) { isSummarizationEnabled, isSummarizationGestureEnabled, areTranslationsEnabled, browserState ->
+                        DynamicFeaturesStatus(
+                            isSummarizationFeatureEnabled = isSummarizationEnabled == true,
+                            isSummarizationGestureEnabled = isSummarizationGestureEnabled,
+                            isTranslationsFeatureEnabled = areTranslationsEnabled,
+                            isTranslationsFeatureSupported = browserState.translationEngine.isEngineSupported ?: false,
+                        )
+                    }
                     .distinctUntilChanged()
                     .collect { status ->
                         setupPreferences(status)
@@ -112,17 +114,22 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
 
         bindFollowDeviceTheme()
         bindDarkTheme()
+        bindDarkestTheme()
         bindLightTheme()
         bindAutoBatteryTheme()
         setupRadioGroups()
-        val tabletAndTabStripEnabled = Settings(requireContext()).isTabStripEnabled
-        updateToolbarCategoryBasedOnTabStrip(tabletAndTabStripEnabled)
-        setupTabStripCategory()
+        bindHomepageSearchPosition()
+        setupToolbarCategory()
+        updateHomepageSearchPositionVisibility()
+        setupTabStripDisplayCategory()
+        setupTabStripLocationCategory()
         setupToolbarLayout()
+        setupMenuCategory()
         updateToolbarShortcut()
 
         // if tab strip is enabled, swipe toolbar to switch tabs should not be enabled so the
         // preference is not shown
+        val tabletAndTabStripEnabled = Settings(requireContext()).isTabStripEnabled
         setupGesturesCategory(
             isSwipeToolbarToSwitchTabsVisible = !tabletAndTabStripEnabled,
             isSummarizationEnabled = status.isSummarizationFeatureEnabled,
@@ -130,46 +137,26 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
         )
     }
 
-    private fun updateToolbarCategoryBasedOnTabStrip(
-        tabStripEnabled: Boolean,
-    ) {
-        val topPreference = requirePreference<RadioButtonPreference>(R.string.pref_key_toolbar_top)
-        val bottomPreference = requirePreference<RadioButtonPreference>(R.string.pref_key_toolbar_bottom)
-        val tabStripMessagePref = findPreference<Preference>(getString(R.string.pref_key_tab_strip_message))
-
-        topPreference.isEnabled = !tabStripEnabled
-        bottomPreference.isEnabled = !tabStripEnabled
-        tabStripMessagePref?.isVisible = tabStripEnabled
-
-        if (tabStripEnabled && !topPreference.isChecked) {
-            topPreference.setCheckedWithoutClickListener(true)
-            bottomPreference.setCheckedWithoutClickListener(false)
-        } else {
-            setupToolbarCategory()
-        }
-    }
-
     private fun updateToolbarShortcut() {
-        val category = requirePreference<PreferenceCategory>(
-            R.string.pref_key_customization_category_toolbar_shortcut,
-        )
+        val category = requirePreference<PreferenceCategory>(R.string.pref_key_customization_category_toolbar_shortcut)
         val settings = requireComponents.settings
         val isExpandedToolbarEnabled = settings.shouldUseExpandedToolbar && isTallWindow() && !isWideWindow()
         val isAnyShortcutSelectedForSimpleToolbar = settings.toolbarSimpleShortcutKey != ShortcutType.NONE.value
 
-        val shortcutPreference = if (isExpandedToolbarEnabled) {
-            buildExpandedToolbarCustomButtonSetting()
-        } else if (settings.isTabStripEnabled) {
-            if (settings.toolbarTabStripShortcutKey != ShortcutType.NONE.value) {
-                buildTabStripToolbarWithCustomButtonSelectedSetting()
+        val shortcutPreference =
+            if (isExpandedToolbarEnabled) {
+                buildExpandedToolbarCustomButtonSetting()
+            } else if (settings.isTabStripEnabled) {
+                if (settings.toolbarTabStripShortcutKey != ShortcutType.NONE.value) {
+                    buildTabStripToolbarWithCustomButtonSelectedSetting()
+                } else {
+                    buildTabStripToolbarWithNoCustomButtonSelectedSetting()
+                }
+            } else if (isAnyShortcutSelectedForSimpleToolbar) {
+                buildSimpleToolbarWithCustomButtonSelectedSetting()
             } else {
-                buildTabStripToolbarWithNoCustomButtonSelectedSetting()
+                buildSimpleToolbarWithNoCustomButtonSelectedSetting()
             }
-        } else if (isAnyShortcutSelectedForSimpleToolbar) {
-            buildSimpleToolbarWithCustomButtonSelectedSetting()
-        } else {
-            buildSimpleToolbarWithNoCustomButtonSelectedSetting()
-        }
         category.apply {
             removeAll()
             addPreference(shortcutPreference)
@@ -237,6 +224,7 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
         addToRadioGroup(
             radioLightTheme,
             radioDarkTheme,
+            radioDarkestTheme,
             if (SDK_INT >= Build.VERSION_CODES.P) {
                 radioFollowDeviceTheme
             } else {
@@ -262,11 +250,17 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
     private fun bindDarkTheme() {
         radioDarkTheme = requirePreference(R.string.pref_key_dark_theme)
         radioDarkTheme.onClickListener {
-            AppTheme.darkThemeSelected.record(
-                AppTheme.DarkThemeSelectedExtra(
-                    "SETTINGS",
-                ),
-            )
+            AppTheme.darkThemeSelected.record(AppTheme.DarkThemeSelectedExtra("SETTINGS"))
+            setNewTheme(AppCompatDelegate.MODE_NIGHT_YES)
+        }
+    }
+
+    private fun bindDarkestTheme() {
+        val settings = requireComponents.settings
+        radioDarkestTheme = requirePreference(R.string.pref_key_oled_theme)
+        radioDarkestTheme.isVisible = settings.enableOledTheme
+        radioDarkestTheme.onClickListener {
+            AppTheme.oledThemeSelected.record(AppTheme.OledThemeSelectedExtra("SETTINGS"))
             setNewTheme(AppCompatDelegate.MODE_NIGHT_YES)
         }
     }
@@ -293,24 +287,18 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
     private fun setupToolbarCategory() {
         val topPreference = requirePreference<RadioButtonPreference>(R.string.pref_key_toolbar_top)
         topPreference.onClickListener {
-            ToolbarSettings.changedPosition.record(
-                ToolbarSettings.ChangedPositionExtra(
-                    Position.TOP.name,
-                ),
-            )
+            ToolbarSettings.changedPosition.record(ToolbarSettings.ChangedPositionExtra(Position.TOP.name))
 
             updateToolbarLayoutIcons()
+            updateHomepageSearchPositionVisibility()
         }
 
         val bottomPreference = requirePreference<RadioButtonPreference>(R.string.pref_key_toolbar_bottom)
         bottomPreference.onClickListener {
-            ToolbarSettings.changedPosition.record(
-                ToolbarSettings.ChangedPositionExtra(
-                    Position.BOTTOM.name,
-                ),
-            )
+            ToolbarSettings.changedPosition.record(ToolbarSettings.ChangedPositionExtra(Position.BOTTOM.name))
 
             updateToolbarLayoutIcons()
+            updateHomepageSearchPositionVisibility()
         }
 
         val toolbarPosition = requireComponents.settings.toolbarPosition
@@ -320,7 +308,27 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
         addToRadioGroup(topPreference, bottomPreference)
     }
 
-    private fun setupTabStripCategory() {
+    private fun bindHomepageSearchPosition() {
+        radioHomepageSearchMiddle = requirePreference(R.string.pref_key_enable_homepage_searchbar2)
+        radioHomepageSearchTop = requirePreference(R.string.pref_key_homepage_search_location_top)
+
+        val middleSearchEnabled = requireComponents.settings.enableHomepageSearchBar
+        radioHomepageSearchMiddle.setCheckedWithoutClickListener(middleSearchEnabled)
+        radioHomepageSearchTop.setCheckedWithoutClickListener(!middleSearchEnabled)
+
+        addToRadioGroup(radioHomepageSearchMiddle, radioHomepageSearchTop)
+    }
+
+    private fun updateHomepageSearchPositionVisibility() {
+        val settings = requireComponents.settings
+        val isVisible = settings.enableHomepageCustomization && settings.toolbarPosition == ToolbarPosition.TOP
+
+        requirePreference<Preference>(R.string.pref_key_homepage_search_location_header).isVisible = isVisible
+        radioHomepageSearchMiddle.isVisible = isVisible
+        radioHomepageSearchTop.isVisible = isVisible
+    }
+
+    private fun setupTabStripDisplayCategory() {
         val tabStripSwitch = requirePreference<SwitchPreferenceCompat>(R.string.pref_key_tab_strip_show)
         val context = requireContext()
 
@@ -329,11 +337,34 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
         tabStripSwitch.setOnPreferenceChangeListener { _, newValue ->
             val enabled = newValue as Boolean
             context.components.settings.isTabStripEnabled = enabled
-            updateToolbarCategoryBasedOnTabStrip(enabled)
             setupToolbarLayout()
+            setupTabStripLocationCategory()
             updateToolbarShortcut()
             true
         }
+    }
+
+    private fun setupTabStripLocationCategory() {
+        val settings = requireComponents.settings
+        val isTabStripEnabled = settings.isTabStripEnabled
+
+        requirePreference<PreferenceCategory>(R.string.pref_key_tab_strip_location).isVisible = isTabStripEnabled
+        if (!isTabStripEnabled) return
+
+        val topPreference = requirePreference<RadioButtonPreference>(R.string.pref_key_tab_bar_top)
+        topPreference.onClickListener {
+            ToolbarSettings.changedPosition.record(ToolbarSettings.ChangedPositionExtra(Position.TOP.name))
+        }
+        val bottomPreference = requirePreference<RadioButtonPreference>(R.string.pref_key_tab_bar_bottom)
+        bottomPreference.onClickListener {
+            ToolbarSettings.changedPosition.record(ToolbarSettings.ChangedPositionExtra(Position.BOTTOM.name))
+        }
+
+        val tabStripPosition = settings.tabStripPosition
+        topPreference.setCheckedWithoutClickListener(tabStripPosition == ToolbarPosition.TOP)
+        bottomPreference.setCheckedWithoutClickListener(tabStripPosition == ToolbarPosition.BOTTOM)
+
+        addToRadioGroup(topPreference, bottomPreference)
     }
 
     private fun setupToolbarLayout() {
@@ -382,8 +413,7 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
             onPreferenceChangeListener = SharedPreferenceUpdater()
         }
         requirePreference<SwitchPreferenceCompat>(R.string.pref_key_shake_gesture_enabled).apply {
-            isVisible = context.components.settings.shakeToSummarizeFeatureFlagEnabled &&
-                    isSummarizationEnabled
+            isVisible = context.components.settings.shakeToSummarizeFeatureFlagEnabled && isSummarizationEnabled
             isChecked = isSummarizationGestureEnabled
             onPreferenceChangeListener = { _, newValue ->
                 val updatedValue = (newValue as? Boolean) ?: false
@@ -395,6 +425,11 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
         }
     }
 
+    private fun setupMenuCategory() {
+        val isEnabled = requireComponents.settings.isMenuCustomizationScreenEnabled
+        requirePreference<PreferenceCategory>(R.string.pref_key_customization_category_menu).isVisible = isEnabled
+    }
+
     override fun onPreferenceTreeClick(preference: Preference): Boolean {
         when (preference.key) {
             resources.getString(R.string.pref_key_website_pull_to_refresh) -> {
@@ -402,6 +437,12 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
             }
             resources.getString(R.string.pref_key_dynamic_toolbar) -> {
                 CustomizationSettings.dynamicToolbar.set(requireComponents.settings.isDynamicToolbarEnabled)
+            }
+            resources.getString(R.string.pref_key_customize_menu) -> {
+                nav(
+                    id = R.id.customizationFragment,
+                    directions = CustomizationFragmentDirections.actionCustomizationFragmentToCustomizeMenuFragment(),
+                )
             }
         }
         return super.onPreferenceTreeClick(preference)
@@ -415,7 +456,10 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
 
     companion object {
         // Used to send telemetry data about toolbar position changes
-        enum class Position { TOP, BOTTOM }
+        enum class Position {
+            TOP,
+            BOTTOM,
+        }
     }
 
     private data class DynamicFeaturesStatus(
@@ -426,23 +470,18 @@ class CustomizationFragment : PreferenceFragmentCompat(), SystemInsetsPaddedFrag
     )
 }
 
-/**
- * Provides the toolbar shortcuts options for use in settings search.
- */
+/** Provides the toolbar shortcuts options for use in settings search. */
 object ToolbarShortcutSettingsSearchProvider : SettingsSearchProvider {
     private val preferenceFileInformation = CustomizationPreferences
 
-    override fun getSearchItems(context: Context) = listOf(
-        SettingsSearchItem(
-            title = context.getString(R.string.preferences_toolbar_shortcut),
-            summary = "",
-            preferenceKey = context.getString(
-                R.string.pref_key_customization_category_toolbar_shortcut,
-            ),
-            categoryHeader = context.getString(
-                preferenceFileInformation.categoryHeaderResourceId,
-            ),
-            preferenceFileInformation = preferenceFileInformation,
-        ),
-    )
+    override fun getSearchItems(context: Context) =
+        listOf(
+            SettingsSearchItem(
+                title = context.getString(R.string.preferences_toolbar_shortcut),
+                summary = "",
+                preferenceKey = context.getString(R.string.pref_key_customization_category_toolbar_shortcut),
+                categoryHeader = context.getString(preferenceFileInformation.categoryHeaderResourceId),
+                preferenceFileInformation = preferenceFileInformation,
+            )
+        )
 }

@@ -11,11 +11,18 @@
     "moz-src:///browser/components/tabbrowser/TabMetrics.sys.mjs"
   );
   const { TabStateFlusher } = ChromeUtils.importESModule(
-    "resource:///modules/sessionstore/TabStateFlusher.sys.mjs"
+    "moz-src:///browser/components/sessionstore/TabStateFlusher.sys.mjs"
   );
   const { ContentSharingUtils } = ChromeUtils.importESModule(
     "moz-src:///browser/components/sharing/ContentSharingUtils.sys.mjs"
   );
+  const lazy = {};
+  ChromeUtils.defineESModuleGetters(lazy, {
+    AIWindow:
+      "moz-src:///browser/components/aiwindow/ui/modules/AIWindow.sys.mjs",
+    AIWindowMenu:
+      "moz-src:///browser/components/aiwindow/ui/modules/AIWindowMenu.sys.mjs",
+  });
 
   ChromeUtils.importESModule(
     "chrome://browser/content/genai/content/model-optin.mjs",
@@ -99,6 +106,13 @@
           tabindex="0"
           id="tabGroupEditor_copyAllLinks"
           class="subviewbutton">
+        </toolbarbutton>
+        <toolbarbutton
+          tabindex="0"
+          id="tabGroupEditor_createAITab"
+          class="subviewbutton"
+          data-l10n-id="tab-group-editor-action-create-aitab"
+          hidden="">
         </toolbarbutton>
         <toolbarbutton
           tabindex="0"
@@ -213,7 +227,7 @@
     static markup = /*html*/ `
       <panel
         type="arrow"
-        class="tab-group-editor-panel panel-no-padding"
+        class="tab-group-editor-panel"
         orient="vertical"
         role="dialog"
         ignorekeys="true"
@@ -465,6 +479,7 @@
           "tabGroupEditor_moveGroupToNewWindow"
         ),
         copyAllLinks: document.getElementById("tabGroupEditor_copyAllLinks"),
+        createAITab: document.getElementById("tabGroupEditor_createAITab"),
         ungroupTabs: document.getElementById("tabGroupEditor_ungroupTabs"),
         saveAndCloseGroup: document.getElementById(
           "tabGroupEditor_saveAndCloseGroup"
@@ -523,6 +538,15 @@
 
       this.#commandButtons.shareTabGroup.addEventListener("command", () => {
         ContentSharingUtils.handleShareTabGroup(this.activeGroup);
+        this.close();
+      });
+
+      this.#commandButtons.createAITab.addEventListener("command", () => {
+        lazy.AIWindow.createAITab(
+          window,
+          this.activeGroup.tabs.map(tab => tab.linkedBrowser.currentURI.spec),
+          "tab_group"
+        );
         this.close();
       });
 
@@ -1006,6 +1030,11 @@
 
       this.#commandButtons.shareTabGroup.hidden =
         !ContentSharingUtils.isEnabled;
+      this.#commandButtons.createAITab.hidden =
+        !lazy.AIWindowMenu.canShowAITabMenu(
+          window,
+          this.activeGroup?.tabs.map(tab => tab.linkedBrowser.currentURI) ?? []
+        );
     }
 
     on_popuphidden() {

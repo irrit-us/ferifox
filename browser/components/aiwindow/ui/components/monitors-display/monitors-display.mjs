@@ -4,7 +4,7 @@
 
 import { html, repeat } from "chrome://global/content/vendor/lit.all.mjs";
 import { MozLitElement } from "chrome://global/content/lit-utils.mjs";
-// eslint-disable-next-line import/no-unassigned-import
+// eslint-disable-next-line import-x/no-unassigned-import
 import "chrome://browser/content/aiwindow/components/agent-monitor-item.mjs";
 
 /**
@@ -13,12 +13,15 @@ import "chrome://browser/content/aiwindow/components/agent-monitor-item.mjs";
  * @property {Array} monitors - Array of monitor objects to display
  * @property {object} scheduleTypes - Schedule type constants from parent
  * @property {Array} weekdays - Weekday definitions from parent (required for localization)
+ * @property {boolean} canResume - Whether a paused monitor may be resumed, ie
+ *   whether there is room under the active-monitor limit for one more
  */
 export class MonitorsDisplay extends MozLitElement {
   static properties = {
     monitors: { type: Array },
     scheduleTypes: { type: Object },
     weekdays: { type: Array },
+    canResume: { type: Boolean },
   };
 
   constructor() {
@@ -26,6 +29,7 @@ export class MonitorsDisplay extends MozLitElement {
     this.monitors = [];
     this.scheduleTypes = {};
     this.weekdays = [];
+    this.canResume = true;
   }
 
   buildMonitorStatus(monitor) {
@@ -51,12 +55,9 @@ export class MonitorsDisplay extends MozLitElement {
       monitorName: monitor.title || "Untitled Monitor",
       url: monitor.watchUrls?.[0] || "",
       watchUrls: monitor.watchUrls || [],
+      watchUrlTitles: monitor.watchUrlTitles || {},
       condition: monitor.monitorPrompt || "",
       status: monitorStatus,
-      value: monitor.currentValue || "",
-      valueMeta: monitor.lastRunTime
-        ? `checked ${new Date(monitor.lastRunTime).toLocaleTimeString()}`
-        : "",
       history: (monitor.history || []).slice().reverse(),
       // Pass the schedule data directly - agent-monitor-item will format it using FTL strings
       schedule: monitor.schedule
@@ -100,6 +101,7 @@ export class MonitorsDisplay extends MozLitElement {
                     <agent-monitor-item
                       .showLastResult=${true}
                       .agent=${this.transformMonitorToAgent(monitor)}
+                      .canResume=${this.canResume}
                       mode="display"
                     ></agent-monitor-item>
                   `

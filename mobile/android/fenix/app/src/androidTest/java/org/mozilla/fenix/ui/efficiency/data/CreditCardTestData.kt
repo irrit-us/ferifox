@@ -9,8 +9,8 @@ import java.time.LocalDate
 /**
  * A saved credit card, as entered in Settings > Autofill and then offered on a web payment form.
  *
- * Immutable for the same reason as [AddressDetails]: the legacy equivalent
- * (CreditCardAutofillTest.MockCreditCard1) is an `object` of constants that tests reach into directly.
+ * Immutable for the same reason as [AddressDetails]: the legacy equivalent (CreditCardAutofillTest.MockCreditCard1) is
+ * an `object` of constants that tests reach into directly.
  */
 data class CreditCardDetails(
     val number: String,
@@ -18,17 +18,22 @@ data class CreditCardDetails(
     val nameOnCard: String,
     val expiryMonth: String,
     val expiryYear: String,
+    // How the expiry renders on the saved-cards list ("MM/yyyy"), distinct from the month/year the editor
+    // dropdowns take. Used to assert a saved card shows the right expiry.
+    val expiryMonthAndYear: String,
 )
 
 object CreditCardTestData {
 
     // Expiry year is relative to today: a hardcoded year eventually goes into the past, and the editor
     // does not offer past years, so the dropdown selection would start failing on a fixed date.
-    val FIRST = CreditCardDetails(
-        number = "5555555555554444",
-        lastDigits = "4444",
-        nameOnCard = "Mastercard",
-        expiryMonth = "February",
-        expiryYear = (LocalDate.now().year + 1).toString(),
-    )
+    val FIRST =
+        CreditCardDetails(
+            number = "5555555555554444",
+            lastDigits = "4444",
+            nameOnCard = "Mastercard",
+            expiryMonth = "February",
+            expiryYear = (LocalDate.now().year + 1).toString(),
+            expiryMonthAndYear = "02/${LocalDate.now().year + 1}",
+        )
 }

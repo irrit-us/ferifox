@@ -22,12 +22,21 @@
 
 namespace mozilla::ipc {
 
+ChildThreadId GetChildThreadIdFromArgs(
+    const CrashReporter::CrashReporterInitArgs& aInitArgs) {
+#if defined(XP_DARWIN)
+  return RetainMachSendRight(aInitArgs.threadId().get());
+#else
+  return aInitArgs.threadId();
+#endif  // defined(XP_DARWIN)
+}
+
 CrashReporterHost::CrashReporterHost(
     GeckoProcessType aProcessType, GeckoChildID aChildID,
     const CrashReporter::CrashReporterInitArgs& aInitArgs)
     : mProcessType(aProcessType),
       mChildID(aChildID),
-      mThreadId(aInitArgs.threadId()),
+      mThreadId(GetChildThreadIdFromArgs(aInitArgs)),
       mStartTime(::time(nullptr)),
       mFinalized(false) {
 #if defined(XP_LINUX) && defined(MOZ_CRASHREPORTER) && \
@@ -96,7 +105,8 @@ void CrashReporterHost::FinalizeCrashReport() {
   // have one).
   if (mExtraAnnotations[CrashReporter::Annotation::CrashEventID].IsEmpty()) {
     NSID_TrimBracketsASCII uuidString(nsID::GenerateUUID());
-    mExtraAnnotations[CrashReporter::Annotation::CrashEventID] = uuidString;
+    mExtraAnnotations[CrashReporter::Annotation::CrashEventID] =
+        std::move(uuidString);
   }
 
   char startTime[32];
@@ -112,6 +122,19 @@ void CrashReporterHost::DeleteCrashReport() {
   if (mFinalized && HasMinidump()) {
     CrashReporter::DeleteMinidumpFilesForID(mDumpID, Some(u"browser"_ns));
   }
+}
+
+bool CrashReporterHost::GenerateMinidumpAndPair(
+    GeckoChildProcessHost* aChildProcessHost, const nsACString& aPairName) {
+  AnnotationTable annotations;
+  nsCOMPtr<nsIFile> targetDump;
+  if (!CrashReporter::CreateMinidumpsAndPair(
+          aChildProcessHost->GetChildID(), GetRawThreadId(), aPairName,
+          annotations, getter_AddRefs(targetDump))) {
+    return false;
+  }
+
+  return AdoptMinidump(targetDump, annotations);
 }
 
 const char* CrashReporterHost::ProcessType() const {
@@ -139,7 +162,7 @@ void CrashReporterHost::RecordCrash(GeckoProcessType aProcessType,
 
 /* static */
 void CrashReporterHost::RecordCrashWithTelemetry(GeckoProcessType aProcessType,
-                                                 int32_t aCrashType) {
+                                                 int32_t /*aCrashType*/) {
   nsCString key;
 
   switch (aProcessType) {
@@ -149,7 +172,7 @@ void CrashReporterHost::RecordCrashWithTelemetry(GeckoProcessType aProcessType,
   case GeckoProcessType_##enum_name:                                          \
     key.AssignLiteral(string_name);                                           \
     break;
-#include "mozilla/GeckoProcessTypes.h"
+#include "mozilla/GeckoProcessTypes.inc"
 #undef GECKO_PROCESS_TYPE
     // We can't really hit this, thanks to the above switch, but having it
     // here will placate the compiler.

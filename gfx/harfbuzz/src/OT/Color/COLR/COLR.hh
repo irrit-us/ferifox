@@ -37,6 +37,7 @@
 #include "../../../hb-paint-extents.hh"
 #include "../../../hb-depend-data.hh"
 
+#include "../../../hb-ot-dual.hh"
 #include "../CPAL/CPAL.hh"
 
 /*
@@ -997,8 +998,11 @@ struct PaintSweepGradient
 };
 
 // Paint a non-COLR glyph, filled as indicated by paint.
+template <typename Types>
 struct PaintGlyph
 {
+  using HBGlyphID = typename Types::HBGlyphID;
+
   HB_INTERNAL void dependv1 (hb_colrv1_depend_context_t* c) const;
   HB_INTERNAL void closurev1 (hb_colrv1_closure_context_t* c) const;
 
@@ -1024,11 +1028,11 @@ struct PaintGlyph
 
   inline void paint_glyph (hb_paint_context_t *c) const;
 
-  HBUINT8		format; /* format = 10 */
+  HBUINT8		format; /* format = 10 or 33 */
   Offset24To<Paint>	paint;  /* Offset (from beginning of PaintGlyph table) to Paint subtable. */
-  HBUINT16		gid;
+  HBGlyphID		gid;
   public:
-  DEFINE_SIZE_STATIC (6);
+  DEFINE_SIZE_STATIC (4 + HBGlyphID::static_size);
 };
 
 struct PaintColrGlyph
@@ -1704,10 +1708,10 @@ struct ClipBoxFormat2 : Variable<ClipBoxFormat1>
     value.get_clip_box(clip_box, instancer);
     if (instancer)
     {
-      clip_box.xMin += roundf (instancer (varIdxBase, 0));
-      clip_box.yMin += roundf (instancer (varIdxBase, 1));
-      clip_box.xMax += roundf (instancer (varIdxBase, 2));
-      clip_box.yMax += roundf (instancer (varIdxBase, 3));
+      clip_box.xMin = hb_saturate_add (clip_box.xMin, hb_clamp_to<int> (roundf (instancer (varIdxBase, 0))));
+      clip_box.yMin = hb_saturate_add (clip_box.yMin, hb_clamp_to<int> (roundf (instancer (varIdxBase, 1))));
+      clip_box.xMax = hb_saturate_add (clip_box.xMax, hb_clamp_to<int> (roundf (instancer (varIdxBase, 2))));
+      clip_box.yMax = hb_saturate_add (clip_box.yMax, hb_clamp_to<int> (roundf (instancer (varIdxBase, 3))));
     }
   }
 
@@ -1767,8 +1771,8 @@ struct ClipBox
 
     extents->x_bearing = clip_box.xMin;
     extents->y_bearing = clip_box.yMax;
-    extents->width = clip_box.xMax - clip_box.xMin;
-    extents->height = clip_box.yMin - clip_box.yMax;
+    extents->width = hb_saturate_sub (clip_box.xMax, clip_box.xMin);
+    extents->height = hb_saturate_sub (clip_box.yMin, clip_box.yMax);
     return true;
   }
 
@@ -1986,6 +1990,9 @@ struct Paint
     case 30: hb_barrier (); return_trace (c->dispatch (u.paintformat30, std::forward<Ts> (ds)...));
     case 31: hb_barrier (); return_trace (c->dispatch (u.paintformat31, std::forward<Ts> (ds)...));
     case 32: hb_barrier (); return_trace (c->dispatch (u.paintformat32, std::forward<Ts> (ds)...));
+#ifndef HB_NO_BEYOND_64K
+    case 33: hb_barrier (); return_trace (c->dispatch (u.paintformat33, std::forward<Ts> (ds)...));
+#endif
     default:return_trace (c->default_return_value ());
     }
   }
@@ -2012,7 +2019,7 @@ struct Paint
   Variable<PaintRadialGradient<Variable>>	paintformat7;
   NoVariable<PaintSweepGradient<NoVariable>>	paintformat8;
   Variable<PaintSweepGradient<Variable>>	paintformat9;
-  PaintGlyph					paintformat10;
+  PaintGlyph<Layout::SmallTypes>		paintformat10;
   PaintColrGlyph				paintformat11;
   PaintTransform<NoVariable>			paintformat12;
   PaintTransform<Variable>			paintformat13;
@@ -2035,6 +2042,9 @@ struct Paint
   NoVariable<PaintSkewAroundCenter>		paintformat30;
   Variable<PaintSkewAroundCenter>		paintformat31;
   PaintComposite				paintformat32;
+#ifndef HB_NO_BEYOND_64K
+  PaintGlyph<Layout::MediumTypes>		paintformat33;
+#endif
   } u;
   public:
   DEFINE_SIZE_MIN (2);
@@ -2881,10 +2891,10 @@ struct COLR
 
 	if (clip)
 	  c.funcs->push_clip_rectangle (c.data,
-					extents.x_bearing,
-					extents.y_bearing + extents.height,
-					extents.x_bearing + extents.width,
-					extents.y_bearing);
+					(float) extents.x_bearing,
+					(float) extents.y_bearing + extents.height,
+					(float) extents.x_bearing + extents.width,
+					(float) extents.y_bearing);
 
 	if (is_bounded)
 	  c.recurse (*paint);
@@ -2949,7 +2959,8 @@ hb_paint_context_t::recurse (const Paint &paint)
   depth_left++;
 }
 
-void PaintGlyph::paint_glyph (hb_paint_context_t *c) const
+template <typename Types>
+void PaintGlyph<Types>::paint_glyph (hb_paint_context_t *c) const
 {
   TRACE_PAINT (this);
 
@@ -3014,10 +3025,10 @@ void PaintColrGlyph::paint_glyph (hb_paint_context_t *c) const
 
   if (has_clip_box)
     c->funcs->push_clip_rectangle (c->data,
-				   extents.x_bearing,
-				   extents.y_bearing + extents.height,
-				   extents.x_bearing + extents.width,
-				   extents.y_bearing);
+				   (float) extents.x_bearing,
+				   (float) extents.y_bearing + extents.height,
+				   (float) extents.x_bearing + extents.width,
+				   (float) extents.y_bearing);
 
   if (paint)
     c->recurse (*paint);

@@ -11,12 +11,11 @@ import mozilla.components.browser.state.store.BrowserStore
 import mozilla.components.lib.state.Store
 
 /**
- * Waits (asynchronously, non-blocking) for the search state to be loaded from disk (when using
- * `RegionMiddleware` and `SearchMiddleware`) and invokes [block] with the default search engine
- * (or `null` if no default could be loaded).
+ * Waits (asynchronously, non-blocking) for the search state to be loaded from disk (when using `RegionMiddleware` and
+ * `SearchMiddleware`) and invokes [block] with the default search engine (or `null` if no default could be loaded).
  */
 fun BrowserStore.waitForSelectedOrDefaultSearchEngine(
-    block: (mozilla.components.browser.state.search.SearchEngine?) -> Unit,
+    block: (mozilla.components.browser.state.search.SearchEngine?) -> Unit
 ) {
     // Did we already load the search state? In that case we can invoke `block` immediately.
     if (state.search.complete) {
@@ -28,8 +27,10 @@ fun BrowserStore.waitForSelectedOrDefaultSearchEngine(
     var subscription: Store.Subscription<BrowserState, BrowserAction>? = null
     subscription = observeManually { state ->
         if (state.search.complete) {
-            block(state.search.selectedOrDefaultSearchEngine)
+            // Unsubscribe before invoking the block: `Store.dispatch` notifies subscribers synchronously, so a block
+            // that dispatches (e.g. by opening a tab) would otherwise re-enter this observer and run again.
             subscription!!.unsubscribe()
+            block(state.search.selectedOrDefaultSearchEngine)
         }
     }
     subscription.resume()

@@ -20,6 +20,7 @@
 #include "mozilla/dom/Selection.h"
 #include "mozilla/dom/Element.h"
 #include "mozilla/dom/ElementInlines.h"
+#include "mozilla/dom/Range.h"
 #include "nsAString.h"
 #include "nsCOMPtr.h"
 #include "nsDebug.h"
@@ -34,7 +35,6 @@
 #include "nsITableCellLayout.h"  // For efficient access to table cell
 #include "nsLiteralString.h"
 #include "nsQueryFrame.h"
-#include "nsRange.h"
 #include "nsString.h"
 #include "nsTArray.h"
 #include "nsTableCellFrame.h"
@@ -247,8 +247,9 @@ nsresult HTMLEditor::InsertCell(Element* aCell, int32_t aRowSpan,
     // Note: Do NOT use editor transaction for this
     nsAutoString newRowSpan;
     newRowSpan.AppendInt(aRowSpan, 10);
-    DebugOnly<nsresult> rvIgnored = newCell->SetAttr(
-        kNameSpaceID_None, nsGkAtoms::rowspan, newRowSpan, true);
+    DebugOnly<nsresult> rvIgnored =
+        newCell->SetAttr(kNameSpaceID_None, nsGkAtoms::rowspan, newRowSpan,
+                         true, IsKnownNewAttr::No);
     NS_WARNING_ASSERTION(
         NS_SUCCEEDED(rvIgnored),
         "Element::SetAttr(nsGkAtoms::rawspan) failed, but ignored");
@@ -257,8 +258,9 @@ nsresult HTMLEditor::InsertCell(Element* aCell, int32_t aRowSpan,
     // Note: Do NOT use editor transaction for this
     nsAutoString newColSpan;
     newColSpan.AppendInt(aColSpan, 10);
-    DebugOnly<nsresult> rvIgnored = newCell->SetAttr(
-        kNameSpaceID_None, nsGkAtoms::colspan, newColSpan, true);
+    DebugOnly<nsresult> rvIgnored =
+        newCell->SetAttr(kNameSpaceID_None, nsGkAtoms::colspan, newColSpan,
+                         true, IsKnownNewAttr::No);
     NS_WARNING_ASSERTION(
         NS_SUCCEEDED(rvIgnored),
         "Element::SetAttr(nsGkAtoms::colspan) failed, but ignored");
@@ -1247,11 +1249,11 @@ nsresult HTMLEditor::DeleteTableElementAndChildrenWithTransaction(
       }
     }
 
-    RefPtr<nsRange> range = nsRange::Create(&aTableElement);
+    RefPtr<dom::Range> range = dom::Range::Create(&aTableElement);
     ErrorResult error;
     range->SelectNode(aTableElement, error);
     if (error.Failed()) {
-      NS_WARNING("nsRange::SelectNode() failed");
+      NS_WARNING("Range::SelectNode() failed");
       return error.StealNSResult();
     }
     SelectionRef().AddRangeAndSelectFramesAndNotifyListeners(*range, error);
@@ -2108,10 +2110,11 @@ nsresult HTMLEditor::DeleteSelectedTableRowsWithTransaction(
             "next...");
         startRowIndex++;
       }
-      // Check if there's a cell in the "next" row.
-      cell = GetTableCellElementAt(*table, startRowIndex, startColIndex);
-      if (!cell) {
-        return NS_OK;
+      // Check if there's a cell in the "next" row. We can treat generated cell
+      // is also a cell at the column index.
+      if (!GetMaybeGeneratedTableCellElementAt(*table, startRowIndex,
+                                               startColIndex)) {
+        break;
       }
     }
     return NS_OK;
@@ -3334,7 +3337,7 @@ NS_IMETHODIMP HTMLEditor::JoinTableCells(bool aMergeNonContiguousContents) {
     uint32_t rangeCount = SelectionRef().RangeCount();
 
     // TODO: Rewriting this with reversed ranged-loop may make it simpler.
-    RefPtr<nsRange> range;
+    RefPtr<dom::Range> range;
     for (uint32_t i = 0; i < rangeCount; i++) {
       range = SelectionRef().GetRangeAt(i);
       if (NS_WARN_IF(!range)) {
@@ -4053,15 +4056,17 @@ NS_IMETHODIMP HTMLEditor::GetCellAt(Element* aTableElement, int32_t aRowIndex,
     }
   }
 
-  RefPtr<Element> cellElement =
-      GetTableCellElementAt(*tableElement, aRowIndex, aColumnIndex);
-  cellElement.forget(aCellElement);
+  RefPtr<Element> cellElement = GetMaybeGeneratedTableCellElementAt(
+      *tableElement, aRowIndex, aColumnIndex);
+  // Don't expose the cell element if it's a generated content.
+  if (cellElement && !cellElement->IsInNativeAnonymousSubtree()) {
+    cellElement.forget(aCellElement);
+  }
   return NS_OK;
 }
 
-Element* HTMLEditor::GetTableCellElementAt(Element& aTableElement,
-                                           int32_t aRowIndex,
-                                           int32_t aColumnIndex) const {
+Element* HTMLEditor::GetMaybeGeneratedTableCellElementAt(
+    Element& aTableElement, int32_t aRowIndex, int32_t aColumnIndex) const {
   // Let's grab the <table> element while we're retrieving layout API since
   // editor developers do not watch all layout API changes.  So, it may
   // become unsafe.
@@ -4071,8 +4076,8 @@ Element* HTMLEditor::GetTableCellElementAt(Element& aTableElement,
     NS_WARNING("There was no table layout information");
     return nullptr;
   }
-  nsIContent* cell = tableFrame->GetCellAt(aRowIndex, aColumnIndex);
-  return Element::FromNodeOrNull(cell);
+  return Element::FromNodeOrNull(
+      tableFrame->GetCellAt(aRowIndex, aColumnIndex));
 }
 
 // When all you want are the rowspan and colspan (not exposed in nsITableEditor)
@@ -4281,8 +4286,9 @@ void HTMLEditor::SetSelectionAfterTableEdit(Element* aTable, int32_t aRow,
   RefPtr<Element> cell;
   bool done = false;
   do {
-    cell = GetTableCellElementAt(*aTable, aRow, aCol);
-    if (cell) {
+    cell = GetMaybeGeneratedTableCellElementAt(*aTable, aRow, aCol);
+    if (cell && HTMLEditUtils::IsSimplyEditableNode(*cell)) {
+      MOZ_ASSERT(!cell->IsInNativeAnonymousSubtree());
       if (aSelected) {
         // Reselect the cell
         DebugOnly<nsresult> rv = SelectContentInternal(*cell);

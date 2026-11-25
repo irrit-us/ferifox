@@ -24,6 +24,7 @@ from run_operations import (
     run_hg,
     run_shell,
 )
+from save_patch_stack import save_patch_stack
 
 # This script drives the libwebrtc fast-forward process one upstream commit
 # at a time.  It is the Python port of loop-ff.sh and expects to be invoked
@@ -325,7 +326,7 @@ remain for this commit:
   # commit the updated moz.build files with the appropriate commit msg
   bash {script_dir}/commit-build-file-changes.sh
   # do a (hopefully) quick test build
-  ./mach build && ./mach build recurse_gtest && echo "Successful build"
+  ./mach build && ./mach build gtest && echo "Successful build"
 
 After a successful build, you may resume this script:
     bash {script_dir}/loop-ff.sh
@@ -335,22 +336,15 @@ After a successful build, you may resume this script:
 
         # save the current patch stack in case we need to reconstitute it later
         echo_log("Save patch-stack")
-        run_command([
-            "./mach",
-            "python",
-            f"{script_dir}/save_patch_stack.py",
-            "--skip-startup-sanity",
-            "--repo-path",
+        save_patch_stack(
             libwebrtc_src,
-            "--branch",
             libwebrtc_branch,
-            "--patch-path",
-            "third_party/libwebrtc/moz-patch-stack",
-            "--state-path",
+            os.path.abspath("third_party/libwebrtc/moz-patch-stack"),
             state_dir,
-            "--target-branch-head",
             target,
-        ])
+            None,
+            False,
+        )
 
         modified_build_related_file_cnt = len(
             run_shell(f"bash {script_dir}/get_build_file_changes.sh")
@@ -367,7 +361,7 @@ Then complete these steps:
   # commit the updated moz.build files with the appropriate commit msg
   bash {script_dir}/commit-build-file-changes.sh
   # do a (hopefully) quick test build
-  ./mach build && ./mach build recurse_gtest && echo "Successful build"
+  ./mach build && ./mach build gtest && echo "Successful build"
 
 After a successful build, you may resume this script:
     bash {script_dir}/loop-ff.sh
@@ -409,14 +403,14 @@ The test build has failed.  Most likely this is due to an upstream api
 change that must be reflected in Mozilla code outside of the
 third_party/libwebrtc directory. After fixing the build, you may resume
 running this script with the following command:
-    ./mach build && ./mach build recurse_gtest && \\
+    ./mach build && ./mach build gtest && \\
     bash {script_dir}/loop-ff.sh
 """
         )
         echo_log("Test build - ./mach build")
         run_command(["./mach", "build"])
-        echo_log("Test build - ./mach build recurse_gtest")
-        run_command(["./mach", "build", "recurse_gtest"])
+        echo_log("Test build - ./mach build gtest")
+        run_command(["./mach", "build", "gtest"])
         error_help.set_help(None)
 
         # If we've committed moz.build changes, spin up try builds.

@@ -4,35 +4,60 @@
 
 package org.mozilla.conventions
 
+import com.android.build.api.artifact.SingleArtifact
+import com.android.build.api.dsl.ApplicationExtension
+import com.android.build.api.dsl.CommonExtension
+import com.android.build.api.variant.ApplicationAndroidComponentsExtension
+import com.android.build.api.variant.FilterConfiguration
 import org.gradle.api.Action
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.artifacts.Configuration
 import org.gradle.api.artifacts.DependencySubstitution
-import org.gradle.api.artifacts.ExternalModuleDependency
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
-import org.gradle.api.attributes.Bundling
 import org.gradle.api.artifacts.component.ModuleComponentSelector
+import org.gradle.api.artifacts.component.ProjectComponentIdentifier
 import org.gradle.api.logging.Logger
 import org.gradle.api.logging.StandardOutputListener
+import org.gradle.api.artifacts.ArtifactView
+import org.gradle.api.artifacts.component.ComponentIdentifier
+import org.gradle.api.artifacts.transform.InputArtifact
+import org.gradle.api.artifacts.transform.TransformAction
+import org.gradle.api.artifacts.transform.TransformOutputs
+import org.gradle.api.artifacts.transform.TransformParameters
+import org.gradle.api.artifacts.transform.TransformSpec
+import org.gradle.api.artifacts.type.ArtifactTypeDefinition
+import org.gradle.api.file.FileSystemLocation
 import org.gradle.api.plugins.AppliedPlugin
+import org.gradle.api.provider.Property
+import org.gradle.api.provider.Provider
+import org.gradle.api.specs.Spec
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.JavaExec
+import org.gradle.api.tasks.Sync
 import org.gradle.api.tasks.testing.Test
 import org.gradle.api.tasks.testing.TestDescriptor
 import org.gradle.api.tasks.testing.TestListener
 import org.gradle.api.tasks.testing.TestOutputEvent
 import org.gradle.api.tasks.testing.TestOutputListener
 import org.gradle.api.tasks.testing.TestResult
+import org.gradle.kotlin.dsl.getByType
+import org.gradle.kotlin.dsl.register
+import org.gradle.kotlin.dsl.withType
 import org.gradle.process.CommandLineArgumentProvider
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.mozilla.conventions.ktfmt.configureKtfmt
 import java.io.File
+import java.util.concurrent.Callable
+import java.util.zip.ZipFile
 
 class ProjectPlugin : Plugin<Project> {
     @Suppress("UNCHECKED_CAST")
     override fun apply(project: Project) {
         val mozilla = project.extensions.create("mozilla", ProjectExtension::class.java)
         mozilla.androidComponentsProject.convention(false)
-        mozilla.ktlintSourcePaths.convention(emptyList())
+        mozilla.ktfmtSourcePaths.convention(emptyList())
         mozilla.detektSourcePaths.convention(emptyList())
         mozilla.detektAutoCorrect.convention(true)
         mozilla.detektReports.convention(emptyMap())
@@ -54,16 +79,17 @@ class ProjectPlugin : Plugin<Project> {
         configureKotlinCompilerMessageReformatting(project)
         configureKotlinWarningsAsErrors(project)
         configureAndroidBuildToolsVersion(project, substs)
-        configureKotlinJvmToolchain(project)
         configureAppServicesSubstitution(project, extraProperties, substs)
         configureGleanSubstitution(project, extraProperties)
         configureGleanVersionResolution(project)
-        configureKtlint(project, mozilla)
+        configureKtfmt(project, mozilla)
         configureDetekt(project, mozilla)
         configureAndroidComponentsLint(project, mozilla, topsrcdir)
-        configureTestOutputFormatting(project)
+        configureUnitTests(project)
         configurePackagingResourcesExcludes(project)
+        configureBuildMetadata(project)
         registerPrintVariantsTask(project)
+        configureNativeLibsForTests(project, substs)
     }
 
     // Initialize the project buildDir to be in ${topobjdir} to follow
@@ -91,14 +117,10 @@ class ProjectPlugin : Plugin<Project> {
     // implicit behaviour. Our projects do not specify the `ndkVersion` for our main Android builds
     // and so stripping would otherwise fail with a warning. Note that gecko builds themselves will
     // already strip the *.so files when compiled as release targets.
-    @Suppress("UNCHECKED_CAST")
     private fun configureJniKeepDebugSymbols(project: Project) {
         val action = Action<AppliedPlugin> {
-            val android = project.extensions.getByName("android")
-            val packaging = android.javaClass.getMethod("getPackaging").invoke(android)
-            val jniLibs = packaging.javaClass.getMethod("getJniLibs").invoke(packaging)
-            val keepDebugSymbols = jniLibs.javaClass.getMethod("getKeepDebugSymbols").invoke(jniLibs)
-            (keepDebugSymbols as MutableSet<String>).add("**/*.so")
+            val android = project.extensions.getByType<CommonExtension>()
+            android.packaging.jniLibs.keepDebugSymbols.add("**/*.so")
         }
         project.pluginManager.withPlugin("com.android.library", action)
         project.pluginManager.withPlugin("com.android.application", action)
@@ -141,6 +163,94 @@ class ProjectPlugin : Plugin<Project> {
         if (extraProperties.has("localProperties.autoPublish.glean.dir")) {
             substituteWithMavenLocal(project, "local-glean", GLEAN_GROUPS)
         }
+    }
+
+    // Extract native libs from libsForTests JARs so transitive .so dependencies
+    // (e.g. libmozsqlite3.so needed by libmegazord.so) can be found by the OS
+    // dynamic linker during JVM unit tests.
+    private fun configureNativeLibsForTests(project: Project, substs: Map<String, Any>) {
+        if (substs["DOWNLOAD_ALL_GRADLE_DEPENDENCIES"].isTruthy()) {
+            return
+        }
+
+        val osName = System.getProperty("os.name", "").lowercase()
+        val osArch = System.getProperty("os.arch", "").lowercase()
+        val osPrefix = when {
+            osName.contains("linux") -> "linux"
+            osName.contains("mac") || osName.contains("darwin") -> "darwin"
+            osName.contains("win") -> "win32"
+            else -> return
+        }
+        val archSuffix = when {
+            osArch.contains("aarch64") || osArch.contains("arm64") -> "aarch64"
+            osArch.contains("x86_64") || osArch.contains("amd64") -> "x86-64"
+            else -> return
+        }
+        val jnaPlatform = "$osPrefix-$archSuffix"
+        val nativeLibsType = "mozilla-native-libs-for-tests"
+
+        // Unpack the libsForTests JAR's native libs through an artifact transform.
+        // The transform is cached and only runs for configurations that actually
+        // resolve the JAR, so test tasks without the dependency see an empty view.
+        project.dependencies.registerTransform(
+            ExtractNativeLibsForTests::class.java,
+            Action<TransformSpec<ExtractNativeLibsForTests.Parameters>> {
+                from.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.JAR_TYPE)
+                to.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, nativeLibsType)
+                parameters.jnaPlatform.set(jnaPlatform)
+            }
+        )
+
+        val nativeLibs = project.files(Callable {
+            project.configurations
+                .filter { it.isCanBeResolved && it.name.contains("UnitTestRuntimeClasspath") }
+                .map { config ->
+                    config.incoming.artifactView(Action<ArtifactView.ViewConfiguration> {
+                        attributes.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, nativeLibsType)
+                        componentFilter(Spec<ComponentIdentifier> { id ->
+                            id is ModuleComponentIdentifier && id.module.contains("libsForTests")
+                        })
+                        lenient(true)
+                    }).files
+                }
+        })
+
+        // Stage the extracted libs into a fixed directory so the test tasks have
+        // a stable location to point their library paths at.
+        val stageNativeLibs = project.tasks.register(
+            "stageNativeLibsForTests",
+            Sync::class.java,
+            Action<Sync> {
+                from(nativeLibs)
+                into(project.layout.buildDirectory.dir("nativeLibsForTests"))
+            }
+        )
+        val nativeLibsDir = project.layout.buildDirectory.dir("nativeLibsForTests").get().asFile
+        val hostPath = project.providers.environmentVariable("PATH")
+
+        project.tasks.withType(Test::class.java).configureEach(Action<Test> {
+            val testTask = this
+            testTask.dependsOn(stageNativeLibs)
+            testTask.inputs.files(stageNativeLibs).withPropertyName("nativeLibsForTests")
+            testTask.jvmArgumentProviders.add(CommandLineArgumentProvider {
+                if (nativeLibsDir.list().isNullOrEmpty()) {
+                    emptyList()
+                } else {
+                    listOf(
+                        "-Djna.library.path=${nativeLibsDir.absolutePath}",
+                        "-Djava.library.path=${nativeLibsDir.absolutePath}",
+                    )
+                }
+            })
+            // Windows has no rpath; nss3 loads softokn3/freebl3 through the OS
+            // DLL search, so put the staged libs directory on the test JVM PATH.
+            if (osPrefix == "win32") {
+                testTask.environment(
+                    "PATH",
+                    "${nativeLibsDir.absolutePath}${File.pathSeparator}${hostPath.getOrElse("")}",
+                )
+            }
+        })
     }
 
     // Substitutes dependencies to use locally published versions from mavenLocal.
@@ -193,11 +303,7 @@ class ProjectPlugin : Plugin<Project> {
             Regex("""([ew]): (.+): \((\d+), (\d+)\): (.*)"""),
         )
 
-        project.tasks.configureEach {
-            if (!this::class.java.name.startsWith("org.jetbrains.kotlin.gradle.tasks.KotlinCompile")) {
-                return@configureEach
-            }
-
+        project.tasks.withType<KotlinCompile>().configureEach {
             // Translate Kotlin messages like "w: ..." and "e: ..." into
             // "...: warning: ..." and "...: error: ...", to make Treeherder understand.
             val listener = StandardOutputListener { message ->
@@ -235,39 +341,17 @@ class ProjectPlugin : Plugin<Project> {
     }
 
     private fun configureKotlinWarningsAsErrors(project: Project) {
-        project.tasks.configureEach {
-            if (!this::class.java.name.startsWith("org.jetbrains.kotlin.gradle.tasks.KotlinCompile")) {
-                return@configureEach
+        project.tasks.withType<KotlinCompile>().configureEach {
+            compilerOptions {
+                allWarningsAsErrors.set(true)
             }
-            val compilerOptions = this::class.java.getMethod("getCompilerOptions").invoke(this)
-            val allWarningsAsErrors = compilerOptions::class.java.getMethod("getAllWarningsAsErrors").invoke(compilerOptions)
-            allWarningsAsErrors::class.java.getMethod("set", Any::class.java).invoke(allWarningsAsErrors, true)
         }
     }
 
     private fun configureAndroidBuildToolsVersion(project: Project, substs: Map<String, Any>) {
         val buildToolsVersion = substs["ANDROID_BUILD_TOOLS_VERSION"] as String
-
-        // Use android plugin id string and reflection to avoid classloader isolation issues
         project.pluginManager.withPlugin("com.android.base") {
-            val android = project.extensions.findByName("android") ?: return@withPlugin
-            android::class.java.getMethod("setBuildToolsVersion", String::class.java)
-                .invoke(android, buildToolsVersion)
-        }
-    }
-
-    // Reads rootProject extra properties; IsolatedProject does not expose extensions/extraProperties.
-    @Suppress("GradleProjectIsolation")
-    private fun configureKotlinJvmToolchain(project: Project) {
-        // Wait for Android plugin first to ensure Java plugin extension exists
-        project.pluginManager.withPlugin("com.android.base") {
-            project.pluginManager.withPlugin("org.jetbrains.kotlin.android") {
-                val kotlin = project.extensions.findByName("kotlin") ?: return@withPlugin
-                val config = project.rootProject.extensions.extraProperties["config"] ?: return@withPlugin
-                val jvmTargetCompatibility = config.javaClass.getField("jvmTargetCompatibility").get(config) as Int
-                kotlin::class.java.getMethod("jvmToolchain", Integer.TYPE)
-                    .invoke(kotlin, jvmTargetCompatibility)
-            }
+            project.extensions.getByType<CommonExtension>().buildToolsVersion = buildToolsVersion
         }
     }
 
@@ -298,9 +382,14 @@ class ProjectPlugin : Plugin<Project> {
                     }
                     capabilitiesResolution {
                         withCapability("org.mozilla.telemetry:glean-native") {
+                            // GeckoView provides Glean either as an in-build project or as a
+                            // published module, depending on the build composition.
                             val toBeSelected = candidates.find {
-                                it.id is ModuleComponentIdentifier &&
-                                    (it.id as ModuleComponentIdentifier).module.contains("geckoview")
+                                when (val id = it.id) {
+                                    is ProjectComponentIdentifier -> id.projectName.contains("geckoview")
+                                    is ModuleComponentIdentifier -> id.module.contains("geckoview")
+                                    else -> false
+                                }
                             }
                             if (toBeSelected != null) {
                                 select(toBeSelected)
@@ -321,75 +410,6 @@ class ProjectPlugin : Plugin<Project> {
         private val GLEAN_GROUPS = setOf("org.mozilla.telemetry")
     }
 
-    private fun configureKtlint(project: Project, mozilla: ProjectExtension) {
-        val sourcePaths = mozilla.ktlintSourcePaths
-
-        val ktlintConfig = project.configurations.register("ktlint")
-
-        val ktlintDep = project.provider {
-            val versionCatalogs = project.extensions.getByType(VersionCatalogsExtension::class.java)
-            val libs = versionCatalogs.named("libs")
-            val dep = project.dependencies.create(libs.findLibrary("ktlint").get().get())
-            if (dep is ExternalModuleDependency) {
-                dep.attributes {
-                    attribute(Bundling.BUNDLING_ATTRIBUTE, project.objects.named(Bundling::class.java, Bundling.EXTERNAL))
-                }
-            }
-            dep
-        }
-        ktlintConfig.configure { dependencies.addLater(ktlintDep) }
-        val ktlintClasspath = project.files(ktlintConfig)
-
-        // Resolve the include/exclude globs (with leading "!" meaning exclude)
-        // into a FileTree rooted at projectDir, so Gradle can use the actual
-        // Kotlin source set to compute UP-TO-DATE / build cache keys.
-        fun ktlintSourceTree() = project.fileTree(project.projectDir).matching {
-            sourcePaths.get().forEach { pattern ->
-                if (pattern.startsWith("!")) {
-                    exclude(pattern.removePrefix("!"))
-                } else {
-                    include(pattern)
-                }
-            }
-        }
-
-        project.tasks.register("ktlint", JavaExec::class.java) {
-            group = "verification"
-            description = "Check Kotlin code style."
-            classpath = ktlintClasspath
-            mainClass.set("com.pinterest.ktlint.Main")
-            onlyIf { sourcePaths.get().isNotEmpty() }
-            sourcePaths.get().forEach { args(it) }
-            args("--reporter=json,output=build/reports/ktlint/ktlint.json")
-            args("--reporter=plain")
-            inputs.files(ktlintSourceTree())
-                .withPropertyName("ktlintSources")
-                .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
-                .skipWhenEmpty()
-            outputs.file(project.file("build/reports/ktlint/ktlint.json"))
-                .withPropertyName("ktlintReport")
-            outputs.cacheIf { true }
-        }
-
-        project.tasks.register("ktlintFormat", JavaExec::class.java) {
-            group = "formatting"
-            description = "Fix Kotlin code style deviations."
-            classpath = ktlintClasspath
-            mainClass.set("com.pinterest.ktlint.Main")
-            onlyIf { sourcePaths.get().isNotEmpty() }
-            args("-F")
-            sourcePaths.get().forEach { args(it) }
-            args("--reporter=json,output=build/reports/ktlint/ktlintFormat.json")
-            args("--reporter=plain")
-            jvmArgs("--add-opens", "java.base/java.lang=ALL-UNNAMED")
-            inputs.files(ktlintSourceTree())
-                .withPropertyName("ktlintFormatSources")
-                .withPathSensitivity(org.gradle.api.tasks.PathSensitivity.RELATIVE)
-                .skipWhenEmpty()
-            outputs.file(project.file("build/reports/ktlint/ktlintFormat.json"))
-                .withPropertyName("ktlintFormatReport")
-        }
-    }
 
     private fun configureDetekt(project: Project, mozilla: ProjectExtension) {
         val sourcePaths = mozilla.detektSourcePaths
@@ -498,31 +518,23 @@ class ProjectPlugin : Plugin<Project> {
         }
     }
 
-    @Suppress("UNCHECKED_CAST")
+    @Suppress("DEPRECATION") // `sarifReport` and `sarifOutput` are deprecated
     private fun configureAndroidComponentsLint(project: Project, mozilla: ProjectExtension, topsrcdir: String) {
         val action = Action<AppliedPlugin> {
-            if (!mozilla.androidComponentsProject.get()) {
-                return@Action
-            }
-            val sarifOutput = File(
+            if (!mozilla.androidComponentsProject.get()) return@Action
+
+            val sarifOutputFile = File(
                 topsrcdir,
                 "mobile/android/android-components/build/reports/lint/lint-report-${project.name}.sarif.json",
             )
-            val android = project.extensions.getByName("android")
-            val lint = android.javaClass.getMethod("getLint").invoke(android)
-            lint.javaClass.getMethod("setBaseline", File::class.java)
-                .invoke(lint, project.file("lint-baseline.xml"))
-            lint.javaClass.getMethod("setWarningsAsErrors", Boolean::class.javaPrimitiveType)
-                .invoke(lint, true)
-            lint.javaClass.getMethod("setAbortOnError", Boolean::class.javaPrimitiveType)
-                .invoke(lint, false)
-            lint.javaClass.getMethod("setSarifReport", Boolean::class.javaPrimitiveType)
-                .invoke(lint, true)
-            lint.javaClass.getMethod("setSarifOutput", File::class.java)
-                .invoke(lint, sarifOutput)
-            val disable = lint.javaClass.getMethod("getDisable").invoke(lint) as MutableSet<String>
-            disable.addAll(
-                listOf(
+            val android = project.extensions.getByType<CommonExtension>()
+            with(android.lint) {
+                baseline = project.file("lint-baseline.xml")
+                warningsAsErrors = true
+                abortOnError = false
+                sarifReport = true
+                sarifOutput = sarifOutputFile
+                disable += listOf(
                     "MissingTranslation",
                     "ExtraTranslation",
                     "MissingDefaultResource",
@@ -535,24 +547,33 @@ class ProjectPlugin : Plugin<Project> {
                     // "We do not impose rules on locales"
                     // https://github.com/mozilla-mobile/android-components/pull/11069
                     "TypographyDashes",
-                ),
-            )
+                )
+            }
         }
         project.pluginManager.withPlugin("com.android.library", action)
         project.pluginManager.withPlugin("com.android.application", action)
     }
 
-    // Translates JUnit test events into Mozilla's TBPL-like textual format that Taskcluster
-    // log parsing expects. See also: testing/mozbase/mozlog/mozlog/formatters/tbplformatter.py
-    private fun configureTestOutputFormatting(project: Project) {
+    private fun configureUnitTests(project: Project) {
+        val automation = project.providers.environmentVariable("MOZ_AUTOMATION").isPresent
+        val fetches = project.providers.environmentVariable("MOZ_FETCHES_DIR")
         project.pluginManager.withPlugin("com.android.base") {
             project.tasks.withType(Test::class.java).configureEach {
                 systemProperty("robolectric.logging", "stdout")
                 systemProperty("logging.test-mode", "true")
                 systemProperty("javax.net.ssl.trustStoreType", "JKS")
+                if (automation) {
+                    systemProperty(
+                        "robolectric.dependency.dir",
+                        File(fetches.get(), "robolectric-android-all").path,
+                    )
+                }
 
                 testLogging.events = emptySet()
 
+                // Translates JUnit test events into Mozilla's TBPL-like textual format that
+                // Taskcluster log parsing expects.
+                // See also: testing/mozbase/mozlog/mozlog/formatters/tbplformatter.py
                 val listener = MozillaTestOutputListener(logger)
                 addTestListener(listener)
                 addTestOutputListener(listener)
@@ -560,92 +581,68 @@ class ProjectPlugin : Plugin<Project> {
         }
     }
 
-    @Suppress("UNCHECKED_CAST")
+    /**
+     * Applies the packaging resources exclusions for Android library and application projects
+     */
     private fun configurePackagingResourcesExcludes(project: Project) {
         val action = Action<AppliedPlugin> {
-            val android = project.extensions.getByName("android")
-            val packaging = android.javaClass.getMethod("getPackaging").invoke(android)
-            val resources = packaging.javaClass.getMethod("getResources").invoke(packaging)
-            val excludes = resources.javaClass.getMethod("getExcludes").invoke(resources) as MutableSet<String>
-            excludes.addAll(listOf("META-INF/LICENSE.md", "META-INF/LICENSE-notice.md"))
+            val android = project.extensions.getByType<CommonExtension>()
+            android.packaging.resources.excludes.addAll(listOf("META-INF/LICENSE.md", "META-INF/LICENSE-notice.md"))
         }
         project.pluginManager.withPlugin("com.android.library", action)
         project.pluginManager.withPlugin("com.android.application", action)
     }
 
-    @Suppress("UNCHECKED_CAST")
+    /**
+     * Adds the `build-metadata.properties` asset to minified application variants.
+     */
+    private fun configureBuildMetadata(project: Project) {
+        project.pluginManager.withPlugin("com.android.application") {
+            val androidComponents = project.extensions.getByType<ApplicationAndroidComponentsExtension>()
+            androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+                if (!variant.isMinifyEnabled) return@onVariants
+                val task = project.tasks.register<WriteBuildMetadata>(
+                    "writeBuildMetadata${variant.name.replaceFirstChar { it.uppercase() }}",
+                ) {
+                    mappingFile.set(variant.artifacts.get(SingleArtifact.OBFUSCATION_MAPPING_FILE))
+                }
+                variant.sources.assets?.addGeneratedSourceDirectory(task, WriteBuildMetadata::outputDir)
+            }
+        }
+    }
+
     private fun registerPrintVariantsTask(project: Project) {
         project.pluginManager.withPlugin("com.android.application") {
             val outputFile = project.file("build/printVariants.json")
             val variants = mutableListOf<Map<String, Any?>>()
 
-            // Only collect variant metadata when printVariants is actually being run. onVariants is a
-            // configuration-time callback (unlike the legacy applicationVariants collection, which we could
-            // wrap in a lazy provider resolved at execution), so gating its registration keeps the
-            // reflection out of every other build that configures this project.
+            // onVariants is a configuration-time callback, so only collect variant metadata when
+            // printVariants is actually being run.
             val wantsPrintVariants = project.gradle.startParameter.taskNames.any {
                 it.substringAfterLast(':') == "printVariants"
             }
             if (wantsPrintVariants) {
-                val androidComponents = project.extensions.getByName("androidComponents")
-                val android = project.extensions.getByName("android")
-                val buildTypes = android.javaClass.getMethod("getBuildTypes").invoke(android)
+                val buildTypes = project.extensions.getByType<ApplicationExtension>().buildTypes
+                val androidComponents = project.extensions.getByType<ApplicationAndroidComponentsExtension>()
 
-                // Collect variant metadata via the new androidComponents.onVariants API (the legacy
-                // applicationVariants API is removed in AGP 9). We go through reflection because this
-                // convention plugin has no runtime dependency on the Android Gradle plugin; its types are
-                // loaded from the consuming project's classloader. The APK file name is reconstructed from
-                // the flavor/ABI/build type since the new VariantOutput no longer exposes the output file.
-                val collectVariant = { variant: Any ->
-                    val variantName = variant.javaClass.getMethod("getName").invoke(variant) as String
-                    val buildType = variant.javaClass.getMethod("getBuildType").invoke(variant) as String?
-                    val flavorName = variant.javaClass.getMethod("getFlavorName").invoke(variant) as String?
-                    val flavorPrefix = if (!flavorName.isNullOrEmpty()) "$flavorName-" else ""
+                // The APK file name is reconstructed from the flavor/ABI/build type since VariantOutput
+                // does not expose the output file.
+                androidComponents.onVariants(androidComponents.selector().all()) { variant ->
+                    val buildType = variant.buildType
+                    val flavorPrefix = if (!variant.flavorName.isNullOrEmpty()) "${variant.flavorName}-" else ""
                     // AGP appends "-unsigned" to APKs whose build type has no signing config.
-                    val signed = buildTypes.javaClass.getMethod("getByName", String::class.java)
-                        .invoke(buildTypes, buildType)
-                        .let { it.javaClass.getMethod("getSigningConfig").invoke(it) != null }
+                    val signed = buildTypes.getByName(requireNotNull(buildType)).signingConfig != null
                     val signedSuffix = if (signed) "" else "-unsigned"
-                    val outputs = variant.javaClass.getMethod("getOutputs").invoke(variant) as Iterable<*>
 
-                    val apks = outputs.map { output ->
-                        val filters = output!!.javaClass.getMethod("getFilters").invoke(output) as Iterable<*>
-                        val abi = filters
-                            .firstOrNull { f ->
-                                val filterType = f!!.javaClass.getMethod("getFilterType").invoke(f)
-                                (filterType as Enum<*>).name == "ABI"
-                            }
-                            ?.let { f -> f!!.javaClass.getMethod("getIdentifier").invoke(f) as String }
+                    val apks = variant.outputs.map { output ->
+                        val abi = output.filters
+                            .firstOrNull { it.filterType == FilterConfiguration.FilterType.ABI }
+                            ?.identifier
                             ?: "universal"
                         mapOf("abi" to abi, "fileName" to "app-$flavorPrefix$abi-$buildType$signedSuffix.apk")
-                    }.sortedBy { it["abi"] as String }
-                    variants.add(mapOf("apks" to apks, "build_type" to buildType, "name" to variantName))
+                    }.sortedBy { it["abi"] }
+                    variants.add(mapOf("apks" to apks, "build_type" to buildType, "name" to variant.name))
                 }
-
-                val selector = androidComponents.javaClass.getMethod("selector").invoke(androidComponents)
-                val allSelector = selector.javaClass.getMethod("all").invoke(selector)
-                // onVariants(VariantSelector, (Variant) -> Unit). The callback is a Kotlin function type;
-                // build the proxy from the method's own parameter type so it is loaded by the same
-                // (Android Gradle plugin) classloader the method expects.
-                val onVariants = androidComponents.javaClass.methods.first {
-                    it.name == "onVariants" &&
-                        it.parameterCount == 2 &&
-                        it.parameterTypes[1].name == "kotlin.jvm.functions.Function1"
-                }
-                val callbackType = onVariants.parameterTypes[1]
-                val callback = java.lang.reflect.Proxy.newProxyInstance(
-                    callbackType.classLoader,
-                    arrayOf(callbackType),
-                ) { _, method, args ->
-                    when (method.name) {
-                        "invoke" -> { collectVariant(args!![0]!!); Unit }
-                        "equals" -> false
-                        "hashCode" -> 0
-                        "toString" -> "printVariantsCollector"
-                        else -> null
-                    }
-                }
-                onVariants.invoke(androidComponents, allSelector, callback)
             }
 
             project.tasks.register("printVariants") {
@@ -703,5 +700,35 @@ private class MozillaTestOutputListener(
 
     override fun onOutput(testDescriptor: TestDescriptor, outputEvent: TestOutputEvent) {
         taskLogger.lifecycle("    ${outputEvent.message.trim()}")
+    }
+}
+
+// Unpacks the host platform native libs (the `<jna platform>/` entries) out of a
+// libsForTests JAR into a flat directory, so JVM unit tests can load them.
+abstract class ExtractNativeLibsForTests : TransformAction<ExtractNativeLibsForTests.Parameters> {
+    interface Parameters : TransformParameters {
+        @get:Input
+        val jnaPlatform: Property<String>
+    }
+
+    @get:InputArtifact
+    abstract val inputArtifact: Provider<FileSystemLocation>
+
+    override fun transform(outputs: TransformOutputs) {
+        val jar = inputArtifact.get().asFile
+        val platform = parameters.jnaPlatform.get()
+        val outputDir = outputs.dir("native-libs")
+        ZipFile(jar).use { zip ->
+            zip.entries().asSequence()
+                .filter { it.name.startsWith("$platform/") && !it.isDirectory }
+                .forEach { entry ->
+                    val outFile = File(outputDir, entry.name.substringAfterLast("/"))
+                    zip.getInputStream(entry).use { input ->
+                        outFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                }
+        }
     }
 }

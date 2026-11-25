@@ -264,7 +264,13 @@ impl FontCache {
     }
 
     fn delete_font(&mut self, cached: Arc<Mutex<CachedFont>>) {
-        self.fonts.remove(&cached.lock().unwrap().template);
+        // Check for other users while FONT_CACHE is locked so that add_font cannot
+        // hand out another reference before we remove the cache entry. If the only
+        // references are the cache and this argument, the face is also destroyed
+        // under the lock, as required by the shared FreeType library.
+        if Arc::strong_count(&cached) <= 2 {
+            self.fonts.remove(&cached.lock().unwrap().template);
+        }
     }
 }
 
@@ -426,11 +432,7 @@ impl FontContext {
 
     pub fn delete_font(&mut self, font_key: &FontKey) {
         if let Some(cached) = self.fonts.remove(font_key) {
-            // If the only references to this font are the FontCache and this FontContext,
-            // then delete the font as there are no other existing users.
-            if Arc::strong_count(&cached) <= 2 {
-                FONT_CACHE.lock().unwrap().delete_font(cached);
-            }
+            FONT_CACHE.lock().unwrap().delete_font(cached);
         }
     }
 
@@ -526,7 +528,7 @@ impl FontContext {
             unsafe { FT_Set_Transform(face, ptr::null_mut(), ptr::null_mut()) };
             Self::choose_bitmap_size(face, req_size * y_scale)
         } else {
-            let mut shape = font.transform.invert_scale(x_scale, y_scale);
+            let mut shape = font.transform;
             if font.flags.contains(FontInstanceFlags::FLIP_X) {
                 shape = shape.flip_x();
             }
@@ -536,6 +538,11 @@ impl FontContext {
             if font.flags.contains(FontInstanceFlags::TRANSPOSE) {
                 shape = shape.swap_xy();
             }
+            // FT_Set_Char_Size scales the glyph before the transform is applied,
+            // so the scale must be taken from the oriented glyph transform. For a
+            // transposed glyph, its x axis maps to the device y axis.
+            let (x_scale, y_scale) = shape.compute_scale().unwrap_or((1.0, 1.0));
+            shape = shape.invert_scale(x_scale, y_scale);
             let (mut tx, mut ty) = (0.0, 0.0);
             if font.synthetic_italics.is_enabled() {
                 let (shape_, (tx_, ty_)) = font.synthesize_italics(shape, y_scale * req_size);

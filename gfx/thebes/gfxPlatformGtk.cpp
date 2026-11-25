@@ -240,6 +240,13 @@ void gfxPlatformGtk::InitPlatformHardwareVideoConfig() {
                             FeatureStatus::Unavailable, "Requires EGL",
                             "FEATURE_FAILURE_REQUIRES_EGL"_ns);
   }
+  if (!gfxVars::UseDMABuf()) {
+    featureDec.ForceDisable(FeatureStatus::Unavailable, "Requires DMABUF",
+                            "FEATURE_FAILURE_REQUIRES_DMABUF"_ns);
+    gfxConfig::ForceDisable(Feature::HARDWARE_VIDEO_ENCODING,
+                            FeatureStatus::Unavailable, "Requires DMABUF",
+                            "FEATURE_FAILURE_REQUIRES_DMABUF"_ns);
+  }
 
   if (!featureDec.IsEnabled()) {
     return;
@@ -249,6 +256,7 @@ void gfxPlatformGtk::InitPlatformHardwareVideoConfig() {
   FeatureState& featureZeroCopy =
       gfxConfig::GetFeature(Feature::HW_DECODED_VIDEO_ZERO_COPY);
 
+  featureZeroCopy.Reset();
   featureZeroCopy.EnableByDefault();
   uint32_t state =
       StaticPrefs::media_ffmpeg_vaapi_force_surface_zero_copy_AtStartup();

@@ -39,16 +39,17 @@ import mozilla.components.compose.base.LinkTextState
 import mozilla.components.compose.base.Switch
 import mozilla.components.compose.base.annotation.FlexibleWindowPreview
 import mozilla.components.compose.base.button.TextButton
+import mozilla.components.compose.base.theme.PreviewThemeProvider
+import mozilla.components.compose.base.theme.Theme
 import org.mozilla.fenix.R
 import org.mozilla.fenix.onboarding.store.PrivacyPreferencesAction
 import org.mozilla.fenix.onboarding.store.PrivacyPreferencesStore
+import org.mozilla.fenix.onboarding.view.hapticOnCheckedChange
+import org.mozilla.fenix.onboarding.view.hapticOnClick
+import org.mozilla.fenix.onboarding.view.hapticOnLinkClick
 import org.mozilla.fenix.theme.FirefoxTheme
-import org.mozilla.fenix.theme.PreviewThemeProvider
-import org.mozilla.fenix.theme.Theme
 
-/**
- * Dialog to manage privacy preferences during onboarding.
- */
+/** Dialog to manage privacy preferences during onboarding. */
 @Composable
 fun ManagePrivacyPreferencesDialog(
     store: PrivacyPreferencesStore,
@@ -66,11 +67,7 @@ fun ManagePrivacyPreferencesDialog(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
             shape = MaterialTheme.shapes.small,
         ) {
-            Column(
-                Modifier
-                    .padding(16.dp)
-                    .verticalScroll(rememberScrollState()),
-            ) {
+            Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
                 Title()
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -111,9 +108,7 @@ private fun CrashReportingPreference(
         label = stringResource(R.string.onboarding_preferences_dialog_crash_reporting_title),
         checked = crashReportingEnabled,
         onCheckedChange = {
-            store.dispatch(
-                PrivacyPreferencesAction.CrashReportingPreferenceUpdatedTo(it),
-            )
+            store.dispatch(PrivacyPreferencesAction.CrashReportingPreferenceUpdatedTo(it))
         },
         modifier = Modifier.wrapContentWidth(),
         labelStyle = FirefoxTheme.typography.body2,
@@ -130,13 +125,14 @@ private fun CrashReportingPreference(
 
     LinkText(
         text = stringResource(R.string.onboarding_preferences_dialog_crash_reporting_learn_more_2),
-        linkTextStates = listOf(
-            LinkTextState(
-                text = stringResource(id = R.string.onboarding_preferences_dialog_crash_reporting_learn_more_2),
-                url = "",
-                onClick = { onLinkClick() },
+        linkTextStates =
+            listOf(
+                LinkTextState(
+                    text = stringResource(id = R.string.onboarding_preferences_dialog_crash_reporting_learn_more_2),
+                    url = "",
+                    onClick = hapticOnLinkClick { onLinkClick() },
+                )
             ),
-        ),
         style = FirefoxTheme.typography.caption,
     )
 }
@@ -151,9 +147,7 @@ private fun UsageDataPreference(
         label = stringResource(R.string.onboarding_preferences_dialog_usage_data_title),
         checked = usageDataEnabled,
         onCheckedChange = {
-            store.dispatch(
-                PrivacyPreferencesAction.UsageDataPreferenceUpdatedTo(it),
-            )
+            store.dispatch(PrivacyPreferencesAction.UsageDataPreferenceUpdatedTo(it))
         },
         modifier = Modifier.wrapContentWidth(),
         labelStyle = FirefoxTheme.typography.body2,
@@ -170,13 +164,14 @@ private fun UsageDataPreference(
 
     LinkText(
         text = stringResource(R.string.onboarding_preferences_dialog_usage_data_learn_more_2),
-        linkTextStates = listOf(
-            LinkTextState(
-                text = stringResource(id = R.string.onboarding_preferences_dialog_usage_data_learn_more_2),
-                url = "",
-                onClick = { onLinkClick() },
+        linkTextStates =
+            listOf(
+                LinkTextState(
+                    text = stringResource(id = R.string.onboarding_preferences_dialog_usage_data_learn_more_2),
+                    url = "",
+                    onClick = hapticOnLinkClick { onLinkClick() },
+                )
             ),
-        ),
         style = FirefoxTheme.typography.caption,
     )
 }
@@ -184,14 +179,12 @@ private fun UsageDataPreference(
 @Composable
 private fun PositiveButton(onDismissRequest: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .wrapContentHeight(),
+        modifier = Modifier.fillMaxWidth().wrapContentHeight(),
         horizontalArrangement = Arrangement.End,
     ) {
         TextButton(
             text = stringResource(R.string.onboarding_preferences_dialog_positive_button),
-            onClick = { onDismissRequest() },
+            onClick = hapticOnClick { onDismissRequest() },
         )
     }
 }
@@ -206,47 +199,43 @@ private fun SwitchWithLabel(
     labelStyle: TextStyle = FirefoxTheme.typography.body1,
     onCheckedChange: ((Boolean) -> Unit),
 ) {
+    val onCheckedChangeWithHaptic = hapticOnCheckedChange(onCheckedChange)
+
     Row(
-        modifier = Modifier
-            .toggleable(
-                value = checked,
-                enabled = enabled,
-                role = Role.Switch,
-                onValueChange = onCheckedChange,
-            ).then(
-                modifier,
-            ),
+        modifier =
+            Modifier.toggleable(
+                    value = checked,
+                    enabled = enabled,
+                    role = Role.Switch,
+                    onValueChange = onCheckedChangeWithHaptic,
+                )
+                .then(modifier),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(
-            modifier = Modifier
-                .weight(1f),
-        ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
-                modifier = Modifier
-                    .defaultMinSize(minHeight = 24.dp)
-                    .wrapContentHeight(),
-                color = if (enabled) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                },
+                modifier = Modifier.defaultMinSize(minHeight = 24.dp).wrapContentHeight(),
+                color =
+                    if (enabled) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    },
                 style = labelStyle,
             )
 
             description?.let {
                 Text(
                     text = description,
-                    modifier = Modifier
-                        .defaultMinSize(minHeight = 20.dp)
-                        .wrapContentHeight(),
-                    color = if (enabled) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                    },
+                    modifier = Modifier.defaultMinSize(minHeight = 20.dp).wrapContentHeight(),
+                    color =
+                        if (enabled) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                        },
                     style = FirefoxTheme.typography.body2,
                 )
             }
@@ -255,7 +244,7 @@ private fun SwitchWithLabel(
         Switch(
             modifier = Modifier.clearAndSetSemantics {},
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = onCheckedChangeWithHaptic,
             enabled = enabled,
         )
     }
@@ -263,9 +252,7 @@ private fun SwitchWithLabel(
 
 @FlexibleWindowPreview
 @Composable
-private fun ManagePrivacyPreferencesDialogPreview(
-    @PreviewParameter(PreviewThemeProvider::class) theme: Theme,
-) {
+private fun ManagePrivacyPreferencesDialogPreview(@PreviewParameter(PreviewThemeProvider::class) theme: Theme) {
     FirefoxTheme(theme) {
         ManagePrivacyPreferencesDialog(PrivacyPreferencesStore(), {}, {}, {})
     }

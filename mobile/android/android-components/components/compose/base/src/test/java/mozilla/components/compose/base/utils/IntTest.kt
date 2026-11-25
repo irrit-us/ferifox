@@ -4,18 +4,18 @@
 
 package mozilla.components.compose.base.utils
 
+import java.util.Locale
 import org.junit.Assert
 import org.junit.Test
-import java.util.Locale
 
 class IntTest {
 
     @Test
-    fun `WHEN the language is Arabic THEN translate the number to the proper symbol of that locale`() {
-        val expected = "٥"
+    fun `WHEN the language is Persian THEN translate the number to the proper symbol of that locale`() {
+        val expected = "۵"
         val numberUnderTest = 5
 
-        Locale.setDefault(Locale.forLanguageTag("ar"))
+        Locale.setDefault(Locale.forLanguageTag("fa"))
 
         Assert.assertEquals(expected, numberUnderTest.toLocaleString())
     }

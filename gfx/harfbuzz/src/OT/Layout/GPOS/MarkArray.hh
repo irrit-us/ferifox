@@ -25,27 +25,33 @@ resolve_cross_offset (const hb_glyph_position_t *pos,
     if (unlikely (parent >= len))
       break;
     glyph_pos = parent;
-    offset += horizontal ? pos[glyph_pos].y_offset : pos[glyph_pos].x_offset;
+    offset = hb_saturate_add (offset,
+			      horizontal ? pos[glyph_pos].y_offset : pos[glyph_pos].x_offset);
   }
   return offset;
 }
 
-struct MarkArray : Array16Of<MarkRecord>        /* Array of MarkRecords--in Coverage order */
+template <typename Types>
+struct MarkArray : Types::template ArrayOf<MarkRecord<Types>>
+                                                /* Array of MarkRecords--in Coverage order */
 {
+  typedef typename Types::template ArrayOf<MarkRecord<Types>> Super;
+
   bool sanitize (hb_sanitize_context_t *c) const
   {
     TRACE_SANITIZE (this);
-    return_trace (Array16Of<MarkRecord>::sanitize (c, this));
+    return_trace (Super::sanitize (c, this));
   }
 
+  template <typename AnchorMatrixType>
   bool apply (hb_ot_apply_context_t *c,
               unsigned int mark_index, unsigned int glyph_index,
-              const AnchorMatrix &anchors, unsigned int class_count,
+              const AnchorMatrixType &anchors, unsigned int class_count,
               unsigned int glyph_pos) const
   {
     TRACE_APPLY (this);
     hb_buffer_t *buffer = c->buffer;
-    const MarkRecord &record = Array16Of<MarkRecord>::operator[](mark_index);
+    const MarkRecord<Types> &record = Super::operator[](mark_index);
     unsigned int mark_class = record.klass;
 
     const Anchor& mark_anchor = this + record.markAnchor;
@@ -82,9 +88,9 @@ struct MarkArray : Array16Of<MarkRecord>        /* Array of MarkRecords--in Cove
     mark.x_offset = roundf (base_x - mark_x);
     mark.y_offset = roundf (base_y - mark_y);
     if (HB_DIRECTION_IS_HORIZONTAL (buffer->props.direction))
-      mark.y_offset += base_offset;
+      mark.y_offset = hb_saturate_add (mark.y_offset, base_offset);
     else
-      mark.x_offset += base_offset;
+      mark.x_offset = hb_saturate_add (mark.x_offset, base_offset);
     buffer->scratch_flags |= HB_BUFFER_SCRATCH_FLAG_HAS_GPOS_ATTACHMENT;
 
     if (HB_BUFFER_MESSAGE_MORE && c->buffer->messaging ())
@@ -132,18 +138,19 @@ struct MarkArray : Array16Of<MarkRecord>        /* Array of MarkRecords--in Cove
   }
 };
 
+template <typename Types>
 HB_INTERNAL inline
-void Markclass_closure_and_remap_indexes (const Coverage  &mark_coverage,
-                                          const MarkArray &mark_array,
-                                          const hb_set_t  &glyphset,
-                                          hb_map_t*        klass_mapping /* INOUT */)
+void Markclass_closure_and_remap_indexes (const Coverage     &mark_coverage,
+                                          const MarkArray<Types> &mark_array,
+                                          const hb_set_t     &glyphset,
+                                          hb_map_t*           klass_mapping /* INOUT */)
 {
   hb_set_t orig_classes;
 
   + hb_zip (mark_coverage, mark_array)
   | hb_filter (glyphset, hb_first)
   | hb_map (hb_second)
-  | hb_map (&MarkRecord::get_class)
+  | hb_map (&MarkRecord<Types>::get_class)
   | hb_sink (orig_classes)
   ;
 

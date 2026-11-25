@@ -23,6 +23,7 @@
 #include "gc/GCContext-inl.h"
 #include "gc/ObjectKind-inl.h"
 #include "gc/TraceMethods-inl.h"
+#include "vm/JSAtomUtils-inl.h"
 #include "vm/JSContext-inl.h"
 #include "wasm/WasmInstance-inl.h"
 
@@ -109,6 +110,7 @@ static bool AddToEnvironmentMap(JSContext* cx, const JSClass* clasp,
   PropertyFlags propFlags = {PropertyFlag::Enumerable};
   switch (bindKind) {
     case BindingKind::Const:
+    case BindingKind::Using:
     case BindingKind::NamedLambdaCallee:
       // Non-writable.
       break;
@@ -147,9 +149,9 @@ SharedShape* js::CreateEnvironmentShape(JSContext* cx, BindingIter& bi,
                                                map, mapLength, objectFlags);
 }
 
-SharedShape* js::CreateEnvironmentShapeForSyntheticModule(
+static SharedShape* CreateEnvironmentShapeForModuleExports(
     JSContext* cx, const JSClass* cls, uint32_t numSlots,
-    Handle<ModuleObject*> module) {
+    const ExportNameVector& exportNames) {
   Rooted<SharedPropMap*> map(cx);
   uint32_t mapLength = 0;
 
@@ -159,8 +161,8 @@ SharedShape* js::CreateEnvironmentShapeForSyntheticModule(
   RootedId id(cx);
   uint32_t slotIndex = numSlots;
 
-  auto addProperty = [&](PropertyName* name) {
-    id = NameToId(name);
+  auto addProperty = [&](JSAtom* name) {
+    id = AtomToId(name);
     return SharedPropMap::addPropertyWithKnownSlot(
         cx, cls, &map, &mapLength, id, propFlags, slotIndex, &objectFlags);
   };
@@ -171,9 +173,8 @@ SharedShape* js::CreateEnvironmentShapeForSyntheticModule(
   }
   slotIndex++;
 
-  // Add synthetic exports.
-  for (JSAtom* exportName : module->syntheticExportNames()) {
-    if (!addProperty(exportName->asPropertyName())) {
+  for (JSAtom* exportName : exportNames) {
+    if (!addProperty(exportName)) {
       return nullptr;
     }
     slotIndex++;
@@ -183,6 +184,21 @@ SharedShape* js::CreateEnvironmentShapeForSyntheticModule(
   return SharedShape::getInitialOrPropMapShape(cx, cls, cx->realm(),
                                                TaggedProto(nullptr), numFixed,
                                                map, mapLength, objectFlags);
+}
+
+SharedShape* js::CreateEnvironmentShapeForSyntheticModule(
+    JSContext* cx, const JSClass* cls, uint32_t numSlots,
+    Handle<ModuleObject*> module) {
+  return CreateEnvironmentShapeForModuleExports(cx, cls, numSlots,
+                                                module->syntheticExportNames());
+}
+
+SharedShape* js::CreateEnvironmentShapeForWasmModule(
+    JSContext* cx, const JSClass* cls, uint32_t numSlots,
+    Handle<ExportNameVector> exportNames) {
+  // TODO(Bug 2079881): *namespace* is a valid wasm export name that will
+  // be shadowed by us using *namespace* to represent ~NAMESPACE~.
+  return CreateEnvironmentShapeForModuleExports(cx, cls, numSlots, exportNames);
 }
 
 template <class DataT>
@@ -775,6 +791,7 @@ WasmFunctionScope* WasmFunctionScope::create(JSContext* cx,
   wasm::StackResults unusedStackResults;
   if (!instance->instance().debug().debugGetLocalTypes(
           funcIndex, &locals, &argsLength, &unusedStackResults)) {
+    ReportOutOfMemory(cx);
     return nullptr;
   }
   uint32_t namesCount = locals.length();

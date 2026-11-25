@@ -50,7 +50,6 @@ class nsIPrincipal;
 class nsIURI;
 class nsNodeSupportsWeakRefTearoff;
 class nsDOMMutationObserver;
-class nsRange;
 class nsWindowSizes;
 
 namespace mozilla {
@@ -65,6 +64,7 @@ class PresShell;
 class TextEditor;
 class WidgetEvent;
 namespace dom {
+class Range;
 class NodeList;
 class HTMLCollection;
 
@@ -665,6 +665,13 @@ class nsINode : public mozilla::dom::EventTarget {
   virtual bool IsSelectedContentElement() const { return false; }
   virtual bool IsGenericHTMLFormControlElementWithState() const {
     return false;
+  }
+
+  /**
+   * Return true if the concrete class inherits ScriptElement.
+   */
+  [[nodiscard]] bool IsScriptElement() const {
+    return IsHTMLElement(nsGkAtoms::script) || IsSVGElement(nsGkAtoms::script);
   }
 
   // Returns non-null if this element subclasses `LinkStyle`.
@@ -1808,6 +1815,8 @@ class nsINode : public mozilla::dom::EventTarget {
     virtual void Traverse(nsCycleCollectionTraversalCallback&);
     virtual void Unlink(nsINode&);
 
+    void ClearWeakReference();
+
     /**
      * A list of mutation observers
      */
@@ -1830,7 +1839,8 @@ class nsINode : public mozilla::dom::EventTarget {
 
     /**
      * Weak reference to this node.  This is cleared by the destructor of
-     * nsNodeWeakReference.
+     * nsNodeWeakReference, and by ClearWeakReference when the node is
+     * unlinked or destroyed.
      */
     nsNodeWeakReference* MOZ_NON_OWNING_REF mWeakReference;
 
@@ -2128,12 +2138,12 @@ class nsINode : public mozilla::dom::EventTarget {
 
   /**
    * Return true if any part of (this, aStartOffset) .. (this, aEndOffset)
-   * overlaps any nsRange in
+   * overlaps any Range in
    * GetClosestCommonInclusiveAncestorForRangeInSelection ranges (i.e.
    * where this is a descendant of a range's common inclusive ancestor node).
-   * If a nsRange starts in (this, aEndOffset) or if it ends in
+   * If a Range starts in (this, aEndOffset) or if it ends in
    * (this, aStartOffset) then it is non-overlapping and the result is false
-   * for that nsRange.  Collapsed ranges always counts as non-overlapping.
+   * for that Range.  Collapsed ranges always counts as non-overlapping.
    *
    * @param aStartOffset has to be less or equal to aEndOffset.
    * @param aCache A cache which contains all fully selected nodes for each

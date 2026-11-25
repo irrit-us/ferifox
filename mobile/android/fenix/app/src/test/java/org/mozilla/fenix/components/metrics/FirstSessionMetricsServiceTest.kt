@@ -14,6 +14,8 @@ import io.mockk.just
 import io.mockk.mockk
 import io.mockk.spyk
 import io.mockk.verify
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.mozilla.fenix.FenixApplication
@@ -22,7 +24,7 @@ import org.mozilla.fenix.ext.application
 internal class FirstSessionMetricsServiceTest {
 
     @Test
-    fun `start() triggers the ping if it wasn't marked as triggered`() {
+    fun `start() triggers the ping if it wasn't marked as triggered`() = runTest {
         val mockedPackageManager: PackageManager = mockk(relaxed = true)
         mockedPackageManager.configureMockInstallSourcePackage()
 
@@ -32,23 +34,34 @@ internal class FirstSessionMetricsServiceTest {
         val mockedContext: Context = mockk(relaxed = true)
         every { mockedContext.applicationContext } returns mockedApplication
 
-        val mockAp = spyk(FirstSessionMetricsService(mockedContext), recordPrivateCalls = true)
+        val mockAp =
+            spyk(
+                FirstSessionMetricsService(mockedContext, StandardTestDispatcher(testScheduler)),
+                recordPrivateCalls = true,
+            )
         every { mockAp.wasAlreadyTriggered() } returns false
         every { mockAp.markAsTriggered() } just Runs
 
         mockAp.start()
+        testScheduler.advanceUntilIdle()
 
         verify(exactly = 1) { mockAp.triggerPingIfNotSent() }
-        verify(timeout = 1000, exactly = 1) { mockAp.markAsTriggered() }
+        verify(exactly = 1) { mockAp.markAsTriggered() }
     }
 
     @Test
-    fun `start() doesn't trigger the ping again if it was marked as triggered`() {
-        val mockAp = spyk(FirstSessionMetricsService(mockk()), recordPrivateCalls = true)
+    fun `start() doesn't trigger the ping again if it was marked as triggered`() = runTest {
+        val mockAp =
+            spyk(
+                FirstSessionMetricsService(mockk(), StandardTestDispatcher(testScheduler)),
+                recordPrivateCalls = true,
+            )
         every { mockAp.wasAlreadyTriggered() } returns true
 
         mockAp.start()
+        testScheduler.advanceUntilIdle()
 
+        verify(exactly = 1) { mockAp.wasAlreadyTriggered() }
         verify(exactly = 0) { mockAp.markAsTriggered() }
     }
 
@@ -64,18 +77,20 @@ internal class FirstSessionMetricsServiceTest {
         val mockedContext: Context = mockk(relaxed = true)
         every { mockedContext.applicationContext } returns mockedApplication
 
-        val result = installSourcePackage(
-            sdk = Build.VERSION_CODES.R,
-            packageManager = mockedContext.application.packageManager,
-            packageName = mockedContext.application.packageName,
-        )
+        val result =
+            installSourcePackage(
+                sdk = Build.VERSION_CODES.R,
+                packageManager = mockedContext.application.packageManager,
+                packageName = mockedContext.application.packageName,
+            )
         assertEquals(testPackageName, result)
     }
 
     @Test
     fun `GIVEN packageManager throws an exception WHEN build version is R THEN installSourcePackage returns an empty string`() {
         val mockedPackageManager: PackageManager = mockk(relaxed = true)
-        every { mockedPackageManager.getInstallSourceInfo(any()).installingPackageName } throws PackageManager.NameNotFoundException()
+        every { mockedPackageManager.getInstallSourceInfo(any()).installingPackageName } throws
+            PackageManager.NameNotFoundException()
 
         val mockedApplication: FenixApplication = mockk(relaxed = true)
         every { mockedApplication.packageManager } returns mockedPackageManager
@@ -83,11 +98,12 @@ internal class FirstSessionMetricsServiceTest {
         val mockedContext: Context = mockk(relaxed = true)
         every { mockedContext.applicationContext } returns mockedApplication
 
-        val result = installSourcePackage(
-            sdk = Build.VERSION_CODES.R,
-            packageManager = mockedContext.application.packageManager,
-            packageName = mockedContext.application.packageName,
-        )
+        val result =
+            installSourcePackage(
+                sdk = Build.VERSION_CODES.R,
+                packageManager = mockedContext.application.packageManager,
+                packageName = mockedContext.application.packageName,
+            )
         assertEquals("", result)
     }
 
@@ -103,18 +119,20 @@ internal class FirstSessionMetricsServiceTest {
         val mockedContext: Context = mockk(relaxed = true)
         every { mockedContext.applicationContext } returns mockedApplication
 
-        val result = installSourcePackage(
-            sdk = Build.VERSION_CODES.R.plus(1),
-            packageManager = mockedContext.application.packageManager,
-            packageName = mockedContext.application.packageName,
-        )
+        val result =
+            installSourcePackage(
+                sdk = Build.VERSION_CODES.R.plus(1),
+                packageManager = mockedContext.application.packageManager,
+                packageName = mockedContext.application.packageName,
+            )
         assertEquals(testPackageName, result)
     }
 
     @Test
     fun `GIVEN packageManager throws an exception WHEN build version is more than R THEN installSourcePackage returns an empty string`() {
         val mockedPackageManager: PackageManager = mockk(relaxed = true)
-        every { mockedPackageManager.getInstallSourceInfo(any()).installingPackageName } throws PackageManager.NameNotFoundException()
+        every { mockedPackageManager.getInstallSourceInfo(any()).installingPackageName } throws
+            PackageManager.NameNotFoundException()
 
         val mockedApplication: FenixApplication = mockk(relaxed = true)
         every { mockedApplication.packageManager } returns mockedPackageManager
@@ -122,11 +140,12 @@ internal class FirstSessionMetricsServiceTest {
         val mockedContext: Context = mockk(relaxed = true)
         every { mockedContext.applicationContext } returns mockedApplication
 
-        val result = installSourcePackage(
-            sdk = Build.VERSION_CODES.R.plus(1),
-            packageManager = mockedContext.application.packageManager,
-            packageName = mockedContext.application.packageName,
-        )
+        val result =
+            installSourcePackage(
+                sdk = Build.VERSION_CODES.R.plus(1),
+                packageManager = mockedContext.application.packageManager,
+                packageName = mockedContext.application.packageName,
+            )
         assertEquals("", result)
     }
 
@@ -142,11 +161,12 @@ internal class FirstSessionMetricsServiceTest {
         val mockedContext: Context = mockk(relaxed = true)
         every { mockedContext.applicationContext } returns mockedApplication
 
-        val result = installSourcePackage(
-            sdk = Build.VERSION_CODES.R.minus(1),
-            packageManager = mockedContext.application.packageManager,
-            packageName = mockedContext.application.packageName,
-        )
+        val result =
+            installSourcePackage(
+                sdk = Build.VERSION_CODES.R.minus(1),
+                packageManager = mockedContext.application.packageManager,
+                packageName = mockedContext.application.packageName,
+            )
         assertEquals(testPackageName, result)
     }
 
@@ -162,11 +182,12 @@ internal class FirstSessionMetricsServiceTest {
         val mockedContext: Context = mockk(relaxed = true)
         every { mockedContext.applicationContext } returns mockedApplication
 
-        val result = installSourcePackage(
-            sdk = Build.VERSION_CODES.R.minus(1),
-            packageManager = mockedContext.application.packageManager,
-            packageName = mockedContext.application.packageName,
-        )
+        val result =
+            installSourcePackage(
+                sdk = Build.VERSION_CODES.R.minus(1),
+                packageManager = mockedContext.application.packageManager,
+                packageName = mockedContext.application.packageName,
+            )
         assertEquals("", result)
     }
 }

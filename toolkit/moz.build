@@ -23,10 +23,19 @@ DIRS += [
 ]
 
 if CONFIG["OS_ARCH"] == "WINNT":
-    # mingw is missing Windows toast notification definitions.
+    # mingw-w64 is missing the WRL headers the toast notification code uses.
     if CONFIG["CC_TYPE"] == "clang-cl":
         if CONFIG["MOZ_NOTIFICATION_SERVER"]:
             DIRS += ["mozapps/notificationserver"]
+
+    if CONFIG["MOZ_BACKGROUNDTASKS"]:
+        DIRS += [
+            "mozapps/msixcomserver",
+            "mozapps/msixcomserver-rust",
+        ]
+
+    if CONFIG["MOZ_PUSH_NOTIFICATION_HELPER"]:
+        DIRS += ["mozapps/pushnotificationhelper"]
 
     if CONFIG["CC_TYPE"] == "clang-cl" or CONFIG["MOZ_ARTIFACT_BUILDS"]:
         # Default Browser Agent relies on Windows toast notifications, so should
@@ -104,6 +113,9 @@ with Files("l10n-registry.manifest"):
 
 with Files("jsconfig.json"):
     BUG_COMPONENT = ("Developer Infrastructure", "Lint and Formatting")
+
+with Files("figma.config.json"):
+    BUG_COMPONENT = ("Toolkit", "UI Widgets")
 
 GeneratedFile(
     "content/neterror/aboutNetErrorCodes.js",

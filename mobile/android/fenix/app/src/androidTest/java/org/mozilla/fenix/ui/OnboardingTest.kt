@@ -4,23 +4,26 @@
 
 package org.mozilla.fenix.ui
 
+import androidx.compose.ui.test.junit4.v2.AndroidComposeTestRule as AndroidComposeTestRuleV2
 import androidx.test.filters.SdkSuppress
 import org.junit.Ignore
 import org.junit.Rule
 import org.junit.Test
+import org.mozilla.fenix.customannotations.Converted
 import org.mozilla.fenix.customannotations.SmokeTest
+import org.mozilla.fenix.helpers.AppAndSystemHelper.openAppFromExternalLink
 import org.mozilla.fenix.helpers.AppAndSystemHelper.runWithLauncherIntent
 import org.mozilla.fenix.helpers.FenixTestRule
 import org.mozilla.fenix.helpers.HomeActivityIntentTestRule
+import org.mozilla.fenix.helpers.TestAssetHelper.getGenericAsset
 import org.mozilla.fenix.helpers.TestHelper.closeApp
 import org.mozilla.fenix.helpers.TestHelper.restartApp
 import org.mozilla.fenix.helpers.perf.DetectMemoryLeaksRule
+import org.mozilla.fenix.ui.robots.browserScreen
 import org.mozilla.fenix.ui.robots.homeScreen
-import androidx.compose.ui.test.junit4.v2.AndroidComposeTestRule as AndroidComposeTestRuleV2
 
 class OnboardingTest {
-    @get:Rule(order = 0)
-    val fenixTestRule: FenixTestRule = FenixTestRule(grantNotifications = false)
+    @get:Rule(order = 0) val fenixTestRule: FenixTestRule = FenixTestRule(grantNotifications = false)
 
     @get:Rule(order = 1)
     val composeTestRule =
@@ -28,13 +31,19 @@ class OnboardingTest {
             HomeActivityIntentTestRule.withDefaultSettingsOverrides(
                 launchActivity = false,
                 skipOnboarding = false,
-            ),
-        ) { it.activity }
+            )
+        ) {
+            it.activity
+        }
 
-    @get:Rule(order = 2)
-    val memoryLeaksRule = DetectMemoryLeaksRule(composeTestRule = { composeTestRule })
+    @get:Rule(order = 2) val memoryLeaksRule = DetectMemoryLeaksRule(composeTestRule = { composeTestRule })
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3349493
+    @Converted(
+        replacedBy = ["org.mozilla.fenix.ui.efficiency.tests.OnboardingTest#verifyTheTermsOfUseOnboardingCardTest"],
+        bug = 2057054,
+        since = "2026-07",
+    )
     @SdkSuppress(minSdkVersion = 29)
     @SmokeTest
     @Test
@@ -50,7 +59,9 @@ class OnboardingTest {
     }
 
     // TestRail link: https://mozilla.testrail.io/index.php?/cases/view/3814795
-    @Ignore("Disabled temporarily,as the default prompt is being turned off for tests, for more info check: https://bugzilla.mozilla.org/show_bug.cgi?id=2051502")
+    @Ignore(
+        "Disabled temporarily,as the default prompt is being turned off for tests, for more info check: https://bugzilla.mozilla.org/show_bug.cgi?id=2051502"
+    )
     @SdkSuppress(minSdkVersion = 29)
     @SmokeTest
     @Test
@@ -117,6 +128,25 @@ class OnboardingTest {
                 clickTheSetAsDefaultBrowserDialogCancelButton()
                 verifyTheSetAsDefaultBrowserOnboardingCard()
             }
+        }
+    }
+
+    @SdkSuppress(minSdkVersion = 29)
+    @Test
+    fun verifyAnExternalLinkOpenedDuringOnboardingIsOpenedAfterOnboardingTest() {
+        val externalPage = fenixTestRule.mockWebServer.getGenericAsset(1)
+
+        runWithLauncherIntent(composeTestRule.activityRule) {
+            homeScreen(composeTestRule) {
+                verifyTheTermsOfUseOnboardingCard()
+                openAppFromExternalLink(composeTestRule, externalPage.url.toString())
+                verifyTheTermsOfUseOnboardingCard()
+                clickTheOnboardingCardContinueButton()
+                clickTheSetAsDefaultBrowserDialogCancelButton()
+                clickNotNowOnboardingCardButton()
+                clickContinueIfMarketingCardShown()
+            }
+            browserScreen(composeTestRule) { verifyUrl(externalPage.url.toString()) }
         }
     }
 

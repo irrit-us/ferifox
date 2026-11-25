@@ -20,11 +20,11 @@ import androidx.fragment.compose.content
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
+import java.time.LocalDate
 import mozilla.components.ExperimentalAndroidComponentsApi
-import mozilla.components.concept.engine.ipprotection.ServiceState
-import mozilla.components.feature.ipprotection.IPProtectionFxaAuthFlow
-import mozilla.components.feature.ipprotection.IPProtectionFxaAuthFlow.Companion.INTENT_ON_COMPLETE
 import mozilla.components.feature.ipprotection.IPProtectionWarningBinding
+import mozilla.components.feature.ipprotection.auth.fxa.IPProtectionFxaAuthFlow
+import mozilla.components.feature.ipprotection.auth.fxa.IPProtectionFxaAuthFlow.Companion.INTENT_ON_COMPLETE
 import mozilla.components.feature.ipprotection.debug.IPProtectionStateDebugContent
 import mozilla.components.feature.ipprotection.store.IPProtectionAction
 import mozilla.components.feature.ipprotection.store.state.AccountStatus
@@ -33,9 +33,11 @@ import mozilla.components.lib.state.ext.observeAsComposableState
 import mozilla.components.support.base.feature.ViewBoundFeatureWrapper
 import mozilla.telemetry.glean.private.NoExtras
 import org.mozilla.fenix.GleanMetrics.Vpn
+import org.mozilla.fenix.R
 import org.mozilla.fenix.components.components
 import org.mozilla.fenix.e2e.SystemInsetsPaddedFragment
 import org.mozilla.fenix.ext.hideToolbar
+import org.mozilla.fenix.ext.nav
 import org.mozilla.fenix.ext.requireComponents
 import org.mozilla.fenix.home.HomeFragmentDirections
 import org.mozilla.fenix.ipprotection.helpers.IsoPromoDeadline
@@ -44,7 +46,6 @@ import org.mozilla.fenix.ipprotection.ui.IPProtectionSnackbarBinding
 import org.mozilla.fenix.nimbus.FxNimbus
 import org.mozilla.fenix.snackbar.FenixSnackbarDelegate
 import org.mozilla.fenix.theme.FirefoxTheme
-import java.time.LocalDate
 
 /** Fragment hosting the IP Protection settings screen. */
 class IPProtectionFragment : Fragment(), SystemInsetsPaddedFragment {
@@ -62,7 +63,7 @@ class IPProtectionFragment : Fragment(), SystemInsetsPaddedFragment {
         super.onCreate(savedInstanceState)
 
         if (args.startAuthFlow) {
-            requireComponents.ipProtection.store.dispatch(IPProtectionAction.Toggle)
+            requireComponents.ipProtection.store.dispatch(IPProtectionAction.ActivationAction.Toggle)
         }
     }
 
@@ -78,22 +79,22 @@ class IPProtectionFragment : Fragment(), SystemInsetsPaddedFragment {
         // To make the transition smoother, we prevent the fragment from drawing UI in that case.
         if (shouldHideUi(state)) return@content
 
-        val promoDate = FxNimbus.features.ipProtection.value().promoDeadline.let { promoDate ->
-            IsoPromoDeadline(promoDate)
-                .formatPromoDateOrCatch { requireComponents.analytics.crashReporter.submitCaughtException(it) }
-                ?.takeIf { LocalDate.now() <= LocalDate.parse(promoDate) }
-        }
+        val promoDate =
+            FxNimbus.features.ipProtection.value().promoDeadline.let { promoDate ->
+                IsoPromoDeadline(promoDate)
+                    .formatPromoDateOrCatch { requireComponents.analytics.crashReporter.submitCaughtException(it) }
+                    ?.takeIf { LocalDate.now() <= LocalDate.parse(promoDate) }
+            }
 
         LaunchedEffect(Unit) {
-           requireComponents.ipProtection.store.dispatch(IPProtectionAction.CheckAccount)
+            requireComponents.ipProtection.store.dispatch(IPProtectionAction.AccountAction.CheckAccount)
+            requireComponents.ipProtection.store.dispatch(IPProtectionAction.LocationAction.CheckLocations)
         }
 
         FirefoxTheme {
             IPProtectionScreen(
                 state = state,
                 snackbarHostState = snackbarHostState,
-                readyToUse = state.readyToUse(),
-                syncingData = state.syncingData(),
                 promoDate = promoDate,
                 onVpnToggle = { enabled ->
                     if (enabled) {
@@ -101,7 +102,7 @@ class IPProtectionFragment : Fragment(), SystemInsetsPaddedFragment {
                     } else {
                         Vpn.settingsTurnedOff.record(NoExtras())
                     }
-                    requireComponents.ipProtection.store.dispatch(IPProtectionAction.Toggle)
+                    requireComponents.ipProtection.store.dispatch(IPProtectionAction.ActivationAction.Toggle)
                 },
                 onLearnMoreClick = {
                     Vpn.settingsLearnMoreTapped.record(NoExtras())
@@ -116,13 +117,13 @@ class IPProtectionFragment : Fragment(), SystemInsetsPaddedFragment {
                 },
                 onGetStartedClick = {
                     Vpn.getStartedTapped.record(Vpn.GetStartedTappedExtra(entrypoint = "Settings"))
-                    requireComponents.ipProtection.store.dispatch(IPProtectionAction.Toggle)
+                    requireComponents.ipProtection.store.dispatch(IPProtectionAction.ActivationAction.Toggle)
                 },
                 showDebugAction = requireComponents.settings.showSecretDebugMenuThisSession,
                 onDebugActionClick = { showDebugDialog = true },
                 onNavigateBack = { findNavController().popBackStack() },
                 onLocationClicked = { handleOnLocationClicked() },
-                isLocationSelectionEnabled = requireComponents.settings.isIPProtectionLocationsEnabled,
+                isLocationSelectionEnabled = true,
             )
 
             if (showDebugDialog) {
@@ -140,87 +141,69 @@ class IPProtectionFragment : Fragment(), SystemInsetsPaddedFragment {
         super.onViewCreated(view, savedInstanceState)
 
         fxaAccountAuthFlow.set(
-            feature = IPProtectionFxaAuthFlow(
-                accountManager = requireComponents.backgroundServices.accountManager,
-                store = requireComponents.ipProtection.store,
-                entrypoint = args.entrypoint,
-                onAuthRequested = { url, onCompleteAction ->
-                    val intent = SupportUtils.createAuthCustomTabIntent(requireContext(), url)
-                    intent.putExtra(INTENT_ON_COMPLETE, onCompleteAction)
-                    startActivity(intent)
-                },
-            ),
+            feature =
+                IPProtectionFxaAuthFlow(
+                    accountManager = requireComponents.backgroundServices.accountManager,
+                    store = requireComponents.ipProtection.store,
+                    entrypoint = args.entrypoint,
+                    onAuthRequested = { url, onCompleteAction ->
+                        val intent = SupportUtils.createAuthCustomTabIntent(requireContext(), url)
+                        intent.putExtra(INTENT_ON_COMPLETE, onCompleteAction)
+                        startActivity(intent)
+                    },
+                ),
             view = view,
             owner = this,
         )
 
         ipProtectionWarningBinding.set(
-            feature = IPProtectionWarningBinding(
-                store = requireComponents.ipProtection.store,
-                proxyUnavailable = {
-                    Vpn.proxyUnavailable.record()
-                    findNavController().navigate(
-                        HomeFragmentDirections.actionGlobalIpProtectionUnavailableDialog(),
-                    )
-                },
-            ),
+            feature =
+                IPProtectionWarningBinding(
+                    store = requireComponents.ipProtection.store,
+                    proxyUnavailable = {
+                        Vpn.proxyUnavailable.record()
+                        findNavController().navigate(HomeFragmentDirections.actionGlobalIpProtectionUnavailableDialog())
+                    },
+                ),
             owner = this,
             view = view,
         )
 
         ipProtectionSnackbarBinding.set(
-            feature = IPProtectionSnackbarBinding(
-                appStore = requireComponents.appStore,
-                snackbarDelegate = FenixSnackbarDelegate(
-                    snackbarHostState = snackbarHostState,
-                    scope = viewLifecycleOwner.lifecycleScope,
+            feature =
+                IPProtectionSnackbarBinding(
+                    appStore = requireComponents.appStore,
                     context = requireContext(),
+                    navController = findNavController(),
+                    snackbarDelegate =
+                        FenixSnackbarDelegate(
+                            snackbarHostState = snackbarHostState,
+                            scope = viewLifecycleOwner.lifecycleScope,
+                            context = requireContext(),
+                        ),
                 ),
-            ),
             owner = this,
             view = view,
         )
     }
 
     private fun handleOnLocationClicked() {
-        findNavController().navigate(
-            IPProtectionFragmentDirections.actionIpProtectionFragmentToIpProtectionLocationFragment(),
-        )
-    }
-
-    /**
-     * ServiceState is the source of truth for vpn "readiness". Proxy might error out, the data limit might
-     * be reached, but the user is entitled to interrace with it. We also have AccountStatus entitlement,
-     * but there is a tiny gap between as enrolling for IPProtection service, and the service actually
-     * becoming active and sending us data - the gap that should be presented as "connecting" state.
-     */
-    @OptIn(ExperimentalAndroidComponentsApi::class)
-    private fun IPProtectionState.readyToUse() = serviceStatus == ServiceState.Ready
-
-    /**
-     * Syncing state locks the screen from interaction, so we want to be explicit about it: for now, it is
-     * specifically for the enrollment state - when the user has passed the auth flow, but the toolkit
-     * service has not been updated yet.
-     * Otherwise, if the ServiceState is not `Ready`, the user gets a "get started" button.
-     */
-    @OptIn(ExperimentalAndroidComponentsApi::class)
-    private fun IPProtectionState.syncingData(): Boolean {
-        return serviceStatus == ServiceState.Unauthenticated &&
-            (
-                accountState.status == AccountStatus.AwaitingEnrollment ||
-                    accountState.status == AccountStatus.Authenticated ||
-                    accountState.status == AccountStatus.EnrolledAndEntitled
+        Vpn.locationSelectorTapped.record()
+        findNavController()
+            .nav(
+                R.id.ipProtectionFragment,
+                IPProtectionFragmentDirections.actionIpProtectionFragmentToIpProtectionLocationFragment(),
             )
     }
 
-    private fun IPProtectionState.authInProgress() = when (accountState.status) {
-        AccountStatus.RequestingAuthentication,
-        AccountStatus.RequestingAuthorization,
-        AccountStatus.AwaitingAuthentication,
-        AccountStatus.AwaitingAuthorization,
-            -> true
-        else -> false
-    }
+    private fun IPProtectionState.authInProgress() =
+        when (accountState.status) {
+            AccountStatus.RequestingAuthentication,
+            AccountStatus.RequestingAuthorization,
+            AccountStatus.AwaitingAuthentication,
+            AccountStatus.AwaitingAuthorization -> true
+            else -> false
+        }
 
     private fun shouldHideUi(
         state: IPProtectionState,

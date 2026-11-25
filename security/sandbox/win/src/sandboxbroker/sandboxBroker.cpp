@@ -27,9 +27,8 @@
 #include "mozilla/Preferences.h"
 #include "mozilla/SHA1.h"
 #include "mozilla/SandboxSettings.h"
-#include "mozilla/StaticPrefs_network.h"
+#include "mozilla/StaticPrefs_media.h"
 #include "mozilla/StaticPrefs_security.h"
-#include "mozilla/StaticPrefs_widget.h"
 #include "mozilla/StaticPtr.h"
 #include "mozilla/UniquePtr.h"
 #include "mozilla/WinDllServices.h"
@@ -1230,6 +1229,16 @@ void SandboxBroker::SetSecurityLevelForContentProcess(int32_t aSandboxLevel,
     // that path to fall-back to the normal loading path.
     config->SetForceKnownDllLoadingFallback();
 
+    // If platform video encoding is not remote it requires the KsecDD device.
+    if (!StaticPrefs::media_use_remote_encoder_video_platform()) {
+      result = config->AllowFileAccess(sandbox::FileSemantics::kAllowAny,
+                                       LR"(\Device\KsecDD)");
+      if (sandbox::SBOX_ALL_OK != result) {
+        NS_ERROR("Failed to add rule for KsecDD.");
+        LOG_E("Failed (ResultCode %d) to add read access to KsecDD", result);
+      }
+    }
+
     // We should be able to remove access to these media registry keys below
     // once encoding has moved out of the content process (bug 1972552).
 
@@ -1335,11 +1344,15 @@ void SandboxBroker::SetSecurityLevelForGPUProcess(int32_t aSandboxLevel) {
   sandbox::IntegrityLevel initialIntegrityLevel = sandbox::INTEGRITY_LEVEL_LOW;
   sandbox::IntegrityLevel delayedIntegrityLevel = sandbox::INTEGRITY_LEVEL_LOW;
 
-  sandbox::JobLevel jobLevel = sandbox::JobLevel::kLimitedUser;
+  sandbox::JobLevel jobLevel = sandbox::JobLevel::kLockdown;
 
   uint32_t uiExceptions =
       JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS | JOB_OBJECT_UILIMIT_DESKTOP |
-      JOB_OBJECT_UILIMIT_EXITWINDOWS | JOB_OBJECT_UILIMIT_DISPLAYSETTINGS;
+      JOB_OBJECT_UILIMIT_EXITWINDOWS | JOB_OBJECT_UILIMIT_DISPLAYSETTINGS |
+      JOB_OBJECT_UILIMIT_HANDLES | JOB_OBJECT_UILIMIT_GLOBALATOMS;
+  if (StaticPrefs::security_sandbox_gpu_disable_job_uilimits()) {
+    uiExceptions |= JOB_OBJECT_UILIMIT_ALL;
+  }
 
   sandbox::MitigationFlags initialMitigations =
       sandbox::MITIGATION_BOTTOM_UP_ASLR | sandbox::MITIGATION_HEAP_TERMINATE |
@@ -1474,79 +1487,6 @@ bool SandboxBroker::SetSecurityLevelForRDDProcess() {
     // The RDD process depends on msmpeg2vdec.dll.
     mitigations |= DynamicCodeFlagForSystemMediaLibraries();
   }
-
-  result = config->SetDelayedProcessMitigations(mitigations);
-  SANDBOX_ENSURE_SUCCESS(result,
-                         "Invalid flags for SetDelayedProcessMitigations.");
-
-  result = AddCigToConfig(config);
-  SANDBOX_ENSURE_SUCCESS(result, "Failed to initialize signed policy rules.");
-
-  // Add the policy for the client side of the crash server pipe.
-  result = config->AllowFileAccess(sandbox::FileSemantics::kAllowAny,
-                                   L"\\??\\pipe\\gecko-crash-server-pipe.*");
-  SANDBOX_ENSURE_SUCCESS(
-      result,
-      "With these static arguments AddRule should never fail, what happened?");
-
-  return true;
-}
-
-bool SandboxBroker::SetSecurityLevelForSocketProcess() {
-  if (!mPolicy) {
-    return false;
-  }
-
-  auto* config = mPolicy->GetConfig();
-
-  auto result =
-      config->SetJobLevel(sandbox::JobLevel::kLockdown, 0 /* ui_exceptions */);
-  SANDBOX_ENSURE_SUCCESS(
-      result,
-      "SetJobLevel should never fail with these arguments, what happened?");
-
-  result = config->SetTokenLevel(sandbox::USER_RESTRICTED_SAME_ACCESS,
-                                 sandbox::USER_LIMITED);
-  SANDBOX_ENSURE_SUCCESS(
-      result,
-      "SetTokenLevel should never fail with these arguments, what happened?");
-
-  config->SetDesktop(sandbox::Desktop::kAlternateWinstation);
-
-  result = config->SetIntegrityLevel(sandbox::INTEGRITY_LEVEL_LOW);
-  SANDBOX_ENSURE_SUCCESS(result,
-                         "SetIntegrityLevel should never fail with these "
-                         "arguments, what happened?");
-
-  config->SetDelayedIntegrityLevel(sandbox::INTEGRITY_LEVEL_UNTRUSTED);
-
-  config->SetLockdownDefaultDacl();
-  config->AddRestrictingRandomSid();
-
-  sandbox::MitigationFlags mitigations =
-      sandbox::MITIGATION_BOTTOM_UP_ASLR | sandbox::MITIGATION_HEAP_TERMINATE |
-      sandbox::MITIGATION_SEHOP | sandbox::MITIGATION_EXTENSION_POINT_DISABLE |
-      sandbox::MITIGATION_DEP_NO_ATL_THUNK | sandbox::MITIGATION_DEP |
-      sandbox::MITIGATION_NONSYSTEM_FONT_DISABLE |
-      sandbox::MITIGATION_KTM_COMPONENT | sandbox::MITIGATION_FSCTL_DISABLED |
-      sandbox::MITIGATION_IMAGE_LOAD_NO_REMOTE |
-      sandbox::MITIGATION_IMAGE_LOAD_NO_LOW_LABEL;
-
-  if (StaticPrefs::security_sandbox_socket_shadow_stack_enabled()) {
-    mitigations |= sandbox::MITIGATION_CET_COMPAT_MODE;
-  }
-
-  result = config->SetProcessMitigations(mitigations);
-  SANDBOX_ENSURE_SUCCESS(result, "Invalid flags for SetProcessMitigations.");
-
-  if (StaticPrefs::security_sandbox_socket_win32k_disable()) {
-    result = AddWin32kLockdownConfig(config);
-    SANDBOX_ENSURE_SUCCESS(result, "Failed to add the win32k lockdown config");
-  }
-
-  mitigations = sandbox::MITIGATION_STRICT_HANDLE_CHECKS |
-                sandbox::MITIGATION_DLL_SEARCH_ORDER |
-                sandbox::MITIGATION_DYNAMIC_CODE_DISABLE;
 
   result = config->SetDelayedProcessMitigations(mitigations);
   SANDBOX_ENSURE_SUCCESS(result,
@@ -1872,6 +1812,8 @@ bool SandboxBroker::SetSecurityLevelForUtilityProcess(
 #endif
     case mozilla::ipc::SandboxingKind::WINDOWS_UTILS:
       return BuildUtilitySandbox(config, WindowsUtilitySandboxProps());
+    case mozilla::ipc::SandboxingKind::HW_INFERENCE:
+      return BuildUtilitySandbox(config, GenericUtilitySandboxProps());
     default:
       MOZ_ASSERT_UNREACHABLE("Unknown sandboxing value");
       return false;

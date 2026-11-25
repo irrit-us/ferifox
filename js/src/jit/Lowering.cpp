@@ -45,6 +45,14 @@ LBoxAllocation LIRGenerator::useBoxFixedAtStart(MDefinition* mir,
 #endif
 }
 
+LBoxAllocation LIRGenerator::useBoxFixed(MDefinition* mir, ValueOperand op) {
+#if defined(JS_NUNBOX32)
+  return useBoxFixed(mir, op.typeReg(), op.payloadReg(), false);
+#elif defined(JS_PUNBOX64)
+  return useBoxFixed(mir, op.valueReg(), op.scratchReg(), false);
+#endif
+}
+
 LBoxAllocation LIRGenerator::useBoxAtStart(MDefinition* mir,
                                            LUse::Policy policy) {
   return useBox(mir, policy, /* useAtStart = */ true);
@@ -99,16 +107,22 @@ void LIRGenerator::visitTableSwitch(MTableSwitch* tableswitch) {
     return;
   }
 
-  // If we don't know the type.
-  if (opd->type() == MIRType::Value) {
-    add(newLTableSwitchV(useBox(opd)), tableswitch);
+  // Case indices are numeric, so types known to be non-numeric will always go
+  // to the default case.
+  if (opd->type() != MIRType::Value && opd->type() != MIRType::Int32 &&
+      opd->type() != MIRType::Double) {
+    add(new (alloc()) LGoto(tableswitch->getDefault()));
     return;
   }
 
-  // Case indices are numeric, so other types will always go to the default
-  // case.
-  if (opd->type() != MIRType::Int32 && opd->type() != MIRType::Double) {
-    add(new (alloc()) LGoto(tableswitch->getDefault()));
+  // Switch table dispatch to the case blocks uses an indirect jump.
+  for (size_t i = 0; i < tableswitch->numCases(); i++) {
+    tableswitch->getCase(i)->lir()->setIsIndirectJumpTarget();
+  }
+
+  // If we don't know the type.
+  if (opd->type() == MIRType::Value) {
+    add(newLTableSwitchV(useBox(opd)), tableswitch);
     return;
   }
 
@@ -1094,7 +1108,6 @@ void LIRGenerator::visitTest(MTest* test) {
         comp->compareType() == MCompare::Compare_Symbol ||
         comp->compareType() == MCompare::Compare_WasmAnyRef) {
       JSOp op = ReorderComparison(comp->jsop(), &left, &right);
-      LAllocation lhs = useRegister(left);
       LAllocation rhs;
       if (comp->isInt32Comparison() ||
           comp->compareType() == MCompare::Compare_UInt32 ||
@@ -1103,6 +1116,16 @@ void LIRGenerator::visitTest(MTest* test) {
         rhs = useAnyOrInt32Constant(right);
       } else {
         rhs = useAny(right);
+      }
+      // A memory lhs needs a non-memory rhs to stay encodable in one
+      // instruction.
+      LAllocation lhs;
+      if (rhs.isConstant() &&
+          (comp->isInt32Comparison() ||
+           comp->compareType() == MCompare::Compare_UInt32)) {
+        lhs = useAny(left);
+      } else {
+        lhs = useRegister(left);
       }
       auto* lir =
           new (alloc()) LCompareAndBranch(ifTrue, ifFalse, lhs, rhs, comp, op);
@@ -1172,9 +1195,9 @@ void LIRGenerator::visitTest(MTest* test) {
     }
   }
 
-#if defined(ENABLE_WASM_SIMD) &&                           \
+#if defined(ENABLE_JIT_SIMD) &&                            \
     (defined(JS_CODEGEN_X86) || defined(JS_CODEGEN_X64) || \
-     defined(JS_CODEGEN_ARM64))
+     defined(JS_CODEGEN_ARM64) || defined(JS_CODEGEN_LOONG64))
   // Check if the operand for this test is an any_true/all_true SIMD operation.
   // If it is, we want to emit an LWasmReduceAndBranchSimd128 node to avoid
   // generating an intermediate boolean result.
@@ -1285,6 +1308,11 @@ void LIRGenerator::visitTest(MTest* test) {
     return;
   }
 
+  if (opd->isIsResumingGenerator() && opd->isEmittedAtUses()) {
+    add(new (alloc()) LIsResumingGeneratorAndBranch(ifTrue, ifFalse), test);
+    return;
+  }
+
   if (opd->isIteratorHasIndices()) {
     MOZ_ASSERT(opd->isEmittedAtUses());
 
@@ -1321,7 +1349,7 @@ void LIRGenerator::visitTest(MTest* test) {
       break;
     case MIRType::Int32:
     case MIRType::Boolean:
-      add(new (alloc()) LTestIAndBranch(ifTrue, ifFalse, useRegister(opd)));
+      add(new (alloc()) LTestIAndBranch(ifTrue, ifFalse, useAny(opd)));
       break;
     case MIRType::IntPtr:
       add(new (alloc()) LTestIPtrAndBranch(ifTrue, ifFalse, useRegister(opd)));
@@ -1496,7 +1524,6 @@ void LIRGenerator::visitCompare(MCompare* comp) {
       comp->compareType() == MCompare::Compare_Symbol ||
       comp->compareType() == MCompare::Compare_WasmAnyRef) {
     JSOp op = ReorderComparison(comp->jsop(), &left, &right);
-    LAllocation lhs = useRegisterAtStart(left);
     LAllocation rhs;
     if (comp->isInt32Comparison() ||
         comp->compareType() == MCompare::Compare_UInt32 ||
@@ -1505,6 +1532,15 @@ void LIRGenerator::visitCompare(MCompare* comp) {
       rhs = useAnyOrInt32ConstantAtStart(right);
     } else {
       rhs = useAnyAtStart(right);
+    }
+    // A memory lhs needs a non-memory rhs to stay encodable in one
+    // instruction.
+    LAllocation lhs;
+    if (rhs.isConstant() && (comp->isInt32Comparison() ||
+                             comp->compareType() == MCompare::Compare_UInt32)) {
+      lhs = useAnyAtStart(left);
+    } else {
+      lhs = useRegisterAtStart(left);
     }
     define(new (alloc()) LCompare(lhs, rhs, op), comp);
     return;
@@ -1626,6 +1662,9 @@ void LIRGenerator::lowerBitOp(JSOp op, MBinaryInstruction* ins) {
     MOZ_ASSERT(lhs->type() == MIRType::Int32);
     MOZ_ASSERT(rhs->type() == MIRType::Int32);
     ReorderCommutative(&lhs, &rhs, ins);
+    if (lowerForALUWithShiftedOperand(op, ins, lhs, rhs)) {
+      return;
+    }
     lowerForALU(new (alloc()) LBitOpI(op), ins, lhs, rhs);
     return;
   }
@@ -2287,6 +2326,9 @@ void LIRGenerator::visitAdd(MAdd* ins) {
   if (ins->type() == MIRType::Int32) {
     MOZ_ASSERT(lhs->type() == MIRType::Int32);
     ReorderCommutative(&lhs, &rhs, ins);
+    if (lowerForALUWithShiftedOperand(JSOp::Add, ins, lhs, rhs)) {
+      return;
+    }
     LAddI* lir = new (alloc()) LAddI;
 
     if (ins->fallible()) {
@@ -2350,6 +2392,9 @@ void LIRGenerator::visitSub(MSub* ins) {
       return;
     }
 
+    if (lowerForALUWithShiftedOperand(JSOp::Sub, ins, lhs, rhs)) {
+      return;
+    }
     LSubI* lir = new (alloc()) LSubI;
     if (ins->fallible()) {
       assignSnapshot(lir, ins->bailoutKind());
@@ -4351,12 +4396,7 @@ void LIRGenerator::visitStoreDynamicSlot(MStoreDynamicSlot* ins) {
 void LIRGenerator::visitPostWriteBarrier(MPostWriteBarrier* ins) {
   MOZ_ASSERT(ins->object()->type() == MIRType::Object);
 
-  // We need a barrier if the value might be allocated in the nursery. If the
-  // value is a constant, it must be tenured because MIR can't contain nursery
-  // pointers.
-  MConstant* constValue = ins->value()->maybeConstantValue();
-  if (constValue) {
-    MOZ_ASSERT(JS::GCPolicy<Value>::isTenured(constValue->toJSValue()));
+  if (!ValueNeedsPostBarrier(ins->value())) {
     return;
   }
 
@@ -4398,10 +4438,7 @@ void LIRGenerator::visitPostWriteBarrier(MPostWriteBarrier* ins) {
       break;
     }
     default:
-      // Currently, only objects, strings, and bigints can be in the nursery.
-      // Other instruction types cannot hold nursery pointers.
-      MOZ_ASSERT(!NeedsPostBarrier(ins->value()->type()));
-      break;
+      MOZ_CRASH("Unexpected value type");
   }
 }
 
@@ -4409,12 +4446,7 @@ void LIRGenerator::visitPostWriteElementBarrier(MPostWriteElementBarrier* ins) {
   MOZ_ASSERT(ins->object()->type() == MIRType::Object);
   MOZ_ASSERT(ins->index()->type() == MIRType::Int32);
 
-  // We need a barrier if the value might be allocated in the nursery. If the
-  // value is a constant, it must be tenured because MIR can't contain nursery
-  // pointers.
-  MConstant* constValue = ins->value()->maybeConstantValue();
-  if (constValue) {
-    MOZ_ASSERT(JS::GCPolicy<Value>::isTenured(constValue->toJSValue()));
+  if (!ValueNeedsPostBarrier(ins->value())) {
     return;
   }
 
@@ -4460,10 +4492,7 @@ void LIRGenerator::visitPostWriteElementBarrier(MPostWriteElementBarrier* ins) {
       break;
     }
     default:
-      // Currently, only objects, strings, and bigints can be in the nursery.
-      // Other instruction types cannot hold nursery pointers.
-      MOZ_ASSERT(!NeedsPostBarrier(ins->value()->type()));
-      break;
+      MOZ_CRASH("Unexpected value type");
   }
 }
 
@@ -6454,6 +6483,10 @@ void LIRGenerator::visitIteratorEnd(MIteratorEnd* ins) {
 }
 
 void LIRGenerator::visitCloseIterCache(MCloseIterCache* ins) {
+  // Emit an overrecursed check: this is necessary because the cache can
+  // attach a scripted getter stub that calls this script recursively.
+  gen->setNeedsOverrecursedCheck();
+
   LCloseIterCache* lir =
       new (alloc()) LCloseIterCache(useRegister(ins->iter()), temp());
   add(lir, ins);
@@ -6722,6 +6755,31 @@ void LIRGenerator::visitIsObject(MIsObject* ins) {
   MOZ_ASSERT(opd->type() == MIRType::Value);
   LIsObject* lir = new (alloc()) LIsObject(useBoxAtStart(opd));
   define(lir, ins);
+}
+
+void LIRGenerator::visitIsResumingGenerator(MIsResumingGenerator* ins) {
+  // Try to emit LIsResumingGeneratorAndBranch. IsResumingGenerator loads the
+  // frame descriptor so we also make sure the MTest instruction is the next
+  // instruction, to prevent moving the load past MClearResumingGeneratorFlag.
+  if (CanEmitAtUseForSingleTest(ins)) {
+    MInstructionIterator next(ins->block()->begin(ins));
+    next++;
+    if (*next == ins->usesBegin()->consumer()->toDefinition()) {
+      emitAtUses(ins);
+      return;
+    }
+  }
+
+  define(new (alloc()) LIsResumingGenerator(), ins);
+}
+
+void LIRGenerator::visitResumeFrameArg(MResumeFrameArg* ins) {
+  defineBox(new (alloc()) LResumeFrameArg(), ins);
+}
+
+void LIRGenerator::visitClearResumingGeneratorFlag(
+    MClearResumingGeneratorFlag* ins) {
+  add(new (alloc()) LClearResumingGeneratorFlag(), ins);
 }
 
 void LIRGenerator::visitIsSuspendedGenerator(MIsSuspendedGenerator* ins) {
@@ -7204,7 +7262,7 @@ void LIRGenerator::visitWasmParameter(MWasmParameter* ins) {
     );
   } else {
     MOZ_ASSERT(IsNumberType(ins->type()) || ins->type() == MIRType::WasmAnyRef
-#ifdef ENABLE_WASM_SIMD
+#ifdef ENABLE_JIT_SIMD
                || ins->type() == MIRType::Simd128
 #endif
     );
@@ -7228,7 +7286,7 @@ void LIRGenerator::visitWasmReturn(MWasmReturn* ins) {
     returnReg = useFixed(rval, ReturnFloat32Reg);
   } else if (rval->type() == MIRType::Double) {
     returnReg = useFixed(rval, ReturnDoubleReg);
-#ifdef ENABLE_WASM_SIMD
+#ifdef ENABLE_JIT_SIMD
   } else if (rval->type() == MIRType::Simd128) {
     returnReg = useFixed(rval, ReturnSimd128Reg);
 #endif
@@ -7385,18 +7443,11 @@ void LIRGenerator::visitWasmCall(MWasmCallT ins) {
   add(lir, ins);
   assignWasmSafepoint(lir);
 
-  // WasmCall with WasmTable has two call instructions, and they both need a
-  // safepoint associated with them.  Create a second safepoint here; the node
-  // otherwise does nothing, and codegen for it only marks the safepoint at the
-  // node.
-  if ((ins->callee().which() == wasm::CalleeDesc::WasmTable ||
-       ins->callee().which() == wasm::CalleeDesc::FuncRef) &&
-      !ins->isWasmReturnCall()) {
-    auto* adjunctSafepoint = new (alloc()) LWasmCallIndirectAdjunctSafepoint();
-    add(adjunctSafepoint);
-    assignWasmSafepoint(adjunctSafepoint);
-    lir->setAdjunctSafepoint(adjunctSafepoint);
-  }
+  // WasmCall with WasmTable or FuncRef has two call instructions (fast and slow
+  // path), and both need a stackmap. The two paths rejoin with the same live
+  // references and frame layout, so codegen registers this call's single
+  // LSafepoint a second time at the slow-path return offset; see
+  // CodeGenerator::visitWasmCall.
 }
 
 void LIRGenerator::visitWasmCallCatchable(MWasmCallCatchable* ins) {
@@ -7424,8 +7475,7 @@ void LIRGenerator::visitWasmFindHandler(MWasmFindHandler* ins) {
 }
 
 void LIRGenerator::visitWasmSuspend(MWasmSuspend* ins) {
-  // This is a call instruction, all other registers should be spilled
-  // We're not passing params either, so we can just let registers be free
+  // This is a call instruction, all other registers should be spilled.
   auto* lir = new (alloc())
       LWasmSuspend(useFixedAtStart(ins->instance(), InstanceReg),
                    useRegisterAtStart(ins->suspendedCont()),
@@ -7445,18 +7495,20 @@ void LIRGenerator::visitWasmResumeBarrier(MWasmResumeBarrier* ins) {
   assignWasmSafepoint(lir);
 }
 
+void LIRGenerator::visitWasmPrepareResume(MWasmPrepareResume* ins) {
+  auto* lir = new (alloc())
+      LWasmPrepareResume(useRegister(ins->cont()), temp(), temp());
+  define(lir, ins);
+}
+
 void LIRGenerator::visitWasmResume(MWasmResume* ins) {
-  // This is a call instruction, all other registers should be spilled
-  // We're not passing params either, so we can just let registers be free
-  LAllocation handlersParamsArea = LAllocation();
-  if (ins->hasHandlersParamsArea()) {
-    handlersParamsArea = useRegisterAtStart(ins->handlersParamsArea());
-  }
+  // This is a call instruction, all other registers should be spilled.
+  // handlersParamsArea is passed as a frame-pointer-relative offset to
+  // EmitResume to avoid excessive register pressure on 32-bit.
   auto* lir = new (alloc())
       LWasmResume(useFixedAtStart(ins->instance(), InstanceReg),
-                  useRegisterAtStart(ins->cont()), handlersParamsArea,
-                  tempFixed(ABINonArgReg0), tempFixed(ABINonArgReg1),
-                  tempFixed(ABINonArgReg2));
+                  useRegisterAtStart(ins->cont()), tempFixed(ABINonArgReg0),
+                  tempFixed(ABINonArgReg1), tempFixed(ABINonArgReg2));
 
   add(lir, ins);
   assignWasmSafepoint(lir);
@@ -7806,11 +7858,10 @@ void LIRGenerator::visitBuiltinObject(MBuiltinObject* ins) {
 }
 
 void LIRGenerator::visitReturn(MReturn* ret) {
-  return visitReturnImpl(ret->getOperand(0));
-}
+  MDefinition* opd = ret->getOperand(0);
+  MOZ_ASSERT(opd->type() == MIRType::Value);
 
-void LIRGenerator::visitGeneratorReturn(MGeneratorReturn* ret) {
-  return visitReturnImpl(ret->getOperand(0), true);
+  add(new (alloc()) LReturn(useBoxFixed(opd, JSReturnOperand)));
 }
 
 void LIRGenerator::visitSuperFunction(MSuperFunction* ins) {
@@ -8387,6 +8438,25 @@ void LIRGenerator::visitDateFromTime(MDateFromTime* ins) {
   defineReturn(lir, ins);
 }
 
+void LIRGenerator::visitUnpackTime(MUnpackTime* ins) {
+  // Allocate an additional register on 32-bit targets to hold half of a 64-bit
+  // value.
+#ifdef JS_NUNBOX32
+  auto* lir = new (alloc()) LUnpackTime(useBox(ins->packedVal()), temp());
+#else
+  auto* lir = new (alloc())
+      LUnpackTime(useBoxAtStart(ins->packedVal()), LDefinition::BogusTemp());
+#endif
+  define(lir, ins);
+}
+
+void LIRGenerator::visitEpochMilliseconds(MEpochMilliseconds* ins) {
+  auto* lir = new (alloc())
+      LEpochMilliseconds(useRegisterAtStart(ins->seconds()),
+                         useRegisterAtStart(ins->nanoseconds()), temp());
+  define(lir, ins);
+}
+
 void LIRGenerator::visitPostIntPtrConversion(MPostIntPtrConversion* ins) {
   // This operation is a no-op.
   redefine(ins, ins->input());
@@ -8480,7 +8550,7 @@ void LIRGenerator::visitWasmFloatConstant(MWasmFloatConstant* ins) {
     case MIRType::Float32:
       define(new (alloc()) LFloat32(ins->toFloat32()), ins);
       break;
-#ifdef ENABLE_WASM_SIMD
+#ifdef ENABLE_JIT_SIMD
     case MIRType::Simd128:
       define(new (alloc()) LSimd128(ins->toSimd128()), ins);
       break;
@@ -8860,13 +8930,18 @@ void LIRGenerator::visitWasmStoreField(MWasmStoreField* ins) {
   LAllocation base = useRegister(ins->base());
   if (value->type() == MIRType::Int64) {
     MOZ_RELEASE_ASSERT(narrowingOp == MNarrowingOp::None);
-    add(new (alloc()) LWasmStoreSlotI64(useInt64Register(value), base, offs,
-                                        ins->maybeTrap()),
+    LInt64Allocation valueAlloc = canStoreConstantWithoutRegister(value)
+                                      ? useInt64RegisterOrConstant(value)
+                                      : useInt64Register(value);
+    add(new (alloc())
+            LWasmStoreSlotI64(valueAlloc, base, offs, ins->maybeTrap()),
         ins);
   } else {
-    add(new (alloc())
-            LWasmStoreSlot(useRegister(value), base, offs, value->type(),
-                           narrowingOp, ins->maybeTrap()),
+    LAllocation valueAlloc = canStoreConstantWithoutRegister(value)
+                                 ? useRegisterOrConstant(value)
+                                 : useRegister(value);
+    add(new (alloc()) LWasmStoreSlot(valueAlloc, base, offs, value->type(),
+                                     narrowingOp, ins->maybeTrap()),
         ins);
   }
   if (ins->keepAlive() != ins->base()) {
@@ -9047,6 +9122,18 @@ void LIRGenerator::visitWasmMulI64WideHI64(MWasmMulI64WideHI64* ins) {
 #endif
 }
 
+void LIRGenerator::visitUnsignedToDouble(MUnsignedToDouble* ins) {
+  MOZ_ASSERT(ins->input()->type() == MIRType::Int32);
+  auto* lir = new (alloc()) LUint32ToDouble(useRegisterAtStart(ins->input()));
+  define(lir, ins);
+}
+
+void LIRGenerator::visitUnsignedToFloat32(MUnsignedToFloat32* ins) {
+  MOZ_ASSERT(ins->input()->type() == MIRType::Int32);
+  auto* lir = new (alloc()) LUint32ToFloat32(useRegisterAtStart(ins->input()));
+  define(lir, ins);
+}
+
 void LIRGenerator::visitAddDisposableResource(MAddDisposableResource* ins) {
   MDefinition* env = ins->environment();
 
@@ -9134,7 +9221,3 @@ void LIRGenerator::visitFuzzilliHashStore(MFuzzilliHashStore* ins) {
 
 static_assert(!std::is_polymorphic_v<LIRGenerator>,
               "LIRGenerator should not have any virtual methods");
-
-#ifdef JS_CODEGEN_NONE
-void LIRGenerator::visitReturnImpl(MDefinition*, bool) { MOZ_CRASH(); }
-#endif

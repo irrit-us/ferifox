@@ -7,14 +7,13 @@
 package mozilla.components.feature.ipprotection.store
 
 import mozilla.components.ExperimentalAndroidComponentsApi
+import mozilla.components.feature.ipprotection.store.reducer.iPProtectionReducer
 import mozilla.components.feature.ipprotection.store.state.IPProtectionState
 import mozilla.components.lib.state.Middleware
 import mozilla.components.lib.state.Reducer
 import mozilla.components.lib.state.Store
 
-/**
- * [Store] for IP protection feature state.
- */
+/** [Store] for IP protection feature state. */
 class IPProtectionStore(
     initialState: IPProtectionState = IPProtectionState(),
     reducer: Reducer<IPProtectionState, IPProtectionAction> = ::iPProtectionReducer,

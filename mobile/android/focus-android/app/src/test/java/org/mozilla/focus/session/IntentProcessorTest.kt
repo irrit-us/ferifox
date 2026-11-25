@@ -6,15 +6,23 @@ package org.mozilla.focus.session
 
 import android.content.Context
 import android.content.Intent
+import androidx.browser.customtabs.CustomTabsIntent
+import androidx.core.net.toUri
+import mozilla.components.browser.state.action.SearchAction
 import mozilla.components.browser.state.selector.allTabs
 import mozilla.components.concept.engine.EngineSession
+import mozilla.components.feature.customtabs.SHORTCUT_CATEGORY
+import mozilla.components.feature.search.ext.createSearchEngine
 import mozilla.components.support.test.robolectric.testContext
 import mozilla.components.support.utils.toSafeIntent
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.Mockito.mock
 import org.mozilla.focus.TestFocusApplication
+import org.mozilla.focus.activity.IntentReceiverActivity
 import org.mozilla.focus.ext.components
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -28,21 +36,30 @@ class IntentProcessorTest {
     @Before
     fun setup() {
         context = testContext
-        intentProcessor = IntentProcessor(
-            context,
-            context.components.tabsUseCases,
-            context.components.customTabsUseCases,
-            context.components.searchUseCases,
-        )
+        val searchEngine =
+            createSearchEngine(
+                name = "Test Engine",
+                url = "https://localhost/?q={searchTerms}",
+                icon = mock(),
+            )
+        context.components.store.dispatch(SearchAction.ApplicationSearchEnginesLoaded(listOf(searchEngine)))
+        intentProcessor =
+            IntentProcessor(
+                context,
+                context.components.tabsUseCases,
+                context.components.customTabsUseCases,
+                context.components.searchUseCases,
+            )
     }
 
     @Test
     fun `GIVEN an ACTION_VIEW intent WHEN handling the intent THEN create a tab with LoadUrlFlags EXTERNAL`() {
         val browserStore = context.components.store
         val url = "https://mozilla.org"
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            data = android.net.Uri.parse(url)
-        }
+        val intent =
+            Intent(Intent.ACTION_VIEW).apply {
+                data = android.net.Uri.parse(url)
+            }
 
         intentProcessor.handleIntent(intent.toSafeIntent(), null)
 
@@ -58,9 +75,10 @@ class IntentProcessorTest {
     fun `GIVEN an ACTION_SEND intent WHEN handling the intent THEN create a tab with LoadUrlFlags EXTERNAL`() {
         val browserStore = context.components.store
         val url = "https://mozilla.org"
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            putExtra(Intent.EXTRA_TEXT, url)
-        }
+        val intent =
+            Intent(Intent.ACTION_SEND).apply {
+                putExtra(Intent.EXTRA_TEXT, url)
+            }
 
         intentProcessor.handleIntent(intent.toSafeIntent(), null)
 
@@ -71,4 +89,38 @@ class IntentProcessorTest {
         assertEquals(url, tab.content.url)
         assertEquals(EngineSession.LoadUrlFlags.external().value, tab.engineState.initialLoadFlags.value)
     }
+
+    @Test
+    fun `GIVEN an ACTION_SEND intent with search terms WHEN handling the intent THEN create a private tab`() {
+        val browserStore = context.components.store
+        val searchTerms = "mozilla firefox"
+        val intent =
+            Intent(Intent.ACTION_SEND).apply {
+                putExtra(Intent.EXTRA_TEXT, searchTerms)
+            }
+
+        intentProcessor.handleIntent(intent.toSafeIntent(), null)
+
+        assertEquals(1, browserStore.state.allTabs.size)
+
+        val tab = browserStore.state.allTabs[0]
+
+        assertEquals(true, tab.content.private)
+    }
+
+    @Test
+    fun `GIVEN a custom tab window intent WHEN resolving it THEN IntentReceiverActivity handles it`() {
+        val intent = createCustomTabWindowIntent("https://mozilla.org")
+
+        val activities = context.packageManager.queryIntentActivities(intent, 0)
+
+        assertTrue(activities.any { it.activityInfo.name == IntentReceiverActivity::class.java.name })
+    }
+
+    private fun createCustomTabWindowIntent(url: String): Intent =
+        CustomTabsIntent.Builder().build().intent.apply {
+            data = url.toUri()
+            `package` = context.packageName
+            addCategory(SHORTCUT_CATEGORY)
+        }
 }

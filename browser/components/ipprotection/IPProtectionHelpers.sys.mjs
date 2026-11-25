@@ -13,10 +13,12 @@ import { IPProtectionActivator } from "moz-src:///toolkit/components/ipprotectio
 const lazy = {};
 
 ChromeUtils.defineESModuleGetters(lazy, {
-  IPPExceptionsManager:
-    "moz-src:///toolkit/components/ipprotection/IPPExceptionsManager.sys.mjs",
+  IPPAutoActivation:
+    "moz-src:///toolkit/components/ipprotection/IPPAutoActivation.sys.mjs",
   IPProtection:
     "moz-src:///browser/components/ipprotection/IPProtection.sys.mjs",
+  IPProtectionPanel:
+    "moz-src:///browser/components/ipprotection/IPProtectionPanel.sys.mjs",
   IPProtectionService:
     "moz-src:///toolkit/components/ipprotection/IPProtectionService.sys.mjs",
   IPProtectionStates:
@@ -32,6 +34,7 @@ if (AppConstants.MOZ_ENTERPRISE) {
   });
 }
 import { IPPUsageHelper } from "moz-src:///browser/components/ipprotection/IPPUsageHelper.sys.mjs";
+import { IPPL10nHelper } from "moz-src:///browser/components/ipprotection/IPPL10nHelper.sys.mjs";
 import { IPPOnboardingMessage } from "moz-src:///browser/components/ipprotection/IPPOnboardingMessageHelper.sys.mjs";
 import { IPPOptOutHelper } from "moz-src:///browser/components/ipprotection/IPPOptOutHelper.sys.mjs";
 import { IPProtectionAlertManager } from "moz-src:///browser/components/ipprotection/IPProtectionAlertManager.sys.mjs";
@@ -60,7 +63,6 @@ class UIHelper {
       this.handleEvent
     );
     lazy.IPProtection.uninit();
-    lazy.IPPExceptionsManager.uninit();
   }
 
   #handleEvent(_event) {
@@ -72,7 +74,6 @@ class UIHelper {
       state !== lazy.IPProtectionStates.UNAVAILABLE
     ) {
       lazy.IPProtection.init();
-      lazy.IPPExceptionsManager.init();
     }
 
     if (
@@ -81,7 +82,6 @@ class UIHelper {
         state === lazy.IPProtectionStates.UNAVAILABLE)
     ) {
       lazy.IPProtection.uninit();
-      lazy.IPPExceptionsManager.uninit();
     }
   }
 }
@@ -96,6 +96,7 @@ function pickAuthProvider() {
 const authProvider = pickAuthProvider();
 
 IPProtectionActivator.addHelpers([
+  IPPL10nHelper,
   IPPOnboardingMessage,
   IPPUsageHelper,
   new UIHelper(),
@@ -106,5 +107,9 @@ IPProtectionActivator.addHelpers([
 ]);
 
 IPProtectionActivator.setAuthProvider(authProvider);
+
+if (!AppConstants.MOZ_ENTERPRISE) {
+  lazy.IPPAutoActivation.isPremium = () => lazy.IPProtectionPanel.isPremium();
+}
 
 export { IPProtectionActivator };
